@@ -121,6 +121,22 @@ input.dt{padding:1px 4px;font-size:11px;border:1px dashed #c5cad4;border-radius:
 .delta{font-size:13px;font-weight:700}.delta.up{color:var(--done)}.delta.down{color:var(--blk)}.delta.flat{color:var(--mute)}
 .banner{background:var(--acc);color:#fff;border-radius:var(--rad);padding:12px 16px;margin-bottom:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 .trend svg{width:100%;height:auto;display:block}
+/* login (same flow as MOM Tracker) */
+#login{position:fixed;inset:0;z-index:100;display:none;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(160deg,#0f2945 0%,#173b63 60%,#21508a 100%);padding:16px;overflow-y:auto}
+#login.open{display:flex}
+.lg-logo{width:52px;height:52px;border-radius:13px;background:#c9a84c;color:#0f2945;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;margin:0 auto 12px}
+.lg-card{background:#fff;border-radius:16px;padding:26px 28px;width:min(360px,100%);box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.lg-title{font-weight:800;font-size:18px;margin-bottom:2px}.lg-sub{font-size:12px;color:#888;margin-bottom:16px}
+.lg-list{display:flex;flex-direction:column;gap:6px;max-height:340px;overflow-y:auto}
+.lg-p{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:8px;border:1.5px solid #e8e6df;background:#fafaf8;font:inherit;font-weight:600;cursor:pointer;text-align:left;color:var(--ink)}
+.lg-p:hover{border-color:#c9a84c}
+.lg-av{width:28px;height:28px;border-radius:50%;background:#f0ede6;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex:none}
+.pinbox{display:flex;gap:10px;justify-content:center;margin:4px 0 18px}.pinbox div{width:44px;height:52px;border:2px solid #e8e6df;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:24px}.pinbox div.f{border-color:#c9a84c}
+.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}.keypad button{padding:13px;border-radius:8px;border:1.5px solid #e8e6df;background:#fafaf8;font:inherit;font-size:17px;font-weight:600;cursor:pointer;color:var(--ink)}
+.lg-err{padding:6px 10px;background:#fbe6e8;border-radius:7px;color:#b3302a;font-size:12px;margin-bottom:10px}
+.lg-link{background:none;border:0;color:#888;cursor:pointer;font:inherit;font-size:12px;width:100%;text-align:center;margin-top:6px}
+.lg-pinin{width:100%;font-size:22px;letter-spacing:10px;text-align:center}
+body.ro [data-set],body.ro [data-newblk],body.ro [data-closeblk],body.ro .rwonly{display:none!important}
 .printonly{display:none}
 @media print{.sticky,.noprint,#drawer,#scrim,#modal{display:none!important}.printonly{display:block}body{background:#fff}main{padding:0;max-width:none}.tile{break-inside:avoid}.mxwrap,.tbwrap{max-height:none;overflow:visible;border:0}.tb tr{break-inside:avoid}}
 @media (max-width:640px){.grid2{grid-template-columns:1fr}.tiles{grid-template-columns:repeat(auto-fill,minmax(145px,1fr))}main{padding:10px}.seg button{padding:7px 7px}}
@@ -139,13 +155,14 @@ input.dt{padding:1px 4px;font-size:11px;border:1px dashed #c5cad4;border-radius:
     <button data-view="blockers">⚠ Blocking points<span class="nb" id="nbk"></span></button>
     <button data-view="weekly">📈 Weekly progress</button>
     <button data-view="dash">📊 Dashboard</button>
-    <button data-view="setup">⚙ Setup</button>
+    <button data-view="setup" id="navsetup">⚙ Setup</button>
   </nav>
 </div>
 <main id="view"><div class="empty">Loading…</div></main>
 <div id="scrim" data-act="close"></div>
 <div id="drawer"></div>
 <div id="modal"></div>
+<div id="login"></div>
 
 <script type="module">
 /* =====================================================================
@@ -189,6 +206,7 @@ function defaultSettings(){
   const T=(id,name,list)=>({id,name,acts:list.split(',')});
   return {
     project:'Riviera Tower',
+    people:[{name:APP_ADMIN,role:'admin'}],
     floors:[{id:'f1',name:'Level 1'},{id:'f2',name:'Level 2'},{id:'f3',name:'Level 3'}],
     acts:DEFAULT_ACTS.map(([id,name,short,color])=>({id,name,short,color,hp:['mep1','wp'].includes(id)})),
     types:[
@@ -223,11 +241,26 @@ function ago(ts){const m=Math.round((Date.now()-ts)/6e4);if(m<1)return'just now'
 const LSK='rtft_db_v1',LSU='rtft_user',LSF='rtft_filters';
 const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:v;}catch(e){return d;}};
 const lsSet=(k,v)=>{try{localStorage.setItem(k,v);}catch(e){}};
-let memUser='';
-const user=()=>lsGet(LSU,'')||memUser||'Unknown';
+/* ===================== ACCESS (same principle as MOM Tracker) =====================
+   The admin keeps a list of people. On first login a person picks their name and chooses a
+   4-digit PIN (stored hashed in ft_auth/pins); afterwards name + PIN. The device stays signed in.
+   Roles: admin (everything incl. Setup) · edit (statuses, blocking points, notes) · view (read only). */
+const APP_ADMIN='HORN, Philippe';
+const normName=s=>(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z ]/g,' ').split(/\s+/).filter(Boolean).sort().join(' ');
+function simpleHash(str){let h=0;for(let i=0;i<str.length;i++){h=((h<<5)-h)+str.charCodeAt(i);h|=0;}return Math.abs(h).toString(36);}
+const isOwner=n=>normName(n)===normName(APP_ADMIN);
+function peopleOf(s){const l=((s&&s.people)||[]).map(p=>({...p}));if(!l.some(p=>isOwner(p.name)))l.unshift({name:APP_ADMIN,role:'admin'});return l;}
+const people=()=>peopleOf(S.settings);
+function me(){const n=lsGet(LSU,'');if(!n||!S.settings)return null;return people().find(p=>normName(p.name)===normName(n))||null;}
+const isAdmin=()=>{const m=me();return !!m&&(isOwner(m.name)||m.role==='admin');};
+const isRO=()=>{const m=me();return !!m&&!isOwner(m.name)&&m.role==='view';};
+const ROLES=[['admin','Admin'],['edit','Editor'],['view','Read only']];
+const roleName=p=>isOwner(p.name)?'Admin':(ROLES.find(r=>r[0]===p.role)||ROLES[1])[1];
+const user=()=>{const m=me();return m?m.name:'auto';};
+function roBlock(){if(isRO()){alert('Your account is read only.\n\nYou can view, print and export everything, but not change it. Ask '+APP_ADMIN+' if you need to edit.');return true;}return false;}
 
 /* ===================== STATE ===================== */
-let S={settings:null,rooms:{},blockers:{},log:[],snaps:[]};
+let S={settings:null,rooms:{},blockers:{},log:[],snaps:[],pins:{}};
 let F={view:'overview',floor:'all',next:'all',type:'all',q:'',blk:'all',colorBy:'next',quick:false,bStatus:'open',bFloor:'all',bCat:'all',bOwner:'all',bGroup:'none',bq:''};
 try{Object.assign(F,JSON.parse(lsGet(LSF,'{}')));}catch(e){}
 let drawerRoom=null;
@@ -268,16 +301,18 @@ function persist(){lsSet(LSK,JSON.stringify(S));render();}
 async function runOps(ops){for(let i=0;i<ops.length;i+=400){const b=fb.writeBatch(db);ops.slice(i,i+400).forEach(([k,c,id,v])=>k==='del'?b.delete(dref(c,id)):b.set(dref(c,id),v));await b.commit();}}
 const fail=e=>{console.error(e);alert('Save failed: '+e.message);};
 const store={
-  saveSettings(s){if(USE_FB)return fb.setDoc(dref('settings','main'),s).catch(fail);S.settings=s;persist();},
-  setRoom(r){if(USE_FB)return fb.setDoc(dref('rooms',r.id),r).catch(fail);S.rooms[r.id]=r;persist();},
-  patchRoom(id,patch){if(USE_FB)return fb.updateDoc(dref('rooms',id),patch).catch(fail);for(const k in patch)setPath(S.rooms[id],k,patch[k]);persist();},
-  setBlocker(b){if(USE_FB)return fb.setDoc(dref('blockers',b.id),b).catch(fail);S.blockers[b.id]=b;persist();},
-  delBlocker(id){if(USE_FB)return fb.deleteDoc(dref('blockers',id)).catch(fail);delete S.blockers[id];persist();},
+  saveSettings(s){if(roBlock())return;if(USE_FB)return fb.setDoc(dref('settings','main'),s).catch(fail);S.settings=s;persist();},
+  setRoom(r){if(roBlock())return;if(USE_FB)return fb.setDoc(dref('rooms',r.id),r).catch(fail);S.rooms[r.id]=r;persist();},
+  patchRoom(id,patch){if(roBlock())return;if(USE_FB)return fb.updateDoc(dref('rooms',id),patch).catch(fail);for(const k in patch)setPath(S.rooms[id],k,patch[k]);persist();},
+  setBlocker(b){if(roBlock())return;if(USE_FB)return fb.setDoc(dref('blockers',b.id),b).catch(fail);S.blockers[b.id]=b;persist();},
+  delBlocker(id){if(roBlock())return;if(USE_FB)return fb.deleteDoc(dref('blockers',id)).catch(fail);delete S.blockers[id];persist();},
   addLog(e){if(USE_FB)return fb.addDoc(fb.collection(db,P+'log'),e).catch(()=>{});S.log.unshift(e);S.log=S.log.slice(0,1500);},
+  savePin(name,hash){if(USE_FB)return fb.setDoc(dref('auth','pins'),{[name]:hash},{merge:true});S.pins[name]=hash;persist();return Promise.resolve();},
+  resetPin(name){if(USE_FB)return fb.setDoc(dref('auth','pins'),{[name]:fb.deleteField()},{merge:true}).catch(fail);delete S.pins[name];persist();},
   saveSnaps(list){if(!list.length)return;if(USE_FB)return runOps(list.map(x=>['set','snapshots',x.id,x])).catch(e=>console.error(e));list.forEach(x=>{S.snaps=S.snaps.filter(y=>y.id!==x.id);S.snaps.push(x);});persist();},
-  async addRooms(rooms){if(USE_FB)return runOps(rooms.map(r=>['set','rooms',r.id,r])).catch(fail);rooms.forEach(r=>S.rooms[r.id]=r);persist();},
-  async delRooms(roomIds,blkIds){if(USE_FB)return runOps([...roomIds.map(id=>['del','rooms',id]),...blkIds.map(id=>['del','blockers',id])]).catch(fail);roomIds.forEach(id=>delete S.rooms[id]);blkIds.forEach(id=>delete S.blockers[id]);persist();},
-  async replaceAll(d){
+  async addRooms(rooms){if(roBlock())return;if(USE_FB)return runOps(rooms.map(r=>['set','rooms',r.id,r])).catch(fail);rooms.forEach(r=>S.rooms[r.id]=r);persist();},
+  async delRooms(roomIds,blkIds){if(roBlock())return;if(USE_FB)return runOps([...roomIds.map(id=>['del','rooms',id]),...blkIds.map(id=>['del','blockers',id])]).catch(fail);roomIds.forEach(id=>delete S.rooms[id]);blkIds.forEach(id=>delete S.blockers[id]);persist();},
+  async replaceAll(d){if(roBlock())return;
     const rooms=Array.isArray(d.rooms)?d.rooms:Object.values(d.rooms||{});
     const blks=Array.isArray(d.blockers)?d.blockers:Object.values(d.blockers||{});
     if(USE_FB){
@@ -292,9 +327,10 @@ async function initFB(){
   const [app,fs,au]=await Promise.all([import(base+'firebase-app.js'),import(base+'firebase-firestore.js'),import(base+'firebase-auth.js')]);
   const a=app.initializeApp(FIREBASE_CONFIG);db=fs.getFirestore(a);fb=fs;
   await au.signInAnonymously(au.getAuth(a));
-  const got={s:0,r:0,b:0,n:0};let booted=false;
+  const got={s:0,r:0,b:0,n:0,p:0};let booted=false;
   return new Promise((res,rej)=>{
-    const ready=()=>{if(got.s&&got.r&&got.b&&got.n){if(!booted){booted=true;res();}else render();}};
+    const ready=()=>{if(got.s&&got.r&&got.b&&got.n&&got.p){if(!booted){booted=true;res();}else render();}};
+    fs.onSnapshot(dref('auth','pins'),d=>{S.pins=d.exists()?d.data():{};got.p=1;ready();},rej);
     fs.onSnapshot(fs.collection(db,P+'snapshots'),q=>{S.snaps=q.docs.map(d=>d.data());got.n=1;ready();},rej);
     fs.onSnapshot(dref('settings','main'),d=>{S.settings=d.exists()?d.data():null;got.s=1;ready();},rej);
     fs.onSnapshot(fs.collection(db,P+'rooms'),q=>{S.rooms={};q.forEach(d=>S.rooms[d.id]=d.data());got.r=1;ready();},rej);
@@ -305,6 +341,7 @@ async function initFB(){
 
 /* ===================== ACTIONS ===================== */
 function setStatus(rid,aid,s){
+  if(roBlock())return;
   const r=S.rooms[rid];if(!r)return;const prev=st(r,aid);if(prev===s)return;
   const cur=(r.st&&r.st[aid])||{};const v={s,by:user(),d:today()};
   if(s>=1)v.ds=cur.ds||today();if(s===2)v.dd=today();
@@ -314,15 +351,72 @@ function setStatus(rid,aid,s){
 function saveS(mut){const s=JSON.parse(JSON.stringify(S.settings));mut(s);store.saveSettings(s);}
 function nextBlkNo(){const m=Math.max(0,...Object.values(S.blockers).map(b=>parseInt(String(b.no||'').replace(/\D/g,''))||0));return 'B-'+String(m+1).padStart(3,'0');}
 
+/* ===================== LOGIN SCREEN ===================== */
+let LG={step:'pick',name:'',pin:'',err:''};
+function showLogin(){LG={step:'pick',name:'',pin:'',err:''};closeModal();$('#login').classList.add('open');renderLogin();}
+function renderLogin(){
+  let h=`<div style="text-align:center;margin-bottom:22px"><div class="lg-logo">RT</div><div style="font-weight:800;color:#fff;font-size:19px;letter-spacing:2px">RIVIERA TOWER</div><div style="font-weight:700;color:#c9a84c;font-size:12px;letter-spacing:1.5px">FLOOR FINISHES TRACKER</div></div><div class="lg-card">`;
+  const pinsOk=USE_FB?!!fb:true;
+  if(LG.step==='pick'){
+    const list=people().map(p=>p.name).sort((a,b)=>a.localeCompare(b));
+    h+=`<div class="lg-title">Who are you?</div><div class="lg-sub">Select your name to continue</div><div class="lg-list">${list.map(n=>`<button class="lg-p" data-lgpick="${esc(n)}"><span class="lg-av">${esc(n[0]||'?')}</span><span>${esc(n)}</span><span style="margin-left:auto;font-size:10px;${S.pins[n]?'color:#aaa':'color:#c9a84c;font-weight:700'}">${S.pins[n]?'🔒 PIN set':'new'}</span></button>`).join('')}</div>${pinsOk?'':'<div class="lg-sub">Connecting…</div>'}`;
+  }else if(LG.step==='pin'){
+    h+=`<div class="lg-title">Hello, ${esc(LG.name.split(',').slice(-1)[0].trim()||LG.name)}</div><div class="lg-sub">Enter your 4-digit PIN</div>${LG.err?`<div class="lg-err">${esc(LG.err)}</div>`:''}
+      <div class="pinbox">${[0,1,2,3].map(i=>`<div class="${LG.pin.length>i?'f':''}">${LG.pin[i]?'●':''}</div>`).join('')}</div>
+      <div class="keypad">${['1','2','3','4','5','6','7','8','9','','0','del'].map(k=>k?`<button data-lgk="${k}">${k==='del'?'⌫':k}</button>`:'<span></span>').join('')}</div>
+      <button class="lg-link" data-lgback="1">← Back</button>
+      <div style="font-size:11px;color:#aaa;text-align:center;margin-top:8px">Forgot your PIN? Ask ${esc(APP_ADMIN)} to reset it.</div>`;
+  }else{
+    h+=`<div class="lg-title">Hi, ${esc(LG.name.split(',').slice(-1)[0].trim()||LG.name)}!</div><div class="lg-sub">First time? Choose your PIN</div>
+      <div style="padding:8px 12px;background:#e6f2e9;border-radius:7px;font-size:11px;color:#1e6b3a;margin-bottom:12px">Your PIN will be stored securely and required next time.</div>${LG.err?`<div class="lg-err">${esc(LG.err)}</div>`:''}
+      <div class="form"><label>Choose PIN (4 digits)<input id="lg_p1" class="lg-pinin" type="password" inputmode="numeric" maxlength="4" placeholder="••••"></label>
+      <label>Confirm PIN<input id="lg_p2" class="lg-pinin" type="password" inputmode="numeric" maxlength="4" placeholder="••••"></label>
+      <button class="btn pri" data-lgset="1" style="width:100%;padding:10px">Set PIN &amp; Continue</button></div>
+      <button class="lg-link" data-lgback="1">← Back</button>`;
+  }
+  $('#login').innerHTML=h+`</div><div style="margin-top:12px;font-size:11px;color:#9fb3c8;text-align:center">PINs are stored hashed in the shared database.<br>Only you know your PIN.</div>`;
+  if(LG.step==='new')setTimeout(()=>{const e=$('#lg_p1');if(e)e.focus();},30);
+}
+function loginOk(n){lsSet(LSU,n);$('#login').classList.remove('open');$('#login').innerHTML='';render();}
+function pinKey(k){
+  if(k==='del'){LG.pin=LG.pin.slice(0,-1);LG.err='';renderLogin();return;}
+  if(LG.pin.length>=4)return;LG.pin+=k;renderLogin();
+  if(LG.pin.length===4)setTimeout(()=>{if(simpleHash(LG.name+LG.pin)===S.pins[LG.name])loginOk(LG.name);else{LG.err='Wrong PIN. Try again.';LG.pin='';renderLogin();}},120);
+}
+function loginClick(d){
+  if(d.lgpick!==undefined){if(USE_FB&&!fb){alert('Still connecting to the server, try again in a second.');return;}LG={step:S.pins[d.lgpick]?'pin':'new',name:d.lgpick,pin:'',err:''};renderLogin();return;}
+  if(d.lgback!==undefined){LG={step:'pick',name:'',pin:'',err:''};renderLogin();return;}
+  if(d.lgk!==undefined){pinKey(d.lgk);return;}
+  if(d.lgset!==undefined){
+    const a=$('#lg_p1').value,b=$('#lg_p2').value;
+    if(!/^\d{4}$/.test(a)){LG.err='PIN must be 4 digits.';renderLogin();return;}
+    if(a!==b){LG.err='PINs do not match.';renderLogin();return;}
+    const name=LG.name;
+    Promise.resolve(store.savePin(name,simpleHash(name+a))).then(()=>loginOk(name)).catch(()=>{LG.err='The PIN could not be saved (no connection to the server). Try again.';renderLogin();});
+  }
+}
+document.addEventListener('keydown',e=>{
+  if(!$('#login').classList.contains('open'))return;
+  if(LG.step==='pin'){if(/^\d$/.test(e.key))pinKey(e.key);else if(e.key==='Backspace')pinKey('del');}
+  else if(LG.step==='new'&&e.key==='Enter')loginClick({lgset:'1'});
+});
+function editPeople(fn){saveS(s=>{const l=peopleOf(s);fn(l);s.people=l;});}
+
 /* ===================== RENDER ===================== */
 let pending=false;
 function render(){
   if(!S.settings)return;
+  const m=me();
+  if(!m){closeDrawer();if(!$('#login').classList.contains('open'))showLogin();else if(LG.step==='pick')renderLogin();return;}
   const ae=document.activeElement;
   if(ae&&ae.matches&&ae.matches('[data-hold]')){pending=true;return;}
+  document.body.classList.toggle('ro',isRO());
+  $('#navsetup').style.display=isAdmin()?'':'none';
+  if(F.view==='setup'&&!isAdmin())F.view='overview';
   lsSet(LSF,JSON.stringify(F));
   $('#pname').textContent=S.settings.project||'Riviera Tower';
-  $('#userchip').textContent='👤 '+user();
+  $('#userchip').textContent=`👤 ${m.name.split(',')[0]} · ${roleName(m)} ⎋`;
+  $('#userchip').title='Signed in as '+m.name+' — click to log out';
   const nOpen=Object.values(S.blockers).filter(b=>b.status==='open').length;
   $('#nbk').textContent=nOpen||'';$('#nbk').style.display=nOpen?'':'none';
   document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.view===F.view));
@@ -348,7 +442,7 @@ function filterBar(mode){
     <select data-fs="blk">${opt('all','Blocked + not blocked',F.blk)}${opt('yes','⚠ Blocked rooms only',F.blk)}${opt('no','Not blocked only',F.blk)}</select>
     <input id="q" data-fs="q" placeholder="🔍 Search room…" value="${esc(F.q)}" style="width:170px">
     ${mode==='tiles'?`<select data-fs="colorBy">${opt('next','Colour = next activity',F.colorBy)}${opt('progress','Colour = % progress',F.colorBy)}</select>`
-      :`<label class="chip"><input type="checkbox" data-fs="quick" ${F.quick?'checked':''}> Quick edit (tap a cell to change status)</label>`}
+      :`<label class="chip rwonly"><input type="checkbox" data-fs="quick" ${F.quick?'checked':''}> Quick edit (tap a cell to change status)</label>`}
     <span class="sp"></span><button class="btn sm" data-act="print">🖨 Print</button>
   </div><div class="chips noprint">${chips}</div>`;
 }
@@ -486,9 +580,14 @@ function vDash(){
 function vSetup(){
   const s=S.settings,rooms=Object.values(S.rooms);
   const cnt=id=>rooms.filter(r=>(r.acts||[]).includes(id)).length;
-  let h=`<div class="grid2"><div class="card"><h2>General</h2><div class="form">
+  if(!isAdmin())return `<div class="card">Setup is reserved for admins.</div>`;
+  let h=`<div class="card"><h2>👥 Team & access</h2><p style="margin:0 0 10px;color:var(--mute);font-size:12px">Only the people in this list can open the app. On their first login they pick their name and choose a 4-digit PIN; next time, name + PIN. <b>Admin</b>: everything including Setup · <b>Editor</b>: statuses, hold points, blocking points, notes · <b>Read only</b>: view, print and export.</p>
+    <div class="tbwrap"><table class="tb"><thead><tr><th>Name</th><th>Role</th><th>PIN</th><th></th></tr></thead><tbody>${people().sort((a,b)=>a.name.localeCompare(b.name)).map(p=>{const own=isOwner(p.name);return `<tr><td><b>${esc(p.name)}</b>${own?' <span class="tag">owner</span>':''}</td><td>${own?'Admin':`<select data-prole="${esc(p.name)}">${ROLES.map(([v,l])=>`<option value="${v}" ${(p.role||'edit')===v?'selected':''}>${l}</option>`).join('')}</select>`}</td><td>${S.pins[p.name]?'🔒 set':'<span style="color:#b57800;font-weight:700">not yet</span>'}</td><td style="white-space:nowrap;text-align:right">${S.pins[p.name]?`<button class="btn sm" data-preset="${esc(p.name)}">Reset PIN</button> `:''}${own?'':`<button class="btn sm red" data-pdel="${esc(p.name)}">Remove</button>`}</td></tr>`;}).join('')}</tbody></table></div>
+    <div class="row" style="margin-top:10px"><textarea id="np_name" rows="2" placeholder="LASTNAME, Firstname (one per line)" style="flex:1;min-width:200px"></textarea><select id="np_role">${ROLES.map(([v,l])=>`<option value="${v}" ${v==='edit'?'selected':''}>${l}</option>`).join('')}</select><button class="btn pri" data-act="addperson">+ Add person</button></div>
+    <p style="margin:8px 0 0;color:var(--mute);font-size:11px">Tip: paste several names at once, one per line. Use the same spelling as in MOM Tracker (e.g. “HORN, Philippe”).</p></div>`;
+  h+=`<div class="grid2"><div class="card"><h2>General</h2><div class="form">
     <label>Project name<input data-hold data-sset="project" value="${esc(s.project)}"></label>
-    <div class="row">Your name (shown on updates): <b>${esc(user())}</b><button class="btn sm" data-act="user">Change</button></div>
+    <div class="row">Signed in as <b>${esc(user())}</b> (${roleName(me())})<button class="btn sm" data-act="user">Log out</button></div>
     <div style="font-size:12px;color:var(--mute)">${USE_FB?'🟢 Shared mode — data is live in Firebase for everyone using this link.':'🟡 Local mode — data is saved in this browser only. Fill the Firebase config in index.html to share it with the team.'}</div></div></div>
     <div class="card"><h2>Floors</h2>${s.floors.map(f=>`<div class="row" style="margin-bottom:6px"><input data-hold data-floorname="${f.id}" value="${esc(f.name)}" style="flex:1"><small style="color:var(--mute);width:70px">${rooms.filter(r=>r.floor===f.id).length} rooms</small><button class="btn sm red" data-delfloor="${f.id}">✕</button></div>`).join('')}<button class="btn sm" data-act="addfloor">+ Add floor</button></div></div>`;
   h+=`<div class="card"><h2>Activity library (in construction sequence)</h2><p style="margin:0 0 10px;color:var(--mute);font-size:12px">Order matters: the “next step” of a room is the first activity of this list, among the ones assigned to the room, that is not done yet. Tick <b>◆ Hold point</b> to insert an inspection step right after an activity: the next trade only becomes “next step” once the hold point is released. A room can switch off a hold point in its own “Customize activities”.</p>`;
@@ -624,9 +723,9 @@ function renderDrawer(){
   h+=`<h3>Blocking points</h3>`;
   h+=allb.length?allb.map(b=>{const a=b.actId&&actById(b.actId);return `<div class="bcard ${b.status}"><div class="row"><b>${esc(b.no)}</b><span class="tag">${esc(b.cat)}</span>${a?`<span class="tag">${esc(a.name)}</span>`:''}<span class="sp"></span>${b.status==='open'?`<button class="btn sm" data-closeblk="${b.id}">✓ Resolve</button>`:`<span class="tag green">Resolved ${fmtD(b.closed)}</span>`}<button class="btn sm" data-editblk="${b.id}">Edit</button></div><div style="margin:4px 0">${esc(b.title)}</div><small>Responsible: ${esc(b.owner||'—')} · raised ${fmtD(b.raised)}${b.due?' · target '+fmtD(b.due):''}</small></div>`;}).join(''):'<div class="empty">None 👍</div>';
   h+=`<button class="btn" data-newblk="${r.id}|">+ Raise blocking point</button>`;
-  h+=`<h3>Notes</h3><textarea data-hold data-rnote="${r.id}" rows="3" style="width:100%" placeholder="Site remarks, access, materials…">${esc(r.note||'')}</textarea>`;
-  h+=`<details style="margin-top:14px"><summary><b>Customize activities</b> <small style="color:var(--mute)">(${acts.length} of ${s.acts.length})</small></summary><div class="row" style="margin:8px 0">Reset from template: <select id="tplsel">${s.types.map(x=>`<option value="${x.id}" ${x.id===r.type?'selected':''}>${esc(x.name)}</option>`).join('')}</select><button class="btn sm" data-act="applytpl">Apply</button></div><div style="columns:2 220px">${s.acts.map(a=>{const on=(r.acts||[]).includes(a.id);return `<label class="chk"><input type="checkbox" data-ract="${r.id}|${a.id}" ${on?'checked':''}><span class="dot" style="background:${a.color}"></span>${esc(a.name)}</label>${a.hp&&on?`<label class="chk sub"><input type="checkbox" data-rhp="${r.id}|${a.id}" ${(r.hpOff||[]).includes(a.id)?'':'checked'}><span class="hptag">◆ HP</span>Hold point</label>`:''}`;}).join('')}</div></details>`;
-  h+=`<details style="margin-top:6px"><summary><b>Room details</b></summary><div class="form" style="margin-top:8px"><div class="row"><label>Code<input data-hold id="rd_code" value="${esc(r.code)}"></label><label>Floor<select id="rd_floor">${s.floors.map(x=>`<option value="${x.id}" ${x.id===r.floor?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label></div><label>Name<input data-hold id="rd_name" value="${esc(r.name)}"></label><label>Type<select id="rd_type">${s.types.map(x=>`<option value="${x.id}" ${x.id===r.type?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label><div class="row"><button class="btn pri" data-act="saveroom">Save details</button><span class="sp"></span><button class="btn red" data-act="delroom">Delete room</button></div></div></details></div>`;
+  h+=`<h3>Notes</h3><textarea data-hold data-rnote="${r.id}" ${isRO()?'readonly':''} rows="3" style="width:100%" placeholder="Site remarks, access, materials…">${esc(r.note||'')}</textarea>`;
+  h+=`<details class="rwonly" style="margin-top:14px"><summary><b>Customize activities</b> <small style="color:var(--mute)">(${acts.length} of ${s.acts.length})</small></summary><div class="row" style="margin:8px 0">Reset from template: <select id="tplsel">${s.types.map(x=>`<option value="${x.id}" ${x.id===r.type?'selected':''}>${esc(x.name)}</option>`).join('')}</select><button class="btn sm" data-act="applytpl">Apply</button></div><div style="columns:2 220px">${s.acts.map(a=>{const on=(r.acts||[]).includes(a.id);return `<label class="chk"><input type="checkbox" data-ract="${r.id}|${a.id}" ${on?'checked':''}><span class="dot" style="background:${a.color}"></span>${esc(a.name)}</label>${a.hp&&on?`<label class="chk sub"><input type="checkbox" data-rhp="${r.id}|${a.id}" ${(r.hpOff||[]).includes(a.id)?'':'checked'}><span class="hptag">◆ HP</span>Hold point</label>`:''}`;}).join('')}</div></details>`;
+  h+=`<details class="rwonly" style="margin-top:6px"><summary><b>Room details</b></summary><div class="form" style="margin-top:8px"><div class="row"><label>Code<input data-hold id="rd_code" value="${esc(r.code)}"></label><label>Floor<select id="rd_floor">${s.floors.map(x=>`<option value="${x.id}" ${x.id===r.floor?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label></div><label>Name<input data-hold id="rd_name" value="${esc(r.name)}"></label><label>Type<select id="rd_type">${s.types.map(x=>`<option value="${x.id}" ${x.id===r.type?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label><div class="row"><button class="btn pri" data-act="saveroom">Save details</button><span class="sp"></span><button class="btn red" data-act="delroom">Delete room</button></div></div></details></div>`;
   D.innerHTML=h;
   D.querySelectorAll('details').forEach((d,i)=>{if(openD[i])d.open=true;});D.scrollTop=sc;
 }
@@ -634,17 +733,6 @@ function renderDrawer(){
 /* ===================== MODALS ===================== */
 function modal(html,lock){$('#modal').innerHTML=`<div class="box">${html}</div>`;$('#modal').dataset.lock=lock?'1':'';$('#modal').classList.add('open');}
 function closeModal(){$('#modal').classList.remove('open');$('#modal').innerHTML='';}
-function askUser(){
-  modal(`<h2>Who are you?</h2><p style="color:var(--mute);margin-top:0">Your name is attached to each status update (stored on this device only).</p><div class="form"><input id="u_name" placeholder="e.g. Philippe" value="${esc(lsGet(LSU,'')||memUser)}"><button class="btn pri" id="u_ok">OK</button></div>`,true);
-  const ok=()=>{const v=$('#u_name').value.trim();if(!v)return;lsSet(LSU,v);memUser=v;closeModal();render();};
-  $('#u_ok').onclick=ok;$('#u_name').onkeydown=e=>{if(e.key==='Enter')ok();};$('#u_name').focus();
-}
-function welcome(){
-  modal(`<h2>Welcome 👋</h2><p>No project data yet. How do you want to start?</p><div class="form"><button class="btn pri" id="w_demo">Start with demo data (3 floors, 33 rooms)</button><button class="btn" id="w_empty">Start empty (3 floors, I add my rooms)</button></div><p style="font-size:12px;color:var(--mute)">Floors, activities and room types can all be edited later in ⚙ Setup. Demo rooms can be deleted in one click.</p>`,true);
-  const go=async d=>{$('#w_demo').disabled=$('#w_empty').disabled=true;await store.replaceAll(d);closeModal();render();if(!lsGet(LSU,'')&&!memUser)askUser();};
-  $('#w_demo').onclick=()=>go(demoData());
-  $('#w_empty').onclick=()=>go({settings:defaultSettings(),rooms:[],blockers:[]});
-}
 function blkModal(bid,roomId,actId){
   const s=S.settings;
   const b=bid?{...S.blockers[bid]}:{id:uid('b'),no:nextBlkNo(),roomId:roomId||'',actId:actId||'',title:'',cat:s.cats[0],owner:'',raised:today(),due:'',status:'open',closed:'',by:user()};
@@ -669,22 +757,6 @@ function blkModal(bid,roomId,actId){
   if(bid)$('#m_del').onclick=()=>{if(confirm('Delete this blocking point permanently?')){store.delBlocker(bid);closeModal();}};
 }
 
-/* ===================== DEMO DATA ===================== */
-function demoData(){
-  const s=defaultSettings(),rooms=[],blockers=[];
-  const L=[['01','Living / Dining','apt'],['02','Bedroom 1','apt'],['03','Bedroom 2','apt'],['04','Master bathroom','wet'],['05','Guest WC','wet'],['06','Kitchen','kit'],['07','Apartment corridor','cor'],['08','Terrace','ter'],['09','Lift lobby','cor'],['10','Staircase','stair'],['11','Electrical room','tech']];
-  s.floors.forEach((f,fi)=>{const base=[.78,.48,.18][fi];
-    L.forEach(([c,n,t])=>{const ty=s.types.find(x=>x.id===t),acts=s.acts.filter(a=>ty.acts.includes(a.id));
-      const steps=[];acts.forEach(a=>{steps.push(a.id);if(a.hp)steps.push(a.id+HP);});
-      const p=Math.max(0,Math.min(1,base+(Math.random()-.5)*.45)),k=Math.floor(p*steps.length),stt={};
-      steps.forEach((a,j)=>{const dd=dMinus(Math.max(1,(steps.length-j)*3+Math.floor(Math.random()*4)));if(j<k)stt[a]={s:2,d:dd,ds:dd,dd,by:'Demo'};else if(j===k&&Math.random()<.5)stt[a]={s:1,d:dMinus(2),ds:dMinus(2),by:'Demo'};});
-      rooms.push({id:uid('r'),floor:f.id,code:`${fi+1}.${c}`,name:n,type:t,acts:acts.map(a=>a.id),st:stt,note:'',demo:true});});});
-  const samples=[['Ceiling level clash with ductwork – RFI pending','Design / RFI','Design team'],['Floor tiles delivery delayed by supplier','Material / Procurement','Procurement'],['Area occupied by MEP subcontractor','Access / Preceding works','MEP subcontractor'],['Wall flatness out of tolerance – NCR, rework needed','Quality / NCR','Plastering subcontractor'],['Waiting client approval of special paint sample','Client decision','Client'],['Not enough tilers on site this week','Subcontractor / Manpower','Tiling subcontractor']];
-  const cand=rooms.filter(r=>r.acts.some(a=>!(r.st[a]&&r.st[a].s===2))).sort(()=>Math.random()-.5).slice(0,6);
-  cand.forEach((r,i)=>{const a=r.acts.find(x=>!(r.st[x]&&r.st[x].s===2)),[title,cat,owner]=samples[i%samples.length];
-    blockers.push({id:uid('b'),no:'B-'+String(i+1).padStart(3,'0'),roomId:r.id,actId:a,title,cat,owner,raised:dMinus(3+i*3),due:i%2?dMinus(-5):dMinus(1),status:'open',closed:'',by:'Demo'});});
-  return {settings:s,rooms,blockers};
-}
 
 /* ===================== EXCEL ===================== */
 function xls(){if(!window.XLSX){alert('Excel library not loaded (check internet connection).');return null;}return XLSX;}
@@ -707,7 +779,10 @@ function exportAll(){
 const ACT={
   print:()=>window.print(),
   close:closeDrawer,
-  user:askUser,
+  user:()=>{if(!confirm('Log out of the Floor Tracker on this device?'))return;lsSet(LSU,'');closeDrawer();showLogin();},
+  addperson:()=>{const lines=$('#np_name').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean),role=$('#np_role').value;if(!lines.length)return;
+    const have=people().map(p=>normName(p.name));const add=lines.filter((n,i)=>!have.includes(normName(n))&&lines.findIndex(x=>normName(x)===normName(n))===i);
+    if(!add.length)return alert('Already in the list.');editPeople(l=>add.forEach(n=>l.push({name:n,role})));},
   xlsblk:exportBlk,
   xlsall:exportAll,
   backup:()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify({settings:S.settings,rooms:S.rooms,blockers:S.blockers},null,1)],{type:'application/json'}));a.download=`RT_FloorTracker_backup_${today()}.json`;a.click();},
@@ -736,16 +811,19 @@ const ACT={
   delroom:()=>{const r=S.rooms[drawerRoom];if(!confirm(`Delete room ${r.code} and its blocking points?`))return;const id=r.id;closeDrawer();store.delRooms([id],Object.values(S.blockers).filter(b=>b.roomId===id).map(b=>b.id));},
 };
 document.addEventListener('click',e=>{
+  const lg=e.target.closest('#login [data-lgpick],#login [data-lgk],#login [data-lgback],#login [data-lgset]');if(lg){loginClick(lg.dataset);return;}
   if(e.target.id==='modal'&&!$('#modal').dataset.lock){closeModal();return;}
-  const t=e.target.closest('[data-view],[data-f],[data-closeblk],[data-editblk],[data-newblk],[data-set],[data-cell],[data-room],[data-act],[data-actup],[data-actdown],[data-actdel],[data-typedel],[data-delfloor],[data-gonext]');
+  const t=e.target.closest('[data-view],[data-f],[data-closeblk],[data-editblk],[data-newblk],[data-set],[data-cell],[data-room],[data-act],[data-actup],[data-actdown],[data-actdel],[data-typedel],[data-delfloor],[data-gonext],[data-preset],[data-pdel]');
   if(!t)return;const d=t.dataset;
+  if(d.preset){if(confirm(`Reset the PIN of ${d.preset}?\n\nThey will choose a new PIN at their next login.`))store.resetPin(d.preset);return;}
+  if(d.pdel){if(!confirm(`Remove ${d.pdel} from the team?\n\nThey will no longer be able to log in. Their past updates stay in the history.`))return;const n=d.pdel;editPeople(l=>{const i=l.findIndex(p=>p.name===n);if(i>=0)l.splice(i,1);});if(S.pins[n])store.resetPin(n);return;}
   if(d.view){F.view=d.view;closeDrawer();render();window.scrollTo(0,0);return;}
   if(d.f){F[d.f]=d.v;render();return;}
   if(d.closeblk){const b=S.blockers[d.closeblk];store.setBlocker({...b,status:'closed',closed:today(),closedBy:user()});return;}
   if(d.editblk){blkModal(d.editblk);return;}
   if(d.newblk!==undefined){const [rid,aid]=d.newblk.split('|');blkModal(null,rid,aid);return;}
   if(d.set){const [rid,aid,k]=d.set.split('|');setStatus(rid,aid,+k);return;}
-  if(d.cell){const [rid,aid]=d.cell.split('|');if(F.quick)setStatus(rid,aid,(st(S.rooms[rid],aid)+1)%3);else openRoom(rid);return;}
+  if(d.cell){const [rid,aid]=d.cell.split('|');if(F.quick&&!isRO())setStatus(rid,aid,(st(S.rooms[rid],aid)+1)%3);else openRoom(rid);return;}
   if(d.room){e.preventDefault();openRoom(d.room);return;}
   if(d.gonext){Object.assign(F,{view:'overview',next:d.gonext,floor:'all',type:'all',q:'',blk:'all'});render();window.scrollTo(0,0);return;}
   if(d.actup||d.actdown){const i=+(d.actup??d.actdown),j=d.actup!==undefined?i-1:i+1;saveS(s=>{[s.acts[i],s.acts[j]]=[s.acts[j],s.acts[i]];});return;}
@@ -764,6 +842,7 @@ document.addEventListener('change',e=>{
   if(d.floorname){saveS(s=>s.floors.find(f=>f.id===d.floorname).name=t.value.trim()||'Floor');return;}
   if(d.actname){saveS(s=>s.acts.find(a=>a.id===d.actname).name=t.value.trim()||'Activity');return;}
   if(d.actshort){saveS(s=>s.acts.find(a=>a.id===d.actshort).short=t.value.trim());return;}
+  if(d.prole){const n=d.prole,v=t.value;editPeople(l=>{const p=l.find(x=>x.name===n);if(p)p.role=v;});return;}
   if(d.acthp){saveS(s=>s.acts.find(a=>a.id===d.acthp).hp=t.checked);return;}
   if(d.rhp){const [rid,aid]=d.rhp.split('|'),r=S.rooms[rid];const off=(r.hpOff||[]).filter(x=>x!==aid);if(!t.checked)off.push(aid);store.patchRoom(rid,{hpOff:off});return;}
   if(d.sdate){const [rid,id,k]=d.sdate.split('|');if(t.value)store.patchRoom(rid,{[`st.${id}.${k}`]:t.value});return;}
@@ -782,12 +861,13 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'){if($('#modal').clas
     catch(err){$('#sync').textContent='🔴 Offline';$('#view').innerHTML=`<div class="card"><h2>Connection problem</h2><p>${esc(err.message)}</p><p>Check in the Firebase console: Firestore database created · Authentication → Anonymous sign-in enabled · Firestore rules published.</p></div>`;return;}
   }else{
     let d={};try{d=JSON.parse(lsGet(LSK,'{}'))||{};}catch(e){}
-    S={settings:d.settings||null,rooms:d.rooms||{},blockers:d.blockers||{},log:d.log||[],snaps:d.snaps||[]};
+    S={settings:d.settings||null,rooms:d.rooms||{},blockers:d.blockers||{},log:d.log||[],snaps:d.snaps||[],pins:d.pins||{}};
     $('#sync').textContent='🟡 Local mode';
   }
   // Monday: first opening of the day shows the weekly progress of last week
   if(new Date().getDay()===1&&lsGet('rtft_monday','')!==today()){lsSet('rtft_monday',today());F.view='weekly';F.wk='';}
-  if(!S.settings)welcome();else{render();if(!lsGet(LSU,''))askUser();}
+  // no demo: the very first opening creates an empty project (3 floors, default activities)
+  if(!S.settings)store.saveSettings(defaultSettings());else render();
   setInterval(ensureSnapshots,15*60*1000);
 })();
 </script>
