@@ -1,0 +1,9 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // RT Floor Tracker collections (ft_settings, ft_rooms, ft_blockers, ft_log)
+    match /{coll}/{doc} {
+      allow read, write: if request.auth != null && coll.matches('ft_.*');
+    }
+  }
+}

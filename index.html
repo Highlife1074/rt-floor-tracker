@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RT Floor Tracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--bg:#f3f4f7;--card:#fff;--ink:#1b2333;--mute:#6a7386;--line:#e2e5eb;--acc:#13406b;--acc2:#e8eef5;--done:#2f9e5f;--wip:#f2a71b;--blk:#d64040;--hp:#2d7ff9;--rad:10px}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.sticky{position:sticky;top:0;z-index:20}
+header.top{background:var(--acc);color:#fff;padding:10px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.brand{font-weight:800;font-size:16px}.sub{opacity:.75;font-size:12px}
+.sp{flex:1}
+.sync{font-size:12px;opacity:.9}
+.userchip{background:rgba(255,255,255,.15);border:0;color:#fff;border-radius:20px;padding:5px 11px;cursor:pointer;font:inherit;font-size:13px}
+nav.tabs{display:flex;gap:2px;padding:0 10px;background:#fff;border-bottom:1px solid var(--line);overflow-x:auto}
+nav.tabs button{border:0;background:none;padding:12px 13px;font:inherit;font-weight:600;color:var(--mute);border-bottom:3px solid transparent;cursor:pointer;white-space:nowrap}
+nav.tabs button.on{color:var(--acc);border-bottom-color:var(--acc)}
+.nb{background:var(--blk);color:#fff;border-radius:10px;font-size:11px;padding:0 6px;margin-left:4px}
+main{padding:16px;max-width:1500px;margin:0 auto}
+.btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:7px 12px;font:inherit;cursor:pointer;color:var(--ink)}
+.btn.pri{background:var(--acc);color:#fff;border-color:var(--acc)}
+.btn.red{color:var(--blk);border-color:#f0c4c4}
+.btn.sm{padding:4px 9px;font-size:12px}
+select,input,textarea{font:inherit;border:1px solid var(--line);border-radius:8px;padding:7px 9px;background:#fff;color:var(--ink);max-width:100%}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--rad);padding:14px;margin-bottom:14px}
+.card h2{margin:0 0 10px;font-size:16px}
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px}
+.chip{border:1px solid var(--line);background:#fff;border-radius:20px;padding:5px 11px;white-space:nowrap;cursor:pointer;font:inherit;font-size:13px;display:inline-flex;gap:6px;align-items:center;color:var(--ink)}
+.chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.chip .n{background:var(--acc2);color:var(--acc);border-radius:10px;padding:0 6px;font-size:11px;font-weight:700}
+.chip.on .n{background:rgba(255,255,255,.22);color:#fff}
+.dot{width:10px;height:10px;border-radius:50%;display:inline-block;flex:none}
+.floor{margin-bottom:24px}
+.floor-h{display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap}.floor-h h2{margin:0;font-size:17px}
+.bar{height:8px;background:#e3e6ec;border-radius:5px;overflow:hidden;flex:1;max-width:260px;min-width:80px}.bar>i{display:block;height:100%;background:var(--done)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:10px}
+.tile{text-align:left;border:1px solid var(--line);background:#fff;border-radius:var(--rad);padding:9px 10px 9px;cursor:pointer;font:inherit;color:inherit;border-top:6px solid #ccc;min-width:0}
+.tile:hover{box-shadow:0 3px 10px rgba(0,0,0,.08)}
+.tile.is-blk{box-shadow:0 0 0 2px var(--blk)}
+.t-top{display:flex;justify-content:space-between;align-items:center;gap:6px}.t-top b{font-size:15px}
+.t-name{color:var(--mute);font-size:12px;margin:1px 0 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.segs{display:flex;gap:2px;margin-bottom:7px}.segs i{flex:1;height:7px;border-radius:2px;background:#e3e6ec}
+.segs i.s1{background:var(--wip)}.segs i.s2{background:var(--done)}.segs i.sb{background:var(--blk)}
+.t-next{font-size:12px;display:flex;align-items:center;gap:6px;min-width:0}.t-next span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge{font-size:11px;font-weight:700;border-radius:10px;padding:1px 7px;white-space:nowrap}.badge.red{background:#fde8e8;color:var(--blk)}
+.pct{font-weight:700;font-size:12px;color:var(--mute)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--mute);margin:0 0 14px}.legend span{display:inline-flex;gap:5px;align-items:center}
+.sq{width:12px;height:12px;border-radius:3px;display:inline-block;border:1px solid #c5cad4}
+.empty{color:var(--mute);font-size:13px;padding:10px 0}
+.mxwrap{overflow:auto;background:#fff;border:1px solid var(--line);border-radius:var(--rad);max-height:calc(100vh - 250px)}
+table.mx{border-collapse:separate;border-spacing:0;font-size:12px}
+.mx th,.mx td{border-bottom:1px solid var(--line);border-right:1px solid var(--line);padding:0}
+.mx thead th{position:sticky;top:0;background:#fff;z-index:2;height:150px;vertical-align:bottom;padding:6px 2px}
+.mx .vt{writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-weight:600;margin:0 auto;display:flex;align-items:center;gap:4px}
+.mx .rh{position:sticky;left:0;background:#fff;z-index:1;padding:4px 10px;min-width:190px;text-align:left;white-space:nowrap}
+.mx thead .rh{z-index:3;vertical-align:bottom}
+.mx a{color:var(--acc);text-decoration:none}
+.mx td.c{width:30px;min-width:30px;height:27px;cursor:pointer;text-align:center;color:#fff;font-weight:800}
+.mx td.c.s0::after{content:'';display:inline-block;width:12px;height:12px;border:1.5px solid #c5cad4;border-radius:3px;vertical-align:middle}
+.mx td.c.s1{background:var(--wip)}.mx td.c.s2{background:var(--done)}.mx td.c.b{background:var(--blk)}.mx td.c.b::after{display:none}
+.mx td.na{background:repeating-linear-gradient(45deg,#f6f7f9,#f6f7f9 4px,#eceef2 4px,#eceef2 8px)}
+.mx tr.fl td{background:var(--acc2);font-weight:700;padding:6px 10px}
+.mx .hl{box-shadow:inset 0 0 0 2px var(--acc)}
+.heat{text-align:center;font-weight:600;font-size:12px;padding:6px 4px}
+#drawer{position:fixed;top:0;right:0;bottom:0;width:min(580px,100%);background:#fff;box-shadow:-8px 0 30px rgba(0,0,0,.15);transform:translateX(105%);transition:transform .2s;z-index:50;overflow-y:auto}
+#drawer.open{transform:none}
+#scrim{position:fixed;inset:0;background:rgba(10,20,40,.35);z-index:45;display:none}#scrim.open{display:block}
+.dh{position:sticky;top:0;background:#fff;padding:14px 16px;border-bottom:1px solid var(--line);z-index:2}
+.db{padding:6px 16px 30px}
+.arow{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.arow .an{flex:1;min-width:0}.arow small{display:block;color:var(--mute);font-size:11px}
+.arow.blk .an b{color:var(--blk)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex:none}
+.seg button{border:0;background:#fff;padding:7px 9px;font:inherit;font-size:12px;cursor:pointer;color:var(--mute)}
+.seg button+button{border-left:1px solid var(--line)}
+.seg .on0{background:#eef0f4;color:var(--ink);font-weight:700}.seg .on1{background:var(--wip);color:#fff;font-weight:700}.seg .on2{background:var(--done);color:#fff;font-weight:700}
+.iconbtn{border:1px solid var(--line);background:#fff;border-radius:8px;width:34px;height:34px;cursor:pointer;flex:none;font-size:15px}
+h3{font-size:12px;margin:18px 0 6px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute)}
+.bcard{border:1px solid var(--line);border-left:4px solid var(--blk);border-radius:8px;padding:8px 10px;margin-bottom:8px}
+.bcard.closed{border-left-color:var(--done);opacity:.75}
+.bcard small{color:var(--mute)}
+.tag{background:#eef0f4;border-radius:6px;padding:1px 7px;font-size:11px;font-weight:600}.tag.green{background:#e3f4ea;color:var(--done)}.tag.red{background:#fde8e8;color:var(--blk)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.checks{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:4px 10px}
+.chk{display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:3px 0}
+details summary{cursor:pointer;padding:6px 0}
+#modal{position:fixed;inset:0;background:rgba(10,20,40,.45);display:none;align-items:center;justify-content:center;z-index:60;padding:16px}
+#modal.open{display:flex}
+#modal .box{background:#fff;border-radius:14px;padding:18px;width:min(540px,100%);max-height:92vh;overflow:auto}
+#modal h2{margin:0 0 12px;font-size:18px}
+.form{display:grid;gap:10px}.form label{display:grid;gap:4px;font-size:12px;color:var(--mute);font-weight:600;flex:1}
+table.tb{width:100%;border-collapse:collapse;background:#fff;font-size:13px}
+.tb th{text-align:left;font-size:11px;text-transform:uppercase;color:var(--mute);border-bottom:2px solid var(--line);padding:8px;white-space:nowrap}
+.tb td{border-bottom:1px solid var(--line);padding:7px 8px;vertical-align:top}
+.tb tr.click{cursor:pointer}.tb tr.click:hover{background:#fafbfc}
+.tb tr.grp td{background:var(--acc2);font-weight:700}
+.tbwrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--rad)}
+.overdue{color:var(--blk);font-weight:700}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.kpi{background:#fff;border:1px solid var(--line);border-radius:var(--rad);padding:12px}.kpi b{display:block;font-size:24px}.kpi span{color:var(--mute);font-size:12px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(400px,1fr));gap:14px}
+.feed div{padding:6px 0;border-bottom:1px solid var(--line);font-size:13px}.feed small{color:var(--mute)}
+.lnk{color:var(--acc);cursor:pointer;font-weight:700;text-decoration:underline}
+/* hold points */
+.segs i.hp{flex:0 0 7px;border-radius:50%}.segs i.hp.s1{background:var(--hp)}
+.mx td.c.hp{width:22px;min-width:22px;background-color:#fafbfd}
+.mx td.c.hp.s0::after{border-radius:2px;transform:rotate(45deg);width:9px;height:9px}
+.mx td.c.hp.s1{background:var(--hp)}.mx td.c.hp.s2{background:var(--done)}
+.mx th.hpcol .vt{font-weight:500;color:var(--mute);font-size:11px}
+.arow.hp{padding-left:22px;background:linear-gradient(90deg,transparent 9px,#d5dae3 9px,#d5dae3 11px,transparent 11px)}
+.arow.hp .an b{font-weight:600;font-size:13px}
+.seg .on1.hpb{background:var(--hp)}
+.hptag{font-size:10px;font-weight:700;color:var(--hp);border:1px solid var(--hp);border-radius:4px;padding:0 4px;margin-right:4px}
+input.dt{padding:1px 4px;font-size:11px;border:1px dashed #c5cad4;border-radius:5px;color:var(--mute);background:transparent}
+.chk.sub{padding-left:22px;color:var(--mute);font-size:12px}
+/* weekly */
+.delta{font-size:13px;font-weight:700}.delta.up{color:var(--done)}.delta.down{color:var(--blk)}.delta.flat{color:var(--mute)}
+.banner{background:var(--acc);color:#fff;border-radius:var(--rad);padding:12px 16px;margin-bottom:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.trend svg{width:100%;height:auto;display:block}
+.printonly{display:none}
+@media print{.sticky,.noprint,#drawer,#scrim,#modal{display:none!important}.printonly{display:block}body{background:#fff}main{padding:0;max-width:none}.tile{break-inside:avoid}.mxwrap,.tbwrap{max-height:none;overflow:visible;border:0}.tb tr{break-inside:avoid}}
+@media (max-width:640px){.grid2{grid-template-columns:1fr}.tiles{grid-template-columns:repeat(auto-fill,minmax(145px,1fr))}main{padding:10px}.seg button{padding:7px 7px}}
+</style>
+</head>
+<body>
+<div class="sticky">
+  <header class="top">
+    <div><div class="brand" id="pname">Riviera Tower</div><div class="sub">Floor finishes tracker</div></div>
+    <span class="sp"></span><span class="sync" id="sync"></span>
+    <button class="userchip" id="userchip" data-act="user">👤</button>
+  </header>
+  <nav class="tabs">
+    <button data-view="overview">🗺 Overview</button>
+    <button data-view="matrix">▦ Matrix</button>
+    <button data-view="blockers">⚠ Blocking points<span class="nb" id="nbk"></span></button>
+    <button data-view="weekly">📈 Weekly progress</button>
+    <button data-view="dash">📊 Dashboard</button>
+    <button data-view="setup">⚙ Setup</button>
+  </nav>
+</div>
+<main id="view"><div class="empty">Loading…</div></main>
+<div id="scrim" data-act="close"></div>
+<div id="drawer"></div>
+<div id="modal"></div>
+
+<script type="module">
+/* =====================================================================
+   1) FIREBASE CONFIG — paste your Web App config here.
+      Leave projectId empty to run in LOCAL MODE (data kept in this browser only).
+   ===================================================================== */
+const FIREBASE_CONFIG = {
+  apiKey: "",
+  authDomain: "",
+  projectId: "",
+  storageBucket: "",
+  messagingSenderId: "",
+  appId: ""
+};
+const P = 'ft_';                       // Firestore collection prefix
+const USE_FB = !!FIREBASE_CONFIG.projectId;
+
+/* ===================== DEFAULT LIBRARY ===================== */
+const DEFAULT_ACTS = [
+  ['brick','Brickworks','BRK','#8d6e63'],
+  ['bw','Builder works','BW','#a1887f'],
+  ['mep1','MEP 1st fix','MEP1','#5c6bc0'],
+  ['plas','Plastering','PLS','#90a4ae'],
+  ['screed','Screed','SCR','#bcaaa4'],
+  ['wp','Waterproofing','WP','#26a69a'],
+  ['dry','Drywall & ceilings','DRY','#78909c'],
+  ['tilef','Tiling – floor','TLF','#00897b'],
+  ['tilew','Tiling – wall','TLW','#00acc1'],
+  ['civ','Civil works finishes','CWF','#6d4c41'],
+  ['pc','Paint – ceiling','PC','#7e57c2'],
+  ['pw','Paint – walls','PW','#ab47bc'],
+  ['spaint','Special paint','SP','#ec407a'],
+  ['join','Doors & joinery','JNR','#c0874a'],
+  ['mep2','MEP 2nd fix','MEP2','#3949ab'],
+  ['snag','Snagging & clean','SNG','#546e7a'],
+];
+const PALETTE=['#e53935','#fb8c00','#fdd835','#7cb342','#00897b','#039be5','#3949ab','#8e24aa','#d81b60','#6d4c41','#546e7a'];
+const LBL=['To do','In progress','Done'];
+
+function defaultSettings(){
+  const T=(id,name,list)=>({id,name,acts:list.split(',')});
+  return {
+    project:'Riviera Tower',
+    floors:[{id:'f1',name:'Level 1'},{id:'f2',name:'Level 2'},{id:'f3',name:'Level 3'}],
+    acts:DEFAULT_ACTS.map(([id,name,short,color])=>({id,name,short,color,hp:['mep1','wp'].includes(id)})),
+    types:[
+      T('apt','Apartment – dry room','brick,bw,mep1,plas,screed,dry,civ,pc,pw,join,mep2,snag'),
+      T('wet','Bathroom / WC','brick,bw,mep1,plas,screed,wp,dry,tilef,tilew,pc,join,mep2,snag'),
+      T('kit','Kitchen','brick,bw,mep1,plas,screed,dry,tilef,tilew,pc,pw,join,mep2,snag'),
+      T('cor','Corridor / Lobby','brick,bw,mep1,plas,screed,dry,tilef,pc,pw,spaint,join,mep2,snag'),
+      T('stair','Staircase','brick,bw,plas,civ,pc,pw,spaint,snag'),
+      T('tech','Technical room','brick,bw,mep1,plas,screed,civ,pc,pw,mep2,snag'),
+      T('ter','Terrace / Balcony','bw,screed,wp,tilef,civ,snag'),
+    ],
+    cats:['Design / RFI','Material / Procurement','Access / Preceding works','Subcontractor / Manpower','Quality / NCR','MEP coordination','Client decision','Other']
+  };
+}
+
+/* ===================== HELPERS ===================== */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid=(p='')=>p+Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-3);
+const pad=n=>String(n).padStart(2,'0');
+const ymd=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const today=()=>ymd(new Date());
+const dMinus=n=>{const d=new Date();d.setDate(d.getDate()-n);return ymd(d);};
+const fmtD=s=>s?new Date(s+'T00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short'}):'';
+const fmtLong=s=>new Date(s+'T00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'});
+const days=(a,b)=>Math.round((new Date(b+'T00:00')-new Date(a+'T00:00'))/864e5);
+const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:0;
+const pc=p=>Math.round(p*100);
+const hexA=(h,a)=>{const n=parseInt(h.slice(1),16);return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`;};
+const heat=p=>p<=0?'#c9ced8':`hsl(${Math.round(15+p*125)},62%,46%)`;
+function ago(ts){const m=Math.round((Date.now()-ts)/6e4);if(m<1)return'just now';if(m<60)return m+' min ago';const h=Math.round(m/60);if(h<24)return h+' h ago';return Math.round(h/24)+' d ago';}
+const LSK='rtft_db_v1',LSU='rtft_user',LSF='rtft_filters';
+const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:v;}catch(e){return d;}};
+const lsSet=(k,v)=>{try{localStorage.setItem(k,v);}catch(e){}};
+let memUser='';
+const user=()=>lsGet(LSU,'')||memUser||'Unknown';
+
+/* ===================== STATE ===================== */
+let S={settings:null,rooms:{},blockers:{},log:[],snaps:[]};
+let F={view:'overview',floor:'all',next:'all',type:'all',q:'',blk:'all',colorBy:'next',quick:false,bStatus:'open',bFloor:'all',bCat:'all',bOwner:'all',bGroup:'none',bq:''};
+try{Object.assign(F,JSON.parse(lsGet(LSF,'{}')));}catch(e){}
+let drawerRoom=null;
+
+/* Hold points: a library activity with hp:true gets a linked step "<id>__hp" right after it in the sequence */
+const HP='__hp';
+const isHP=id=>String(id).endsWith(HP);
+const mainOf=id=>isHP(id)?id.slice(0,-HP.length):id;
+function actById(id){const a=S.settings.acts.find(x=>x.id===mainOf(id));if(!a||!isHP(id))return a;return {id,main:a.id,isHp:true,name:'HP – '+a.name,short:'HP',color:a.color};}
+const allSteps=()=>{const o=[];S.settings.acts.forEach(a=>{o.push(a);if(a.hp)o.push(actById(a.id+HP));});return o;};
+const lbls=id=>isHP(id)?['Pending','Inspection requested','Released']:['To do','In progress','Done'];
+const lbl=(id,s)=>lbls(id)[s]||'';
+const stepLabel=(r,id)=>{const a=actById(id),s=st(r,id);if(a.isHp)return (s===1?'Inspection requested':'Awaiting HP')+': <b>'+esc(a.name.slice(5))+'</b>';return (s===1?'In progress':'Next')+': <b>'+esc(a.name)+'</b>';};
+const floorById=id=>S.settings.floors.find(f=>f.id===id);
+const typeById=id=>S.settings.types.find(t=>t.id===id);
+const floorIdx=id=>{const i=S.settings.floors.findIndex(f=>f.id===id);return i<0?999:i;};
+const roomActs=r=>allSteps().filter(a=>a.isHp?(r.acts||[]).includes(a.main)&&!(r.hpOff||[]).includes(a.main):(r.acts||[]).includes(a.id)).map(a=>a.id);
+const st=(r,a)=>(r.st&&r.st[a]&&r.st[a].s)||0;
+const openBlk=(r,a)=>Object.values(S.blockers).filter(b=>b.status==='open'&&b.roomId===r.id&&(a===undefined||b.actId===a));
+function progress(r){const ids=roomActs(r);if(!ids.length)return 0;return avg(ids.map(a=>{const s=st(r,a);return s===2?1:s===1?.5:0;}));}
+const nextStep=r=>roomActs(r).find(a=>st(r,a)!==2)||null;
+const roomsList=()=>Object.values(S.rooms).sort((a,b)=>floorIdx(a.floor)-floorIdx(b.floor)||String(a.code).localeCompare(String(b.code),undefined,{numeric:true}));
+function passes(r,skipNext){
+  if(F.floor!=='all'&&r.floor!==F.floor)return false;
+  if(F.type!=='all'&&r.type!==F.type)return false;
+  if(F.q){const q=F.q.toLowerCase();if(!(`${r.code} ${r.name}`.toLowerCase().includes(q)))return false;}
+  const bk=openBlk(r).length>0;if(F.blk==='yes'&&!bk)return false;if(F.blk==='no'&&bk)return false;
+  if(!skipNext&&F.next!=='all'){const n=nextStep(r);if(F.next==='__done'){if(n)return false;}else if(n!==F.next)return false;}
+  return true;
+}
+const filtered=()=>roomsList().filter(r=>passes(r,false));
+
+/* ===================== STORE (Firestore or local) ===================== */
+let db,fb;
+const dref=(c,id)=>fb.doc(db,P+c,id);
+function setPath(o,path,v){const k=path.split('.');for(let i=0;i<k.length-1;i++){o[k[i]]=o[k[i]]||{};o=o[k[i]];}o[k[k.length-1]]=v;}
+function persist(){lsSet(LSK,JSON.stringify(S));render();}
+async function runOps(ops){for(let i=0;i<ops.length;i+=400){const b=fb.writeBatch(db);ops.slice(i,i+400).forEach(([k,c,id,v])=>k==='del'?b.delete(dref(c,id)):b.set(dref(c,id),v));await b.commit();}}
+const fail=e=>{console.error(e);alert('Save failed: '+e.message);};
+const store={
+  saveSettings(s){if(USE_FB)return fb.setDoc(dref('settings','main'),s).catch(fail);S.settings=s;persist();},
+  setRoom(r){if(USE_FB)return fb.setDoc(dref('rooms',r.id),r).catch(fail);S.rooms[r.id]=r;persist();},
+  patchRoom(id,patch){if(USE_FB)return fb.updateDoc(dref('rooms',id),patch).catch(fail);for(const k in patch)setPath(S.rooms[id],k,patch[k]);persist();},
+  setBlocker(b){if(USE_FB)return fb.setDoc(dref('blockers',b.id),b).catch(fail);S.blockers[b.id]=b;persist();},
+  delBlocker(id){if(USE_FB)return fb.deleteDoc(dref('blockers',id)).catch(fail);delete S.blockers[id];persist();},
+  addLog(e){if(USE_FB)return fb.addDoc(fb.collection(db,P+'log'),e).catch(()=>{});S.log.unshift(e);S.log=S.log.slice(0,1500);},
+  saveSnaps(list){if(!list.length)return;if(USE_FB)return runOps(list.map(x=>['set','snapshots',x.id,x])).catch(e=>console.error(e));list.forEach(x=>{S.snaps=S.snaps.filter(y=>y.id!==x.id);S.snaps.push(x);});persist();},
+  async addRooms(rooms){if(USE_FB)return runOps(rooms.map(r=>['set','rooms',r.id,r])).catch(fail);rooms.forEach(r=>S.rooms[r.id]=r);persist();},
+  async delRooms(roomIds,blkIds){if(USE_FB)return runOps([...roomIds.map(id=>['del','rooms',id]),...blkIds.map(id=>['del','blockers',id])]).catch(fail);roomIds.forEach(id=>delete S.rooms[id]);blkIds.forEach(id=>delete S.blockers[id]);persist();},
+  async replaceAll(d){
+    const rooms=Array.isArray(d.rooms)?d.rooms:Object.values(d.rooms||{});
+    const blks=Array.isArray(d.blockers)?d.blockers:Object.values(d.blockers||{});
+    if(USE_FB){
+      const ops=[...Object.keys(S.rooms).map(id=>['del','rooms',id]),...Object.keys(S.blockers).map(id=>['del','blockers',id]),['set','settings','main',d.settings],...rooms.map(r=>['set','rooms',r.id,r]),...blks.map(b=>['set','blockers',b.id,b])];
+      return runOps(ops).catch(fail);
+    }
+    S.settings=d.settings;S.rooms={};rooms.forEach(r=>S.rooms[r.id]=r);S.blockers={};blks.forEach(b=>S.blockers[b.id]=b);persist();
+  }
+};
+async function initFB(){
+  const base='https://www.gstatic.com/firebasejs/10.12.2/';
+  const [app,fs,au]=await Promise.all([import(base+'firebase-app.js'),import(base+'firebase-firestore.js'),import(base+'firebase-auth.js')]);
+  const a=app.initializeApp(FIREBASE_CONFIG);db=fs.getFirestore(a);fb=fs;
+  await au.signInAnonymously(au.getAuth(a));
+  const got={s:0,r:0,b:0,n:0};let booted=false;
+  return new Promise((res,rej)=>{
+    const ready=()=>{if(got.s&&got.r&&got.b&&got.n){if(!booted){booted=true;res();}else render();}};
+    fs.onSnapshot(fs.collection(db,P+'snapshots'),q=>{S.snaps=q.docs.map(d=>d.data());got.n=1;ready();},rej);
+    fs.onSnapshot(dref('settings','main'),d=>{S.settings=d.exists()?d.data():null;got.s=1;ready();},rej);
+    fs.onSnapshot(fs.collection(db,P+'rooms'),q=>{S.rooms={};q.forEach(d=>S.rooms[d.id]=d.data());got.r=1;ready();},rej);
+    fs.onSnapshot(fs.collection(db,P+'blockers'),q=>{S.blockers={};q.forEach(d=>S.blockers[d.id]=d.data());got.b=1;ready();},rej);
+    fs.onSnapshot(fs.query(fs.collection(db,P+'log'),fs.orderBy('ts','desc'),fs.limit(400)),q=>{S.log=q.docs.map(d=>d.data());if(booted)render();},()=>{});
+  });
+}
+
+/* ===================== ACTIONS ===================== */
+function setStatus(rid,aid,s){
+  const r=S.rooms[rid];if(!r)return;const prev=st(r,aid);if(prev===s)return;
+  const cur=(r.st&&r.st[aid])||{};const v={s,by:user(),d:today()};
+  if(s>=1)v.ds=cur.ds||today();if(s===2)v.dd=today();
+  store.addLog({ts:Date.now(),by:user(),roomId:rid,code:r.code,actId:aid,from:prev,to:s});
+  store.patchRoom(rid,{['st.'+aid]:v});
+}
+function saveS(mut){const s=JSON.parse(JSON.stringify(S.settings));mut(s);store.saveSettings(s);}
+function nextBlkNo(){const m=Math.max(0,...Object.values(S.blockers).map(b=>parseInt(String(b.no||'').replace(/\D/g,''))||0));return 'B-'+String(m+1).padStart(3,'0');}
+
+/* ===================== RENDER ===================== */
+let pending=false;
+function render(){
+  if(!S.settings)return;
+  const ae=document.activeElement;
+  if(ae&&ae.matches&&ae.matches('[data-hold]')){pending=true;return;}
+  lsSet(LSF,JSON.stringify(F));
+  $('#pname').textContent=S.settings.project||'Riviera Tower';
+  $('#userchip').textContent='👤 '+user();
+  const nOpen=Object.values(S.blockers).filter(b=>b.status==='open').length;
+  $('#nbk').textContent=nOpen||'';$('#nbk').style.display=nOpen?'':'none';
+  document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.view===F.view));
+  const v={overview:vOverview,matrix:vMatrix,blockers:vBlockers,weekly:vWeekly,dash:vDash,setup:vSetup}[F.view]||vOverview;
+  const fid=ae&&ae.id,pos=ae&&ae.selectionStart;
+  $('#view').innerHTML=v();
+  if(fid&&(fid==='q'||fid==='bq')){const el=document.getElementById(fid);if(el){el.focus();try{el.setSelectionRange(pos,pos);}catch(e){}}}
+  if(drawerRoom)renderDrawer();
+  setTimeout(ensureSnapshots,0);
+}
+document.addEventListener('focusout',()=>{if(pending){pending=false;setTimeout(render,0);}});
+
+function filterBar(mode){
+  const s=S.settings,base=roomsList().filter(r=>passes(r,true));
+  const cnt={};let done=0;base.forEach(r=>{const n=nextStep(r);if(n)cnt[n]=(cnt[n]||0)+1;else done++;});
+  let chips=`<button class="chip ${F.next==='all'?'on':''}" data-f="next" data-v="all">All rooms <span class="n">${base.length}</span></button>`;
+  allSteps().forEach(a=>{if(!cnt[a.id]&&F.next!==a.id)return;chips+=`<button class="chip ${F.next===a.id?'on':''}" data-f="next" data-v="${a.id}"><span class="dot" style="background:${a.isHp?'var(--hp)':a.color}"></span>${a.isHp?'◆ Awaiting HP: '+esc(a.name.slice(5)):'Pending: '+esc(a.name)} <span class="n">${cnt[a.id]||0}</span></button>`;});
+  if(done||F.next==='__done')chips+=`<button class="chip ${F.next==='__done'?'on':''}" data-f="next" data-v="__done">✓ Complete <span class="n">${done}</span></button>`;
+  const opt=(v,l,cur)=>`<option value="${v}" ${cur===v?'selected':''}>${esc(l)}</option>`;
+  return `<div class="filters noprint">
+    <select data-fs="floor">${opt('all','All floors',F.floor)}${s.floors.map(f=>opt(f.id,f.name,F.floor)).join('')}</select>
+    <select data-fs="type">${opt('all','All room types',F.type)}${s.types.map(t=>opt(t.id,t.name,F.type)).join('')}</select>
+    <select data-fs="blk">${opt('all','Blocked + not blocked',F.blk)}${opt('yes','⚠ Blocked rooms only',F.blk)}${opt('no','Not blocked only',F.blk)}</select>
+    <input id="q" data-fs="q" placeholder="🔍 Search room…" value="${esc(F.q)}" style="width:170px">
+    ${mode==='tiles'?`<select data-fs="colorBy">${opt('next','Colour = next activity',F.colorBy)}${opt('progress','Colour = % progress',F.colorBy)}</select>`
+      :`<label class="chip"><input type="checkbox" data-fs="quick" ${F.quick?'checked':''}> Quick edit (tap a cell to change status)</label>`}
+    <span class="sp"></span><button class="btn sm" data-act="print">🖨 Print</button>
+  </div><div class="chips noprint">${chips}</div>`;
+}
+
+function vOverview(){
+  const s=S.settings,list=filtered();
+  let h=filterBar('tiles');
+  h+=`<div class="legend noprint">${F.colorBy==='next'?'<span>Top band + tint = next pending activity</span>':'<span>Top band = % complete (grey → orange → green)</span>'}
+    <span><i class="sq" style="background:var(--done);border:0"></i>Done</span><span><i class="sq" style="background:var(--wip);border:0"></i>In progress</span><span><i class="sq" style="background:#e3e6ec;border:0"></i>To do</span><span><i class="sq" style="background:var(--blk);border:0"></i>Blocked</span><span>Red outline = open blocking point</span></div>`;
+  h+=`<div class="printonly"><h2>${esc(s.project)} — Floor overview — ${fmtLong(today())}</h2></div>`;
+  if(!Object.keys(S.rooms).length)return h+`<div class="card">No rooms yet. Go to <span class="lnk" data-view="setup">Setup</span> to add rooms (one by one or paste a list from Excel).</div>`;
+  s.floors.filter(f=>F.floor==='all'||F.floor===f.id).forEach(f=>{
+    const all=Object.values(S.rooms).filter(r=>r.floor===f.id),rs=list.filter(r=>r.floor===f.id),p=avg(all.map(progress));
+    if(!rs.length&&F.next!=='all')return;
+    h+=`<section class="floor"><div class="floor-h"><h2>${esc(f.name)}</h2><div class="bar"><i style="width:${pc(p)}%"></i></div><span class="pct">${pc(p)}% · showing ${rs.length}/${all.length} rooms</span></div>`;
+    h+=rs.length?`<div class="tiles">${rs.map(tile).join('')}</div>`:`<div class="empty">${all.length?'No room matches the filters.':'No rooms on this floor yet.'}</div>`;
+    h+='</section>';
+  });
+  if(!list.length)h+=`<div class="empty">No room matches the current filters.</div>`;
+  return h;
+}
+function tile(r){
+  const n=nextStep(r),a=n&&actById(n),p=progress(r),bl=openBlk(r);
+  const top=F.colorBy==='progress'?heat(p):(a?a.color:'var(--done)');
+  const bg=F.colorBy==='next'&&a?hexA(a.color,.07):'#fff';
+  const segs=roomActs(r).map(id=>{const b=bl.some(x=>x.actId===id);return `<i class="${b?'sb':'s'+st(r,id)} ${isHP(id)?'hp':''}" title="${esc(actById(id).name)}: ${b?'BLOCKED':lbl(id,st(r,id))}"></i>`;}).join('');
+  return `<button class="tile ${bl.length?'is-blk':''}" data-room="${r.id}" style="border-top-color:${top};background:${bg}">
+    <div class="t-top"><b>${esc(r.code)}</b>${bl.length?`<span class="badge red">⚠ ${bl.length}</span>`:''}<span class="pct">${pc(p)}%</span></div>
+    <div class="t-name">${esc(r.name)}</div><div class="segs">${segs}</div>
+    <div class="t-next">${a?`<span class="dot" style="background:${a.isHp?'var(--hp)':a.color}"></span><span>${a.isHp?'◆ ':''}${stepLabel(r,n)}</span>`:'<span style="color:var(--done);font-weight:700">✓ Complete</span>'}</div></button>`;
+}
+
+function vMatrix(){
+  const s=S.settings,list=filtered(),acts=allSteps();
+  let h=filterBar('matrix');
+  h+=`<div class="legend noprint"><span><i class="sq" style="background:var(--done);border:0"></i>Done</span><span><i class="sq" style="background:var(--wip);border:0"></i>In progress</span><span><i class="sq"></i>To do</span><span><i class="sq" style="background:var(--blk);border:0"></i>Blocked</span><span><i class="sq" style="background:repeating-linear-gradient(45deg,#f6f7f9,#f6f7f9 3px,#e2e5eb 3px,#e2e5eb 6px)"></i>Not applicable</span><span>◆ Hold point: <i class="sq" style="background:var(--hp);border:0"></i>inspection requested · <i class="sq" style="background:var(--done);border:0"></i>released</span><span>${F.quick?'Tap a cell: To do → In progress → Done':'Tap a cell to open the room'}</span></div>`;
+  h+=`<div class="printonly"><h2>${esc(s.project)} — Status matrix — ${fmtLong(today())}</h2></div>`;
+  h+=`<div class="mxwrap"><table class="mx"><thead><tr><th class="rh">Room</th>${acts.map(a=>`<th class="${F.next===a.id?'hl':''} ${a.isHp?'hpcol':''}" title="${esc(a.name)}"><div class="vt">${a.isHp?'◆ HP':`<span class="dot" style="background:${a.color}"></span>${esc(a.name)}`}</div></th>`).join('')}<th><div class="vt">Progress</div></th></tr></thead><tbody>`;
+  s.floors.forEach(f=>{
+    const rs=list.filter(r=>r.floor===f.id);if(!rs.length)return;
+    h+=`<tr class="fl"><td class="rh">${esc(f.name)}</td><td colspan="${acts.length+1}"></td></tr>`;
+    rs.forEach(r=>{
+      const bl=openBlk(r),ra=roomActs(r);
+      h+=`<tr><td class="rh"><a href="#" data-room="${r.id}"><b>${esc(r.code)}</b></a> <span style="color:var(--mute)">${esc(r.name)}</span>${bl.length?` <span class="badge red">⚠${bl.length}</span>`:''}</td>`;
+      acts.forEach(a=>{
+        const hl=F.next===a.id?'hl':'';
+        if(!ra.includes(a.id)){h+=`<td class="na ${hl}"></td>`;return;}
+        const sv=st(r,a.id),b=bl.some(x=>x.actId===a.id);
+        h+=`<td class="c s${sv} ${a.isHp?'hp':''} ${b?'b':''} ${hl}" data-cell="${r.id}|${a.id}" title="${esc(r.code+' · '+a.name+' · '+(b?'BLOCKED':lbl(a.id,sv)))}">${b?'!':''}</td>`;
+      });
+      h+=`<td class="heat">${pc(progress(r))}%</td></tr>`;
+    });
+  });
+  h+='</tbody></table></div>';
+  if(!list.length)h+=`<div class="empty">No room matches the current filters.</div>`;
+  return h;
+}
+
+function blkRows(){
+  const t=today();
+  return Object.values(S.blockers).filter(b=>{
+    const r=S.rooms[b.roomId];
+    if(F.bStatus!=='all'&&b.status!==F.bStatus)return false;
+    if(F.bFloor!=='all'&&(!r||r.floor!==F.bFloor))return false;
+    if(F.bCat!=='all'&&b.cat!==F.bCat)return false;
+    if(F.bOwner!=='all'&&(b.owner||'')!==F.bOwner)return false;
+    if(F.bq){const q=F.bq.toLowerCase();if(!(`${b.no} ${b.title} ${b.owner} ${r?r.code+' '+r.name:''}`.toLowerCase().includes(q)))return false;}
+    return true;
+  }).sort((a,b)=>{const ra=S.rooms[a.roomId],rb=S.rooms[b.roomId];return (ra&&rb?floorIdx(ra.floor)-floorIdx(rb.floor)||String(ra.code).localeCompare(String(rb.code),undefined,{numeric:true}):0)||String(a.no).localeCompare(String(b.no));});
+}
+function vBlockers(){
+  const s=S.settings,all=Object.values(S.blockers),t=today();
+  const open=all.filter(b=>b.status==='open'),over=open.filter(b=>b.due&&b.due<t);
+  const cl7=all.filter(b=>b.status==='closed'&&b.closed&&days(b.closed,t)<=7).length;
+  const age=open.length?Math.round(avg(open.map(b=>days(b.raised||t,t)))):0;
+  const roomsB=new Set(open.map(b=>b.roomId)).size;
+  const owners=[...new Set(all.map(b=>b.owner).filter(Boolean))].sort();
+  const opt=(v,l,cur)=>`<option value="${esc(v)}" ${cur===v?'selected':''}>${esc(l)}</option>`;
+  const rows=blkRows();
+  let h=`<div class="kpis"><div class="kpi"><b style="color:var(--blk)">${open.length}</b><span>Open blocking points</span></div><div class="kpi"><b>${roomsB}</b><span>Rooms blocked</span></div><div class="kpi"><b class="${over.length?'overdue':''}">${over.length}</b><span>Overdue (target date passed)</span></div><div class="kpi"><b>${age} d</b><span>Average age of open points</span></div><div class="kpi"><b style="color:var(--done)">${cl7}</b><span>Resolved last 7 days</span></div></div>`;
+  h+=`<div class="filters noprint"><button class="btn pri" data-newblk="|">+ New blocking point</button>
+    <select data-fs="bStatus">${opt('open','Open',F.bStatus)}${opt('closed','Resolved',F.bStatus)}${opt('all','All',F.bStatus)}</select>
+    <select data-fs="bFloor">${opt('all','All floors',F.bFloor)}${s.floors.map(f=>opt(f.id,f.name,F.bFloor)).join('')}</select>
+    <select data-fs="bCat">${opt('all','All categories',F.bCat)}${s.cats.map(c=>opt(c,c,F.bCat)).join('')}</select>
+    <select data-fs="bOwner">${opt('all','All responsibles',F.bOwner)}${owners.map(o=>opt(o,o,F.bOwner)).join('')}</select>
+    <select data-fs="bGroup">${opt('none','No grouping',F.bGroup)}${opt('room','Group by room',F.bGroup)}${opt('cat','Group by category',F.bGroup)}${opt('owner','Group by responsible',F.bGroup)}${opt('act','Group by activity',F.bGroup)}</select>
+    <input id="bq" data-fs="bq" placeholder="🔍 Search…" value="${esc(F.bq)}" style="width:150px">
+    <span class="sp"></span><button class="btn" data-act="print">🖨 Print report</button><button class="btn" data-act="xlsblk">⬇ Excel</button></div>`;
+  const fl=[F.bStatus!=='all'?(F.bStatus==='open'?'Open':'Resolved'):'All statuses',F.bFloor!=='all'?floorById(F.bFloor)?.name:'All floors',F.bCat!=='all'?F.bCat:'',F.bOwner!=='all'?F.bOwner:''].filter(Boolean).join(' · ');
+  h+=`<div class="printonly"><h2 style="margin:0">${esc(s.project)} — Blocking points report</h2><p>${fmtLong(t)} · ${esc(fl)} · ${rows.length} item(s) · issued by ${esc(user())}</p></div>`;
+  if(!rows.length)return h+`<div class="card">No blocking point for these filters 👍</div>`;
+  const gk={room:b=>{const r=S.rooms[b.roomId];return r?`${floorById(r.floor)?.name||''} · ${r.code} ${r.name}`:'(deleted room)';},cat:b=>b.cat||'—',owner:b=>b.owner||'(no responsible)',act:b=>b.actId?(actById(b.actId)?.name||'—'):'General / whole room'}[F.bGroup];
+  const groups={};rows.forEach(b=>{const k=gk?gk(b):'';(groups[k]=groups[k]||[]).push(b);});
+  const keys=gk?Object.keys(groups).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})):[''];
+  h+=`<div class="tbwrap"><table class="tb"><thead><tr><th>No</th><th>Floor</th><th>Room</th><th>Activity</th><th>Description</th><th>Category</th><th>Responsible</th><th>Raised</th><th>Target</th><th>Age</th><th>Status</th><th class="noprint"></th></tr></thead><tbody>`;
+  keys.forEach(k=>{
+    if(gk)h+=`<tr class="grp"><td colspan="12">${esc(k)} (${groups[k].length})</td></tr>`;
+    groups[k].forEach(b=>{
+      const r=S.rooms[b.roomId],a=b.actId&&actById(b.actId),od=b.status==='open'&&b.due&&b.due<t;
+      h+=`<tr class="click" data-editblk="${b.id}"><td><b>${esc(b.no)}</b></td><td>${esc(r?floorById(r.floor)?.name:'')}</td><td><b>${esc(r?r.code:'?')}</b> ${esc(r?r.name:'')}</td><td>${a?`<span class="dot" style="background:${a.color}"></span> ${esc(a.name)}`:'General'}</td><td>${esc(b.title)}</td><td>${esc(b.cat)}</td><td>${esc(b.owner)}</td><td>${fmtD(b.raised)}</td><td class="${od?'overdue':''}">${fmtD(b.due)}${od?' ⏰':''}</td><td>${b.status==='open'?days(b.raised||t,t)+' d':''}</td><td>${b.status==='open'?'<span class="tag red">Open</span>':`<span class="tag green">Resolved ${fmtD(b.closed)}</span>`}</td><td class="noprint">${b.status==='open'?`<button class="btn sm" data-closeblk="${b.id}">✓ Resolve</button>`:''}</td></tr>`;
+    });
+  });
+  return h+'</tbody></table></div>';
+}
+
+function vDash(){
+  const s=S.settings,rooms=Object.values(S.rooms),t=today();
+  const open=Object.values(S.blockers).filter(b=>b.status==='open');
+  const over=open.filter(b=>b.due&&b.due<t).length;
+  const wk=Date.now()-7*864e5;
+  const doneWk=S.log.filter(l=>l.to===2&&l.ts>=wk).length;
+  const complete=rooms.filter(r=>!nextStep(r)).length;
+  let h=`<div class="printonly"><h2>${esc(s.project)} — Progress dashboard — ${fmtLong(t)}</h2></div>`;
+  h+=`<div class="kpis"><div class="kpi"><b>${rooms.length}</b><span>Rooms tracked</span></div><div class="kpi"><b>${pc(avg(rooms.map(progress)))}%</b><span>Overall progress</span></div><div class="kpi"><b style="color:var(--done)">${complete}</b><span>Rooms complete</span></div><div class="kpi"><b style="color:var(--blk)">${open.length}</b><span>Open blocking points${over?` · <span class="overdue">${over} overdue</span>`:''}</span></div><div class="kpi"><b>${doneWk}</b><span>Activities completed (7 days)</span></div></div>`;
+  h+=`<div class="grid2"><div class="card"><h2>Progress by floor</h2>`;
+  s.floors.forEach(f=>{const rs=rooms.filter(r=>r.floor===f.id),p=avg(rs.map(progress)),bk=new Set(open.filter(b=>S.rooms[b.roomId]?.floor===f.id).map(b=>b.roomId)).size;
+    h+=`<div class="row" style="margin:10px 0"><b style="width:90px">${esc(f.name)}</b><div class="bar" style="max-width:none"><i style="width:${pc(p)}%"></i></div><b style="width:42px;text-align:right">${pc(p)}%</b><small style="color:var(--mute);width:140px">${rs.length} rooms · ${rs.filter(r=>!nextStep(r)).length} done${bk?` · <span style="color:var(--blk)">${bk} blocked</span>`:''}</small></div>`;});
+  h+=`</div><div class="card"><h2>Latest updates</h2><div class="feed">`;
+  const lg=S.log.slice(0,25);
+  h+=lg.length?lg.map(l=>`<div><small>${ago(l.ts)} · ${esc(l.by)}</small><br><b>${esc(l.code)}</b> ${esc(actById(l.actId)?.name||'')} → <b style="color:${l.to===2?'var(--done)':l.to===1?'#b57800':'var(--mute)'}">${lbl(l.actId,l.to)}</b></div>`).join(''):'<div class="empty">No update yet.</div>';
+  h+=`</div></div></div>`;
+  h+=`<div class="card"><h2>Progress by activity & floor</h2><p style="margin:0 0 10px;color:var(--mute);font-size:12px">“Pending” = rooms where this activity is the next step (= available work front). Click a number to see those rooms.</p><div class="tbwrap"><table class="tb"><thead><tr><th>Activity</th>${s.floors.map(f=>`<th style="text-align:center">${esc(f.name)}</th>`).join('')}<th style="text-align:center">Total</th><th style="text-align:center">Done / rooms</th><th style="text-align:center">Pending (next step)</th><th style="text-align:center">Blocked</th></tr></thead><tbody>`;
+  const cell=p=>p===null?`<td class="heat" style="color:#bbb">—</td>`:`<td class="heat" style="background:hsla(145,55%,40%,${(0.07+p*0.85).toFixed(2)});color:${p>.55?'#fff':'var(--ink)'}">${pc(p)}%</td>`;
+  const val=(r,a)=>{const x=st(r,a);return x===2?1:x===1?.5:0;};
+  allSteps().forEach(a=>{
+    const app=rooms.filter(r=>roomActs(r).includes(a.id));if(!app.length)return;
+    const nxt=rooms.filter(r=>nextStep(r)===a.id).length,bk=open.filter(b=>b.actId===a.id).length;
+    h+=`<tr><td style="${a.isHp?'padding-left:24px;color:var(--mute)':''}">${a.isHp?'◆ Hold point – released':`<span class="dot" style="background:${a.color}"></span> ${esc(a.name)}`}</td>`;
+    s.floors.forEach(f=>{const rs=app.filter(r=>r.floor===f.id);h+=cell(rs.length?avg(rs.map(r=>val(r,a.id))):null);});
+    h+=cell(avg(app.map(r=>val(r,a.id))))+`<td style="text-align:center">${app.filter(r=>st(r,a.id)===2).length} / ${app.length}</td><td style="text-align:center">${nxt?`<span class="lnk" data-gonext="${a.id}">${nxt}</span>`:'0'}</td><td style="text-align:center;${bk?'color:var(--blk);font-weight:700':''}">${bk}</td></tr>`;
+  });
+  return h+'</tbody></table></div></div>';
+}
+
+function vSetup(){
+  const s=S.settings,rooms=Object.values(S.rooms);
+  const cnt=id=>rooms.filter(r=>(r.acts||[]).includes(id)).length;
+  let h=`<div class="grid2"><div class="card"><h2>General</h2><div class="form">
+    <label>Project name<input data-hold data-sset="project" value="${esc(s.project)}"></label>
+    <div class="row">Your name (shown on updates): <b>${esc(user())}</b><button class="btn sm" data-act="user">Change</button></div>
+    <div style="font-size:12px;color:var(--mute)">${USE_FB?'🟢 Shared mode — data is live in Firebase for everyone using this link.':'🟡 Local mode — data is saved in this browser only. Fill the Firebase config in index.html to share it with the team.'}</div></div></div>
+    <div class="card"><h2>Floors</h2>${s.floors.map(f=>`<div class="row" style="margin-bottom:6px"><input data-hold data-floorname="${f.id}" value="${esc(f.name)}" style="flex:1"><small style="color:var(--mute);width:70px">${rooms.filter(r=>r.floor===f.id).length} rooms</small><button class="btn sm red" data-delfloor="${f.id}">✕</button></div>`).join('')}<button class="btn sm" data-act="addfloor">+ Add floor</button></div></div>`;
+  h+=`<div class="card"><h2>Activity library (in construction sequence)</h2><p style="margin:0 0 10px;color:var(--mute);font-size:12px">Order matters: the “next step” of a room is the first activity of this list, among the ones assigned to the room, that is not done yet. Tick <b>◆ Hold point</b> to insert an inspection step right after an activity: the next trade only becomes “next step” once the hold point is released. A room can switch off a hold point in its own “Customize activities”.</p>`;
+  s.acts.forEach((a,i)=>{h+=`<div class="row" style="margin-bottom:6px"><input type="color" data-actcolor="${a.id}" value="${a.color}" style="width:42px;padding:2px;height:34px"><input data-hold data-actname="${a.id}" value="${esc(a.name)}" style="flex:1;min-width:150px"><input data-hold data-actshort="${a.id}" value="${esc(a.short)}" style="width:70px" title="Short code"><label class="chk" title="Adds a linked hold point (inspection) step right after this activity"><input type="checkbox" data-acthp="${a.id}" ${a.hp?'checked':''}><span class="hptag">◆ HP</span>Hold point</label><small style="color:var(--mute);width:70px">${cnt(a.id)} rooms</small><button class="btn sm" data-actup="${i}" ${i?'':'disabled'}>↑</button><button class="btn sm" data-actdown="${i}" ${i<s.acts.length-1?'':'disabled'}>↓</button><button class="btn sm red" data-actdel="${a.id}">✕</button></div>`;});
+  h+=`<button class="btn sm" data-act="addact">+ Add activity</button></div>`;
+  h+=`<div class="card"><h2>Room types (templates)</h2><p style="margin:0 0 10px;color:var(--mute);font-size:12px">A template pre-selects the activities of a new room. You can still customize each room individually afterwards.</p>`;
+  s.types.forEach(t=>{h+=`<details style="border-bottom:1px solid var(--line)"><summary><b>${esc(t.name)}</b> <small style="color:var(--mute)">· ${t.acts.filter(x=>actById(x)).length} activities · ${rooms.filter(r=>r.type===t.id).length} rooms</small></summary><div class="row" style="margin:8px 0"><input data-hold data-typename="${t.id}" value="${esc(t.name)}" style="flex:1"><button class="btn sm red" data-typedel="${t.id}">Delete type</button></div><div class="checks" style="margin-bottom:10px">${s.acts.map(a=>`<label class="chk"><input type="checkbox" data-typeact="${t.id}|${a.id}" ${t.acts.includes(a.id)?'checked':''}><span class="dot" style="background:${a.color}"></span>${esc(a.name)}</label>`).join('')}</div></details>`;});
+  h+=`<button class="btn sm" data-act="addtype" style="margin-top:8px">+ Add room type</button></div>`;
+  const fo=s.floors.map(f=>`<option value="${f.id}">${esc(f.name)}</option>`).join(''),to=s.types.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('');
+  h+=`<div class="grid2"><div class="card"><h2>Add a room</h2><div class="form"><div class="row"><label>Floor<select id="nr_floor">${fo}</select></label><label>Room code<input id="nr_code" placeholder="e.g. 2.05"></label></div><label>Room name<input id="nr_name" placeholder="e.g. Master bathroom"></label><label>Room type<select id="nr_type">${to}</select></label><button class="btn pri" data-act="addroom">Add room</button></div></div>
+    <div class="card"><h2>Bulk import rooms (paste from Excel)</h2><p style="margin:0 0 8px;color:var(--mute);font-size:12px">4 columns: <b>Floor | Code | Name | Type</b>. Floor and type are matched by name (unknown floors are created, unknown types use the first type). Existing codes on the same floor are skipped.</p><textarea id="bulk" rows="6" style="width:100%" placeholder="Level 1	1.01	Living room	Apartment – dry room&#10;Level 1	1.02	Bathroom	Bathroom / WC"></textarea><button class="btn pri" data-act="bulk" style="margin-top:8px">Import</button></div></div>`;
+  h+=`<div class="card"><h2>Data</h2><div class="row"><button class="btn" data-act="xlsall">⬇ Export everything to Excel</button><button class="btn" data-act="backup">⬇ Backup (JSON)</button><label class="btn">⬆ Restore backup<input type="file" id="restore" accept=".json" hidden></label>${rooms.some(r=>r.demo)?'<button class="btn red" data-act="deldemo">Delete demo rooms</button>':''}<button class="btn red" data-act="delall">Delete all rooms</button></div></div>`;
+  return h;
+}
+
+/* ===================== WEEKLY SNAPSHOTS =====================
+   Every Saturday (end of day) the status of every room is frozen in ft_snapshots/<YYYY-MM-DD>.
+   No server needed: the first person who opens the app after Saturday creates it. The status
+   "as at Saturday" is rebuilt from the start/done dates of each step, so it is exact even if
+   the app is only opened on Monday. Missed weeks are filled in the same way. */
+const addDays=(s,n)=>{const d=new Date(s+'T00:00');d.setDate(d.getDate()+n);return ymd(d);};
+function lastSaturday(){const d=new Date();let diff=(d.getDay()+1)%7;if(diff===0)diff=7;d.setDate(d.getDate()-diff);return ymd(d);}
+function statusAt(r,id,date){const o=r.st&&r.st[id];if(!o||!o.s)return 0;if(o.s===2&&(o.dd||o.d||'')<=date)return 2;if((o.ds||o.d||'')<=date)return 1;return 0;}
+const r4=x=>Math.round(x*1e4)/1e4;
+function makeSnapshot(date){
+  const rooms={},byF={};
+  Object.values(S.rooms).forEach(r=>{
+    const ids=roomActs(r),stt={};ids.forEach(id=>{const v=statusAt(r,id,date);if(v)stt[id]=v;});
+    const p=ids.length?avg(ids.map(id=>[0,.5,1][stt[id]||0])):0;
+    rooms[r.id]={f:r.floor,c:r.code,n:r.name,p:r4(p),st:stt};(byF[r.floor]=byF[r.floor]||[]).push(p);
+  });
+  const floors={};Object.keys(byF).forEach(f=>floors[f]=r4(avg(byF[f])));
+  return {id:date,date,takenAt:Date.now(),by:user(),overall:r4(avg(Object.values(rooms).map(x=>x.p))),floors,rooms};
+}
+let snapDone='';
+function ensureSnapshots(){
+  if(!S.settings||!Object.keys(S.rooms).length)return;
+  const last=lastSaturday(),have=new Set(S.snaps.map(x=>x.id));
+  if(have.has(last)||snapDone===last)return;
+  const limit=addDays(last,-77);let first;
+  if(S.snaps.length)first=addDays([...have].sort().pop(),7);
+  else{ // very first run: rebuild history back to the week before the first recorded progress (max 12 weeks)
+    let e=today();Object.values(S.rooms).forEach(r=>Object.values(r.st||{}).forEach(o=>{const d=o.ds||o.d;if(o.s&&d&&d<e)e=d;}));
+    first=last;while(first>e&&first>limit)first=addDays(first,-7);
+  }
+  if(first<limit)first=limit;
+  const list=[];for(let d=first;d<=last;d=addDays(d,7))if(!have.has(d))list.push(makeSnapshot(d));
+  snapDone=last;store.saveSnaps(list);
+}
+function trendSVG(pts){
+  const n=pts.length;if(n<2)return '<div class="empty">The trend curve appears after two weekly snapshots.</div>';
+  const W=660,H=230,L=38,R=12,T=10,B=28,x=i=>L+(W-L-R)*i/(n-1),y=p=>T+(H-T-B)*(1-p);
+  let g='';for(let k=0;k<=4;k++){const yy=y(k/4);g+=`<line x1="${L}" x2="${W-R}" y1="${yy}" y2="${yy}" stroke="#e6e8ee"/><text x="${L-6}" y="${yy+4}" font-size="10" text-anchor="end" fill="#6a7386">${k*25}%</text>`;}
+  const every=Math.ceil(n/9);pts.forEach((p,i)=>{if(i%every===0||i===n-1)g+=`<text x="${x(i)}" y="${H-9}" font-size="10" text-anchor="middle" fill="#6a7386">${p.id==='live'?'Today':fmtD(p.date)}</text>`;});
+  const cols=['#e8a33d','#7e57c2','#00897b','#d81b60','#3949ab','#6d4c41'];
+  const line=(vals,c,w,dash)=>{const pp=vals.map((v,i)=>v==null?null:x(i).toFixed(1)+','+y(v).toFixed(1)).filter(Boolean);return pp.length>1?`<polyline fill="none" stroke="${c}" stroke-width="${w}" stroke-linejoin="round" ${dash?'stroke-dasharray="5 4"':''} points="${pp.join(' ')}"/>`:'';};
+  S.settings.floors.forEach((f,i)=>{g+=line(pts.map(p=>p.floors&&p.floors[f.id]!=null?p.floors[f.id]:null),cols[i%cols.length],1.8);});
+  g+=line(pts.map(p=>p.overall),'#13406b',3);
+  pts.forEach((p,i)=>{g+=`<circle cx="${x(i)}" cy="${y(p.overall)}" r="3.5" fill="${p.id==='live'?'#fff':'#13406b'}" stroke="#13406b" stroke-width="2"><title>${p.id==='live'?'Today':fmtD(p.date)}: ${pc(p.overall)}%</title></circle>`;});
+  return `<svg viewBox="0 0 ${W} ${H}">${g}</svg><div class="legend" style="margin:6px 0 0"><span><i class="sq" style="background:#13406b;border:0"></i><b>Overall</b></span>${S.settings.floors.map((f,i)=>`<span><i class="sq" style="background:${cols[i%cols.length]};border:0"></i>${esc(f.name)}</span>`).join('')}</div>`;
+}
+function vWeekly(){
+  const s=S.settings,t=today();
+  const snaps=[...S.snaps].sort((a,b)=>a.date.localeCompare(b.date));
+  let h=`<div class="printonly"><h2 style="margin:0">${esc(s.project)} — Weekly progress report</h2></div>`;
+  if(!snaps.length)return h+`<div class="card"><h2>📈 Weekly progress</h2><p>Every Saturday the app automatically saves the status of every room. On Monday this page opens by itself and shows the progress of the week.</p><p style="color:var(--mute)">No snapshot yet: the first one is created as soon as rooms with progress exist and the app is opened after a Saturday.</p></div>`;
+  const live={...makeSnapshot('9999-12-31'),id:'live',date:t};
+  const sel=F.wk==='live'?live:(snaps.find(x=>x.id===F.wk)||snaps[snaps.length-1]);
+  const idx=sel.id==='live'?snaps.length:snaps.findIndex(x=>x.id===sel.id);
+  const prev=idx>0?snaps[idx-1]:null;
+  const title=sel.id==='live'?`This week so far (live, since Saturday ${fmtD(snaps[snaps.length-1].date)})`:`Week ending Saturday ${fmtLong(sel.date)}`;
+  const opts=`<option value="live" ${sel.id==='live'?'selected':''}>This week so far (live)</option>`+[...snaps].reverse().map(x=>`<option value="${x.id}" ${x.id===sel.id?'selected':''}>Week ending Sat ${fmtD(x.date)} ${x.date.slice(0,4)}</option>`).join('');
+  h+=`<div class="banner"><div style="flex:1;min-width:220px"><div style="font-size:12px;opacity:.8">${new Date().getDay()===1&&sel.id!=='live'?'Monday report':'Weekly progress'}</div><div style="font-size:18px;font-weight:800">${title}</div>${prev?`<div style="font-size:12px;opacity:.8">compared with Saturday ${fmtD(prev.date)}</div>`:''}</div><select data-fs="wk" class="noprint">${opts}</select><button class="btn sm noprint" data-act="print">🖨 Print</button></div>`;
+  // compute changes between prev and sel
+  const P0=prev?prev.rooms:{},done={},movers=[];let nAct=0,hpRel=0,hpReq=0,started=0;const roomsDone=[],still=[];
+  Object.entries(sel.rooms).forEach(([rid,x])=>{
+    const o=(P0[rid]&&P0[rid].st)||{};
+    Object.entries(x.st).forEach(([id,v])=>{const pv=o[id]||0;
+      if(v===2&&pv!==2){(done[id]=done[id]||{})[x.f]=(done[id][x.f]||0)+1;if(isHP(id))hpRel++;else nAct++;}
+      if(v>=1&&pv===0){if(isHP(id))hpReq++;else started++;}});
+    const p0=P0[rid]?P0[rid].p:0,dp=x.p-p0;
+    if(x.p>=.9999&&p0<.9999)roomsDone.push(x.c);
+    if(dp>0.0001)movers.push({...x,rid,p0,dp});else if(x.p<.9999)still.push(x);
+  });
+  const from=prev?prev.date:'0000-00-00',to=sel.id==='live'?'9999-12-31':sel.date;
+  const bR=Object.values(S.blockers).filter(b=>b.raised&&b.raised>from&&b.raised<=to).length;
+  const bC=Object.values(S.blockers).filter(b=>b.closed&&b.closed>from&&b.closed<=to).length;
+  const dl=(d,unit='pts')=>d==null?'':`<span class="delta ${d>0.0001?'up':d<-0.0001?'down':'flat'}">${d>0.0001?'▲ +':d<-0.0001?'▼ ':'= '}${Math.round(d*1000)/10} ${unit}</span>`;
+  const sinceTxt=prev?'this week':'since start';
+  h+=`<div class="kpis"><div class="kpi"><b>${pc(sel.overall)}%</b><span>Overall progress ${prev?dl(sel.overall-prev.overall):''}</span></div>
+    <div class="kpi"><b style="color:var(--done)">${nAct}</b><span>Activities completed ${sinceTxt}<br>${started} started</span></div>
+    <div class="kpi"><b style="color:var(--hp)">${hpRel}</b><span>◆ Hold points released ${sinceTxt}<br>${hpReq} inspections requested</span></div>
+    <div class="kpi"><b>${roomsDone.length}</b><span>Rooms completed ${sinceTxt}</span></div>
+    <div class="kpi"><b><span style="color:var(--blk)">${bR}</span> / <span style="color:var(--done)">${bC}</span></b><span>Blocking points raised / resolved ${sinceTxt}</span></div></div>`;
+  h+=`<div class="grid2"><div class="card trend"><h2>Progress curve</h2>${trendSVG(sel.id==='live'?[...snaps,live]:snaps.slice(0,idx+1))}</div>`;
+  h+=`<div class="card"><h2>By floor</h2><table class="tb"><thead><tr><th>Floor</th>${prev?`<th style="text-align:center">Sat ${fmtD(prev.date)}</th>`:''}<th style="text-align:center">${sel.id==='live'?'Today':'Sat '+fmtD(sel.date)}</th><th style="text-align:center">Change</th><th style="text-align:center">Completed</th></tr></thead><tbody>`;
+  s.floors.forEach(f=>{const c=sel.floors[f.id];if(c==null)return;const p0=prev&&prev.floors[f.id]!=null?prev.floors[f.id]:null;const cnt=Object.values(done).reduce((a,o)=>a+(o[f.id]||0),0);
+    h+=`<tr><td><b>${esc(f.name)}</b></td>${prev?`<td style="text-align:center">${p0==null?'—':pc(p0)+'%'}</td>`:''}<td style="text-align:center"><b>${pc(c)}%</b></td><td style="text-align:center">${p0==null?'':dl(c-p0)}</td><td style="text-align:center">${cnt}</td></tr>`;});
+  h+=`</tbody></table></div></div>`;
+  const rows=allSteps().filter(a=>done[a.id]);
+  h+=`<div class="card"><h2>Completed ${sinceTxt} — by activity</h2>`;
+  h+=rows.length?`<div class="tbwrap"><table class="tb"><thead><tr><th>Activity</th>${s.floors.map(f=>`<th style="text-align:center">${esc(f.name)}</th>`).join('')}<th style="text-align:center">Total</th></tr></thead><tbody>${rows.map(a=>{const o=done[a.id],tot=Object.values(o).reduce((x,y)=>x+y,0);return `<tr><td style="${a.isHp?'padding-left:24px;color:var(--mute)':''}">${a.isHp?`<span class="hptag">◆ HP</span>${esc(a.name.slice(5))} – released`:`<span class="dot" style="background:${a.color}"></span> ${esc(a.name)}`}</td>${s.floors.map(f=>`<td style="text-align:center">${o[f.id]||''}</td>`).join('')}<td style="text-align:center"><b>${tot}</b></td></tr>`;}).join('')}</tbody></table></div>`:'<div class="empty">No activity completed in this period.</div>';
+  h+='</div>';
+  movers.sort((a,b)=>b.dp-a.dp);
+  h+=`<div class="grid2"><div class="card"><h2>Rooms that progressed (${movers.length})</h2>${movers.length?`<table class="tb"><tbody>${movers.slice(0,15).map(m=>`<tr class="click" data-room="${S.rooms[m.rid]?m.rid:''}"><td><b>${esc(m.c)}</b> ${esc(m.n)}<br><small style="color:var(--mute)">${esc(floorById(m.f)?.name||'')}</small></td><td style="text-align:right;white-space:nowrap">${pc(m.p0)}% → <b>${pc(m.p)}%</b><br>${dl(m.dp,'%')}</td></tr>`).join('')}</tbody></table>${movers.length>15?`<div class="empty">+ ${movers.length-15} more</div>`:''}`:'<div class="empty">No room progressed in this period.</div>'}</div>`;
+  h+=`<div class="card"><h2>Rooms without progress (${still.length})</h2>${still.length?`<div class="row">${still.map(x=>`<span class="tag" title="${esc(x.n)} · ${pc(x.p)}%">${esc(x.c)}</span>`).join('')}</div><p style="font-size:12px;color:var(--mute)">Not complete and no step moved in this period — check them against the blocking points list.</p>`:'<div class="empty">Every unfinished room moved this week 👍</div>'}</div></div>`;
+  return h;
+}
+
+/* ===================== ROOM DRAWER ===================== */
+function openRoom(id){drawerRoom=id;$('#drawer').scrollTop=0;renderDrawer();$('#drawer').classList.add('open');$('#scrim').classList.add('open');}
+function closeDrawer(){drawerRoom=null;$('#drawer').classList.remove('open');$('#scrim').classList.remove('open');}
+function renderDrawer(){
+  const r=S.rooms[drawerRoom];if(!r){closeDrawer();return;}
+  const D=$('#drawer'),ae=document.activeElement;
+  if(ae&&D.contains(ae)&&ae.matches('[data-hold]')){pending=true;return;}
+  const openD=[...D.querySelectorAll('details')].map(d=>d.open),sc=D.scrollTop;
+  const s=S.settings,f=floorById(r.floor),t=typeById(r.type),n=nextStep(r),p=progress(r),bl=openBlk(r),acts=roomActs(r);
+  let h=`<div class="dh"><div class="row" style="flex-wrap:nowrap"><div style="flex:1;min-width:0"><div style="font-size:20px;font-weight:800">${esc(r.code)} <span style="font-weight:500">${esc(r.name)}</span></div><div style="color:var(--mute);font-size:12px">${esc(f?f.name:'')} · ${esc(t?t.name:'—')}</div></div><button class="iconbtn" data-act="close">✕</button></div>
+    <div class="row" style="margin-top:8px"><div class="bar" style="max-width:none"><i style="width:${pc(p)}%"></i></div><b>${pc(p)}%</b></div>
+    <div style="margin-top:6px;font-size:13px">${n?`Next step: <b>${esc(actById(n).name)}</b>`:'<b style="color:var(--done)">✓ All activities complete</b>'}${bl.length?` · <span style="color:var(--blk);font-weight:700">⚠ ${bl.length} open blocking point(s)</span>`:''}</div></div><div class="db"><h3>Activities</h3>`;
+  if(!acts.length)h+=`<div class="empty">No activity assigned. Open “Customize activities” below.</div>`;
+  acts.forEach(id=>{
+    const a=actById(id),hp=!!a.isHp,o=(r.st||{})[id]||{},sv=o.s||0,b=bl.filter(x=>x.actId===id);
+    const dIn=k=>`<input type="date" class="dt" data-hold data-sdate="${r.id}|${id}|${k}" value="${o[k]||o.d||''}" title="Change date if the work was done on another day">`;
+    const meta=sv===2?`${hp?'Released':'Done'} ${dIn('dd')}${o.by?' · '+esc(o.by):''}`:sv===1?`${hp?'Requested':'Started'} ${dIn('ds')}${o.by?' · '+esc(o.by):''}`:'';
+    const words=hp?['Pending','Req.','Released']:['To do','WIP','Done'];
+    h+=`<div class="arow ${hp?'hp':''} ${b.length?'blk':''}">${hp?'':`<span class="dot" style="background:${a.color}"></span>`}<div class="an">${hp?`<b><span class="hptag">◆ HP</span>Hold point – inspection</b>`:`<b>${esc(a.name)}</b>`}<small>${meta}${b.length?` <span style="color:var(--blk)">⚠ ${esc(b[0].title)}</span>`:''}</small></div>
+      <div class="seg">${[0,1,2].map(k=>`<button class="${sv===k?'on'+k:''} ${hp?'hpb':''}" data-set="${r.id}|${id}|${k}">${words[k]}</button>`).join('')}</div>
+      <button class="iconbtn" title="Raise a blocking point on this activity" data-newblk="${r.id}|${id}">⚠</button></div>`;
+  });
+  const allb=Object.values(S.blockers).filter(b=>b.roomId===r.id).sort((a,b)=>(a.status==='open'?0:1)-(b.status==='open'?0:1));
+  h+=`<h3>Blocking points</h3>`;
+  h+=allb.length?allb.map(b=>{const a=b.actId&&actById(b.actId);return `<div class="bcard ${b.status}"><div class="row"><b>${esc(b.no)}</b><span class="tag">${esc(b.cat)}</span>${a?`<span class="tag">${esc(a.name)}</span>`:''}<span class="sp"></span>${b.status==='open'?`<button class="btn sm" data-closeblk="${b.id}">✓ Resolve</button>`:`<span class="tag green">Resolved ${fmtD(b.closed)}</span>`}<button class="btn sm" data-editblk="${b.id}">Edit</button></div><div style="margin:4px 0">${esc(b.title)}</div><small>Responsible: ${esc(b.owner||'—')} · raised ${fmtD(b.raised)}${b.due?' · target '+fmtD(b.due):''}</small></div>`;}).join(''):'<div class="empty">None 👍</div>';
+  h+=`<button class="btn" data-newblk="${r.id}|">+ Raise blocking point</button>`;
+  h+=`<h3>Notes</h3><textarea data-hold data-rnote="${r.id}" rows="3" style="width:100%" placeholder="Site remarks, access, materials…">${esc(r.note||'')}</textarea>`;
+  h+=`<details style="margin-top:14px"><summary><b>Customize activities</b> <small style="color:var(--mute)">(${acts.length} of ${s.acts.length})</small></summary><div class="row" style="margin:8px 0">Reset from template: <select id="tplsel">${s.types.map(x=>`<option value="${x.id}" ${x.id===r.type?'selected':''}>${esc(x.name)}</option>`).join('')}</select><button class="btn sm" data-act="applytpl">Apply</button></div><div style="columns:2 220px">${s.acts.map(a=>{const on=(r.acts||[]).includes(a.id);return `<label class="chk"><input type="checkbox" data-ract="${r.id}|${a.id}" ${on?'checked':''}><span class="dot" style="background:${a.color}"></span>${esc(a.name)}</label>${a.hp&&on?`<label class="chk sub"><input type="checkbox" data-rhp="${r.id}|${a.id}" ${(r.hpOff||[]).includes(a.id)?'':'checked'}><span class="hptag">◆ HP</span>Hold point</label>`:''}`;}).join('')}</div></details>`;
+  h+=`<details style="margin-top:6px"><summary><b>Room details</b></summary><div class="form" style="margin-top:8px"><div class="row"><label>Code<input data-hold id="rd_code" value="${esc(r.code)}"></label><label>Floor<select id="rd_floor">${s.floors.map(x=>`<option value="${x.id}" ${x.id===r.floor?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label></div><label>Name<input data-hold id="rd_name" value="${esc(r.name)}"></label><label>Type<select id="rd_type">${s.types.map(x=>`<option value="${x.id}" ${x.id===r.type?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label><div class="row"><button class="btn pri" data-act="saveroom">Save details</button><span class="sp"></span><button class="btn red" data-act="delroom">Delete room</button></div></div></details></div>`;
+  D.innerHTML=h;
+  D.querySelectorAll('details').forEach((d,i)=>{if(openD[i])d.open=true;});D.scrollTop=sc;
+}
+
+/* ===================== MODALS ===================== */
+function modal(html,lock){$('#modal').innerHTML=`<div class="box">${html}</div>`;$('#modal').dataset.lock=lock?'1':'';$('#modal').classList.add('open');}
+function closeModal(){$('#modal').classList.remove('open');$('#modal').innerHTML='';}
+function askUser(){
+  modal(`<h2>Who are you?</h2><p style="color:var(--mute);margin-top:0">Your name is attached to each status update (stored on this device only).</p><div class="form"><input id="u_name" placeholder="e.g. Philippe" value="${esc(lsGet(LSU,'')||memUser)}"><button class="btn pri" id="u_ok">OK</button></div>`,true);
+  const ok=()=>{const v=$('#u_name').value.trim();if(!v)return;lsSet(LSU,v);memUser=v;closeModal();render();};
+  $('#u_ok').onclick=ok;$('#u_name').onkeydown=e=>{if(e.key==='Enter')ok();};$('#u_name').focus();
+}
+function welcome(){
+  modal(`<h2>Welcome 👋</h2><p>No project data yet. How do you want to start?</p><div class="form"><button class="btn pri" id="w_demo">Start with demo data (3 floors, 33 rooms)</button><button class="btn" id="w_empty">Start empty (3 floors, I add my rooms)</button></div><p style="font-size:12px;color:var(--mute)">Floors, activities and room types can all be edited later in ⚙ Setup. Demo rooms can be deleted in one click.</p>`,true);
+  const go=async d=>{$('#w_demo').disabled=$('#w_empty').disabled=true;await store.replaceAll(d);closeModal();render();if(!lsGet(LSU,'')&&!memUser)askUser();};
+  $('#w_demo').onclick=()=>go(demoData());
+  $('#w_empty').onclick=()=>go({settings:defaultSettings(),rooms:[],blockers:[]});
+}
+function blkModal(bid,roomId,actId){
+  const s=S.settings;
+  const b=bid?{...S.blockers[bid]}:{id:uid('b'),no:nextBlkNo(),roomId:roomId||'',actId:actId||'',title:'',cat:s.cats[0],owner:'',raised:today(),due:'',status:'open',closed:'',by:user()};
+  const owners=[...new Set(Object.values(S.blockers).map(x=>x.owner).filter(Boolean))];
+  const ro=s.floors.map(f=>`<optgroup label="${esc(f.name)}">${roomsList().filter(r=>r.floor===f.id).map(r=>`<option value="${r.id}" ${r.id===b.roomId?'selected':''}>${esc(r.code+' – '+r.name)}</option>`).join('')}</optgroup>`).join('');
+  modal(`<h2>${bid?'Edit':'New'} blocking point ${esc(b.no)}</h2><div class="form">
+    <label>Room<select id="m_room"><option value="">— select —</option>${ro}</select></label>
+    <label>Activity concerned<select id="m_act"></select></label>
+    <label>Description of the blocking point<textarea id="m_title" rows="3">${esc(b.title)}</textarea></label>
+    <div class="row"><label>Category<select id="m_cat">${s.cats.map(c=>`<option ${c===b.cat?'selected':''}>${esc(c)}</option>`).join('')}</select></label><label>Responsible<input id="m_owner" list="m_owners" value="${esc(b.owner)}" placeholder="Who must solve it"><datalist id="m_owners">${owners.map(o=>`<option value="${esc(o)}">`).join('')}</datalist></label></div>
+    <div class="row"><label>Raised on<input type="date" id="m_raised" value="${b.raised||''}"></label><label>Target date<input type="date" id="m_due" value="${b.due||''}"></label><label>Status<select id="m_status"><option value="open" ${b.status==='open'?'selected':''}>Open</option><option value="closed" ${b.status==='closed'?'selected':''}>Resolved</option></select></label></div>
+    <div class="row"><button class="btn pri" id="m_save">Save</button><button class="btn" id="m_cancel">Cancel</button>${bid?'<span class="sp"></span><button class="btn red" id="m_del">Delete</button>':''}</div></div>`);
+  const fillActs=()=>{const r=S.rooms[$('#m_room').value];$('#m_act').innerHTML=`<option value="">General / whole room</option>`+(r?roomActs(r):[]).map(id=>`<option value="${id}" ${id===b.actId?'selected':''}>${esc(actById(id).name)}</option>`).join('');};
+  fillActs();$('#m_room').onchange=fillActs;$('#m_cancel').onclick=closeModal;
+  $('#m_save').onclick=()=>{
+    const rid=$('#m_room').value,title=$('#m_title').value.trim();
+    if(!rid)return alert('Please select a room.');if(!title)return alert('Please describe the blocking point.');
+    const stt=$('#m_status').value;
+    store.setBlocker({...b,roomId:rid,actId:$('#m_act').value,title,cat:$('#m_cat').value,owner:$('#m_owner').value.trim(),raised:$('#m_raised').value||today(),due:$('#m_due').value||'',status:stt,closed:stt==='closed'?(b.closed||today()):''});
+    closeModal();
+  };
+  if(bid)$('#m_del').onclick=()=>{if(confirm('Delete this blocking point permanently?')){store.delBlocker(bid);closeModal();}};
+}
+
+/* ===================== DEMO DATA ===================== */
+function demoData(){
+  const s=defaultSettings(),rooms=[],blockers=[];
+  const L=[['01','Living / Dining','apt'],['02','Bedroom 1','apt'],['03','Bedroom 2','apt'],['04','Master bathroom','wet'],['05','Guest WC','wet'],['06','Kitchen','kit'],['07','Apartment corridor','cor'],['08','Terrace','ter'],['09','Lift lobby','cor'],['10','Staircase','stair'],['11','Electrical room','tech']];
+  s.floors.forEach((f,fi)=>{const base=[.78,.48,.18][fi];
+    L.forEach(([c,n,t])=>{const ty=s.types.find(x=>x.id===t),acts=s.acts.filter(a=>ty.acts.includes(a.id));
+      const steps=[];acts.forEach(a=>{steps.push(a.id);if(a.hp)steps.push(a.id+HP);});
+      const p=Math.max(0,Math.min(1,base+(Math.random()-.5)*.45)),k=Math.floor(p*steps.length),stt={};
+      steps.forEach((a,j)=>{const dd=dMinus(Math.max(1,(steps.length-j)*3+Math.floor(Math.random()*4)));if(j<k)stt[a]={s:2,d:dd,ds:dd,dd,by:'Demo'};else if(j===k&&Math.random()<.5)stt[a]={s:1,d:dMinus(2),ds:dMinus(2),by:'Demo'};});
+      rooms.push({id:uid('r'),floor:f.id,code:`${fi+1}.${c}`,name:n,type:t,acts:acts.map(a=>a.id),st:stt,note:'',demo:true});});});
+  const samples=[['Ceiling level clash with ductwork – RFI pending','Design / RFI','Design team'],['Floor tiles delivery delayed by supplier','Material / Procurement','Procurement'],['Area occupied by MEP subcontractor','Access / Preceding works','MEP subcontractor'],['Wall flatness out of tolerance – NCR, rework needed','Quality / NCR','Plastering subcontractor'],['Waiting client approval of special paint sample','Client decision','Client'],['Not enough tilers on site this week','Subcontractor / Manpower','Tiling subcontractor']];
+  const cand=rooms.filter(r=>r.acts.some(a=>!(r.st[a]&&r.st[a].s===2))).sort(()=>Math.random()-.5).slice(0,6);
+  cand.forEach((r,i)=>{const a=r.acts.find(x=>!(r.st[x]&&r.st[x].s===2)),[title,cat,owner]=samples[i%samples.length];
+    blockers.push({id:uid('b'),no:'B-'+String(i+1).padStart(3,'0'),roomId:r.id,actId:a,title,cat,owner,raised:dMinus(3+i*3),due:i%2?dMinus(-5):dMinus(1),status:'open',closed:'',by:'Demo'});});
+  return {settings:s,rooms,blockers};
+}
+
+/* ===================== EXCEL ===================== */
+function xls(){if(!window.XLSX){alert('Excel library not loaded (check internet connection).');return null;}return XLSX;}
+const blkRow=b=>{const r=S.rooms[b.roomId];return {No:b.no,Floor:r?floorById(r.floor)?.name:'',Room:r?r.code:'','Room name':r?r.name:'',Activity:b.actId?actById(b.actId)?.name||'':'General',Description:b.title,Category:b.cat,Responsible:b.owner,Raised:b.raised,Target:b.due,Status:b.status==='open'?'Open':'Resolved',Resolved:b.closed||'','Age (days)':b.status==='open'?days(b.raised||today(),today()):''};};
+function exportBlk(){const X=xls();if(!X)return;const wb=X.utils.book_new();X.utils.book_append_sheet(wb,X.utils.json_to_sheet(blkRows().map(blkRow)),'Blocking points');X.writeFile(wb,`RT_BlockingPoints_${today()}.xlsx`);}
+function exportAll(){
+  const X=xls();if(!X)return;const s=S.settings,wb=X.utils.book_new();
+  const steps=allSteps();
+  const head=['Floor','Room','Name','Type','Progress %','Next step','Open blockers',...steps.map(a=>a.name),'Notes'];
+  const rows=roomsList().map(r=>{const n=nextStep(r),ra=roomActs(r);return [floorById(r.floor)?.name||'',r.code,r.name,typeById(r.type)?.name||'',pc(progress(r)),n?actById(n).name:'Complete',openBlk(r).length,...steps.map(a=>ra.includes(a.id)?(openBlk(r,a.id).length?'BLOCKED':lbl(a.id,st(r,a.id))):'n/a'),r.note||''];});
+  X.utils.book_append_sheet(wb,X.utils.aoa_to_sheet([head,...rows]),'Room status');
+  X.utils.book_append_sheet(wb,X.utils.json_to_sheet(Object.values(S.blockers).map(blkRow)),'Blocking points');
+  X.utils.book_append_sheet(wb,X.utils.json_to_sheet(S.log.map(l=>({Date:new Date(l.ts).toLocaleString('en-GB'),By:l.by,Room:l.code,Activity:actById(l.actId)?.name||l.actId,From:lbl(l.actId,l.from),To:lbl(l.actId,l.to)}))),'Update log');
+  const sn=[...S.snaps].sort((a,b)=>a.date.localeCompare(b.date));
+  X.utils.book_append_sheet(wb,X.utils.aoa_to_sheet([['Week ending (Saturday)','Overall %',...s.floors.map(f=>f.name+' %')],...sn.map(x=>[x.date,pc(x.overall),...s.floors.map(f=>x.floors&&x.floors[f.id]!=null?pc(x.floors[f.id]):'')])]),'Weekly snapshots');
+  X.writeFile(wb,`RT_FloorTracker_${today()}.xlsx`);
+}
+
+/* ===================== EVENTS ===================== */
+const ACT={
+  print:()=>window.print(),
+  close:closeDrawer,
+  user:askUser,
+  xlsblk:exportBlk,
+  xlsall:exportAll,
+  backup:()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify({settings:S.settings,rooms:S.rooms,blockers:S.blockers},null,1)],{type:'application/json'}));a.download=`RT_FloorTracker_backup_${today()}.json`;a.click();},
+  addfloor:()=>saveS(s=>s.floors.push({id:uid('f'),name:'Level '+(s.floors.length+1)})),
+  addact:()=>{const n=prompt('Activity name (e.g. Marble polishing):');if(!n)return;saveS(s=>s.acts.push({id:uid('a'),name:n.trim(),short:n.trim().split(/\s+/).map(w=>w[0]).join('').toUpperCase().slice(0,4),color:PALETTE[s.acts.length%PALETTE.length]}));},
+  addtype:()=>{const n=prompt('Room type name (e.g. Spa / Pool area):');if(!n)return;saveS(s=>s.types.push({id:uid('t'),name:n.trim(),acts:[]}));},
+  addroom:()=>{const code=$('#nr_code').value.trim(),name=$('#nr_name').value.trim(),floor=$('#nr_floor').value,type=$('#nr_type').value;if(!code)return alert('Room code is required.');
+    if(Object.values(S.rooms).some(r=>r.floor===floor&&r.code===code))return alert('This code already exists on this floor.');
+    store.setRoom({id:uid('r'),floor,code,name,type,acts:[...(typeById(type)?.acts||[])],st:{},note:''});},
+  bulk:()=>{
+    const txt=$('#bulk').value.trim();if(!txt)return;const s=JSON.parse(JSON.stringify(S.settings));const nr=[];let skip=0;
+    txt.split(/\r?\n/).forEach(line=>{const c=line.split(line.includes('\t')?'\t':line.includes(';')?';':',').map(x=>x.trim());if(c.length<2||!c[1]||/^floor$/i.test(c[0]))return;
+      let f=s.floors.find(x=>x.name.toLowerCase()===c[0].toLowerCase()||x.id===c[0]);if(!f){f={id:uid('f'),name:c[0]||'Floor'};s.floors.push(f);}
+      const tn=(c[3]||'').toLowerCase(),t=s.types.find(x=>x.name.toLowerCase()===tn)||s.types.find(x=>tn&&x.name.toLowerCase().startsWith(tn))||s.types[0];
+      if(Object.values(S.rooms).concat(nr).some(r=>r.floor===f.id&&r.code===c[1])){skip++;return;}
+      nr.push({id:uid('r'),floor:f.id,code:c[1],name:c[2]||'',type:t?t.id:'',acts:[...(t?t.acts:[])],st:{},note:''});});
+    if(!nr.length)return alert(`Nothing to import${skip?` (${skip} duplicate(s) skipped)`:''}.`);
+    if(!confirm(`Import ${nr.length} room(s)${skip?` (${skip} duplicate(s) skipped)`:''}?`))return;
+    if(s.floors.length!==S.settings.floors.length)store.saveSettings(s);
+    store.addRooms(nr);
+  },
+  deldemo:()=>{const ids=Object.values(S.rooms).filter(r=>r.demo).map(r=>r.id);if(!confirm(`Delete ${ids.length} demo rooms and their blocking points?`))return;store.delRooms(ids,Object.values(S.blockers).filter(b=>ids.includes(b.roomId)).map(b=>b.id));},
+  delall:()=>{if(prompt('This deletes ALL rooms and blocking points. Type DELETE to confirm:')!=='DELETE')return;store.delRooms(Object.keys(S.rooms),Object.keys(S.blockers));},
+  applytpl:()=>{const r=S.rooms[drawerRoom],t=typeById($('#tplsel').value);if(!t||!confirm(`Replace this room's activity list with the “${t.name}” template? Statuses already entered are kept.`))return;store.patchRoom(r.id,{acts:[...t.acts],type:t.id});},
+  saveroom:()=>{const r=S.rooms[drawerRoom],code=$('#rd_code').value.trim();if(!code)return alert('Code is required.');document.activeElement.blur();store.patchRoom(r.id,{code,name:$('#rd_name').value.trim(),floor:$('#rd_floor').value,type:$('#rd_type').value});},
+  delroom:()=>{const r=S.rooms[drawerRoom];if(!confirm(`Delete room ${r.code} and its blocking points?`))return;const id=r.id;closeDrawer();store.delRooms([id],Object.values(S.blockers).filter(b=>b.roomId===id).map(b=>b.id));},
+};
+document.addEventListener('click',e=>{
+  if(e.target.id==='modal'&&!$('#modal').dataset.lock){closeModal();return;}
+  const t=e.target.closest('[data-view],[data-f],[data-closeblk],[data-editblk],[data-newblk],[data-set],[data-cell],[data-room],[data-act],[data-actup],[data-actdown],[data-actdel],[data-typedel],[data-delfloor],[data-gonext]');
+  if(!t)return;const d=t.dataset;
+  if(d.view){F.view=d.view;closeDrawer();render();window.scrollTo(0,0);return;}
+  if(d.f){F[d.f]=d.v;render();return;}
+  if(d.closeblk){const b=S.blockers[d.closeblk];store.setBlocker({...b,status:'closed',closed:today(),closedBy:user()});return;}
+  if(d.editblk){blkModal(d.editblk);return;}
+  if(d.newblk!==undefined){const [rid,aid]=d.newblk.split('|');blkModal(null,rid,aid);return;}
+  if(d.set){const [rid,aid,k]=d.set.split('|');setStatus(rid,aid,+k);return;}
+  if(d.cell){const [rid,aid]=d.cell.split('|');if(F.quick)setStatus(rid,aid,(st(S.rooms[rid],aid)+1)%3);else openRoom(rid);return;}
+  if(d.room){e.preventDefault();openRoom(d.room);return;}
+  if(d.gonext){Object.assign(F,{view:'overview',next:d.gonext,floor:'all',type:'all',q:'',blk:'all'});render();window.scrollTo(0,0);return;}
+  if(d.actup||d.actdown){const i=+(d.actup??d.actdown),j=d.actup!==undefined?i-1:i+1;saveS(s=>{[s.acts[i],s.acts[j]]=[s.acts[j],s.acts[i]];});return;}
+  if(d.actdel){const a=actById(d.actdel),n=Object.values(S.rooms).filter(r=>(r.acts||[]).includes(a.id)).length;if(!confirm(`Delete activity “${a.name}”?${n?` It is used in ${n} room(s) and will disappear from them.`:''}`))return;saveS(s=>{s.acts=s.acts.filter(x=>x.id!==d.actdel);s.types.forEach(t=>t.acts=t.acts.filter(x=>x!==d.actdel));});return;}
+  if(d.typedel){if(!confirm('Delete this room type? Rooms keep their activities.'))return;saveS(s=>s.types=s.types.filter(x=>x.id!==d.typedel));return;}
+  if(d.delfloor){if(Object.values(S.rooms).some(r=>r.floor===d.delfloor))return alert('Move or delete the rooms of this floor first.');if(!confirm('Delete this floor?'))return;saveS(s=>s.floors=s.floors.filter(x=>x.id!==d.delfloor));return;}
+  if(d.act&&ACT[d.act])ACT[d.act]();
+});
+document.addEventListener('input',e=>{const d=e.target.dataset;if(d.fs==='q'||d.fs==='bq'){F[d.fs]=e.target.value;render();}});
+document.addEventListener('change',e=>{
+  const t=e.target,d=t.dataset;
+  if(d.fs&&d.fs!=='q'&&d.fs!=='bq'){F[d.fs]=t.type==='checkbox'?t.checked:t.value;render();return;}
+  if(d.rnote){store.patchRoom(d.rnote,{note:t.value});return;}
+  if(d.ract){const [rid,aid]=d.ract.split('|'),r=S.rooms[rid];const a=(r.acts||[]).filter(x=>x!==aid);if(t.checked)a.push(aid);store.patchRoom(rid,{acts:a});return;}
+  if(d.sset){saveS(s=>s[d.sset]=t.value.trim()||'Riviera Tower');return;}
+  if(d.floorname){saveS(s=>s.floors.find(f=>f.id===d.floorname).name=t.value.trim()||'Floor');return;}
+  if(d.actname){saveS(s=>s.acts.find(a=>a.id===d.actname).name=t.value.trim()||'Activity');return;}
+  if(d.actshort){saveS(s=>s.acts.find(a=>a.id===d.actshort).short=t.value.trim());return;}
+  if(d.acthp){saveS(s=>s.acts.find(a=>a.id===d.acthp).hp=t.checked);return;}
+  if(d.rhp){const [rid,aid]=d.rhp.split('|'),r=S.rooms[rid];const off=(r.hpOff||[]).filter(x=>x!==aid);if(!t.checked)off.push(aid);store.patchRoom(rid,{hpOff:off});return;}
+  if(d.sdate){const [rid,id,k]=d.sdate.split('|');if(t.value)store.patchRoom(rid,{[`st.${id}.${k}`]:t.value});return;}
+  if(d.actcolor){saveS(s=>s.acts.find(a=>a.id===d.actcolor).color=t.value);return;}
+  if(d.typename){saveS(s=>s.types.find(x=>x.id===d.typename).name=t.value.trim()||'Type');return;}
+  if(d.typeact){const [tid,aid]=d.typeact.split('|');saveS(s=>{const ty=s.types.find(x=>x.id===tid);ty.acts=ty.acts.filter(x=>x!==aid);if(t.checked)ty.acts.push(aid);});return;}
+  if(t.id==='restore'&&t.files[0]){const rd=new FileReader();rd.onload=()=>{try{const j=JSON.parse(rd.result);if(!j.settings)throw new Error('Not a tracker backup');if(confirm('Replace ALL current data with this backup?'))store.replaceAll(j);}catch(err){alert('Invalid file: '+err.message);}};rd.readAsText(t.files[0]);}
+});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){if($('#modal').classList.contains('open')&&!$('#modal').dataset.lock)closeModal();else if(drawerRoom)closeDrawer();}});
+
+/* ===================== BOOT ===================== */
+(async function boot(){
+  if(USE_FB){
+    $('#sync').textContent='● Connecting…';
+    try{await initFB();$('#sync').textContent='🟢 Live · shared';}
+    catch(err){$('#sync').textContent='🔴 Offline';$('#view').innerHTML=`<div class="card"><h2>Connection problem</h2><p>${esc(err.message)}</p><p>Check in the Firebase console: Firestore database created · Authentication → Anonymous sign-in enabled · Firestore rules published.</p></div>`;return;}
+  }else{
+    let d={};try{d=JSON.parse(lsGet(LSK,'{}'))||{};}catch(e){}
+    S={settings:d.settings||null,rooms:d.rooms||{},blockers:d.blockers||{},log:d.log||[],snaps:d.snaps||[]};
+    $('#sync').textContent='🟡 Local mode';
+  }
+  // Monday: first opening of the day shows the weekly progress of last week
+  if(new Date().getDay()===1&&lsGet('rtft_monday','')!==today()){lsSet('rtft_monday',today());F.view='weekly';F.wk='';}
+  if(!S.settings)welcome();else{render();if(!lsGet(LSU,''))askUser();}
+  setInterval(ensureSnapshots,15*60*1000);
+})();
+</script>
+</body>
+</html>
