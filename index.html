@@ -60,7 +60,7 @@ table.mx{border-collapse:separate;border-spacing:0;font-size:12px}
 .mx thead .rh{z-index:3;vertical-align:bottom}
 .mx a{color:var(--acc);text-decoration:none}
 .mx td.c{width:30px;min-width:30px;height:27px;cursor:pointer;text-align:center;color:#fff;font-weight:800}
-.mx td.c.s0::after{content:'';display:inline-block;width:12px;height:12px;border:1.5px solid #c5cad4;border-radius:3px;vertical-align:middle}
+.mx td.c.hp.s0::after{content:'';display:inline-block;width:12px;height:12px;border:1.5px solid #c5cad4;border-radius:3px;vertical-align:middle}
 .mx td.c.s1{background:var(--wip)}.mx td.c.s2{background:var(--done)}.mx td.c.b{background:var(--blk)}.mx td.c.b::after{display:none}
 .mx td.na{background:repeating-linear-gradient(45deg,#f6f7f9,#f6f7f9 4px,#eceef2 4px,#eceef2 8px)}
 .mx tr.fl td{background:var(--acc2);font-weight:700;padding:6px 10px}
@@ -70,6 +70,16 @@ table.mx{border-collapse:separate;border-spacing:0;font-size:12px}
 .mx td.cmt input{width:100%;border:1px solid transparent;background:transparent;padding:4px 6px;font-size:12px;border-radius:6px}
 .mx td.cmt input:hover,.mx td.cmt input:focus{border-color:var(--line);background:#fff}
 .mx td.cmt input:not(:placeholder-shown){color:var(--ink)}
+.mx td.c .sn{font-size:10px;font-weight:700;color:#a3aab6}
+.mx td.c.s1 .sn,.mx td.c.s2 .sn{color:#fff}
+.mx td.c.s0:not(.hp){box-shadow:inset 0 0 0 4px #fff,inset 0 0 0 5px #e1e4ea}
+.mx td.c.oo{background-image:linear-gradient(225deg,#7e57c2 7px,transparent 7px)}
+.mx td.c.cq{width:46px;min-width:46px;font-size:10px;font-weight:700;color:#5b6474}
+.mx td.c.cq::after,.mx td.c.cq.hp.s0::after{display:none!important}.mx td.c.cq.s1,.mx td.c.cq.s2,.mx td.c.cq.b{color:#fff}
+.mx.seq thead th{height:auto;padding:8px 2px;font-size:11px;color:var(--mute)}
+.mx td.empty{background:#fafbfc}
+#pop{position:fixed;z-index:40;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:10px;display:none;max-width:300px}
+#pop.open{display:block}
 .heat{text-align:center;font-weight:600;font-size:12px;padding:6px 4px}
 #drawer{position:fixed;top:0;right:0;bottom:0;width:min(580px,100%);background:#fff;box-shadow:-8px 0 30px rgba(0,0,0,.15);transform:translateX(105%);transition:transform .2s;z-index:50;overflow-y:auto}
 #drawer.open{transform:none}
@@ -174,6 +184,7 @@ body.ro [data-set],body.ro [data-newblk],body.ro [data-closeblk],body.ro .rwonly
 <div id="drawer"></div>
 <div id="modal"></div>
 <div id="login"></div>
+<div id="pop"></div>
 
 <script type="module">
 /* =====================================================================
@@ -274,7 +285,7 @@ function roBlock(){if(isRO()){alert('Your account is read only.\n\nYou can view,
 
 /* ===================== STATE ===================== */
 let S={settings:null,rooms:{},blockers:{},log:[],snaps:[],pins:{}};
-let F={view:'overview',sub:'all',resp:'all',floor:'all',next:'all',type:'all',q:'',blk:'all',colorBy:'next',quick:false,bStatus:'open',bFloor:'all',bCat:'all',bOwner:'all',bGroup:'none',bq:''};
+let F={view:'overview',mx:'act',sub:'all',resp:'all',floor:'all',next:'all',type:'all',q:'',blk:'all',colorBy:'next',quick:false,bStatus:'open',bFloor:'all',bCat:'all',bOwner:'all',bGroup:'none',bq:''};
 try{Object.assign(F,JSON.parse(lsGet(LSF,'{}')));}catch(e){}
 let drawerRoom=null;
 
@@ -413,7 +424,7 @@ function renderLogin(){
       <button class="lg-link" data-lgback="1">← Back</button>`;
   }
   $('#login').innerHTML=h+`</div><div style="margin-top:12px;font-size:11px;color:#9fb3c8;text-align:center">PINs are stored hashed in the shared database.<br>Only you know your PIN.</div>`;
-  if(LG.step==='new')setTimeout(()=>{const e=$('#lg_p1');if(e)e.focus();},30);
+  if(LG.step==='new')setTimeout(()=>{const e=$('#lg_p1'),ae=document.activeElement;if(e&&!(ae&&ae.tagName==='INPUT'&&$('#login').contains(ae)))e.focus();},30);
 }
 function loginOk(n){lsSet(LSU,n);$('#login').classList.remove('open');$('#login').innerHTML='';render();}
 function pinKey(k){
@@ -491,7 +502,7 @@ function filterBar(mode){
     <select data-fs="blk">${opt('all','Blocked + not blocked',F.blk)}${opt('yes','⚠ Blocked rooms only',F.blk)}${opt('no','Not blocked only',F.blk)}</select>
     <input id="q" data-fs="q" placeholder="🔍 Search room…" value="${esc(F.q)}" style="width:170px">
     ${mode==='tiles'?`<select data-fs="colorBy">${opt('next','Colour = next activity',F.colorBy)}${opt('progress','Colour = % progress',F.colorBy)}</select>`
-      :`<label class="chip rwonly"><input type="checkbox" data-fs="quick" ${F.quick?'checked':''}> Quick edit (tap a cell to change status)</label>`}
+      :`<div class="seg" title="Matrix layout"><button class="${F.mx!=='seq'?'on0':''}" data-f="mx" data-v="act">▦ By activity</button><button class="${F.mx==='seq'?'on0':''}" data-f="mx" data-v="seq">➜ By sequence</button></div>`}
     <span class="sp"></span><button class="btn sm" data-act="print">🖨 Print</button>
   </div><div class="chips noprint">${chips}</div>`;
 }
@@ -524,24 +535,51 @@ function tile(r){
     <div class="t-next">${a?`<span class="dot" style="background:${a.isHp?'var(--hp)':a.color}"></span><span>${a.isHp?'◆ ':''}${stepLabel(r,n)}</span>`+(()=>{const g=asg(r,n),t=a.isHp?(g.resp?'👷 '+g.resp:''):[subName(g.sub)&&'🏗 '+subName(g.sub),g.resp&&'👷 '+g.resp.split(',')[0]].filter(Boolean).join(' · ');return t?`</div><div class="t-name" style="margin:4px 0 0">${esc(t)}`:'';})():'<span style="color:var(--done);font-weight:700">✓ Complete</span>'}</div></button>`;
 }
 
+/* Column order for the "by activity" matrix: the template's own sequence when a room type is filtered,
+   otherwise the DOMINANT order of the listed rooms (average relative position of each activity). */
+function mxColumns(list){
+  const used=new Set();list.forEach(r=>cleanSeq(r.acts).forEach(a=>used.add(a)));
+  const t=F.type!=='all'?typeById(F.type):null;let order;
+  if(t){const ts=cleanSeq(t.acts);order=[...ts,...[...used].filter(a=>!ts.includes(a)).sort((a,b)=>libOrd(a)-libOrd(b))];}
+  else{const sum={},n={};list.forEach(r=>{const q=cleanSeq(r.acts);q.forEach((a,i)=>{sum[a]=(sum[a]||0)+(q.length>1?i/(q.length-1):0);n[a]=(n[a]||0)+1;});});
+    order=[...used].sort((a,b)=>(sum[a]/n[a])-(sum[b]/n[b])||libOrd(a)-libOrd(b));}
+  if(!order.length)order=S.settings.acts.map(a=>a.id);
+  const cols=[];order.forEach(id=>{const a=actById(id);if(!a)return;cols.push(a);if(a.hp)cols.push(actById(id+HP));});
+  return {order,cols};
+}
 function vMatrix(){
-  const s=S.settings,list=filtered(),acts=allSteps();
+  const s=S.settings,list=filtered(),seq=F.mx==='seq';
   let h=filterBar('matrix');
-  h+=`<div class="legend noprint"><span><i class="sq" style="background:var(--done);border:0"></i>Done</span><span><i class="sq" style="background:var(--wip);border:0"></i>In progress</span><span><i class="sq"></i>To do</span><span><i class="sq" style="background:var(--blk);border:0"></i>Blocked</span><span><i class="sq" style="background:repeating-linear-gradient(45deg,#f6f7f9,#f6f7f9 3px,#e2e5eb 3px,#e2e5eb 6px)"></i>Not applicable</span><span>◆ Hold point: <i class="sq" style="background:var(--hp);border:0"></i>inspection requested · <i class="sq" style="background:var(--done);border:0"></i>released</span><span>${F.quick?'Tap a cell: To do → In progress → Done':'Tap a cell to open the room'}</span></div>`;
-  h+=`<div class="printonly"><h2>${esc(s.project)} — Status matrix — ${fmtLong(today())}</h2></div>`;
-  h+=`<div class="mxwrap"><table class="mx"><thead><tr><th class="rh">Room</th><th class="cmt">💬 Comment</th>${acts.map(a=>`<th class="${F.next===a.id?'hl':''} ${a.isHp?'hpcol':''}" title="${esc(a.name)}"><div class="vt">${a.isHp?'◆ HP':`<span class="dot" style="background:${a.color}"></span>${esc(a.name)}`}</div></th>`).join('')}<th><div class="vt">Progress</div></th></tr></thead><tbody>`;
+  const lg=`<span><i class="sq" style="background:var(--done);border:0"></i>Done</span><span><i class="sq" style="background:var(--wip);border:0"></i>In progress</span><span><i class="sq"></i>To do</span><span><i class="sq" style="background:var(--blk);border:0"></i>Blocked</span><span>◆ Hold point: <i class="sq" style="background:var(--hp);border:0"></i>requested · <i class="sq" style="background:var(--done);border:0"></i>released</span>`;
+  h+=`<div class="legend noprint">${lg}${seq?'<span>Each row reads left → right in the room’s own sequence (activity short codes)</span>':`<span>Number = step of the activity in the room’s sequence</span><span><i class="sq" style="background:linear-gradient(225deg,#7e57c2 6px,#fff 6px)"></i>done in a different order than the columns</span><span>Columns: ${F.type!=='all'?'sequence of the “'+esc(typeById(F.type)?.name||'')+'” template':'dominant order of the rooms shown'}</span>`}<span><b>Click a cell</b> to set To do / WIP / Done</span></div>`;
+  h+=`<div class="printonly"><h2>${esc(s.project)} — Status matrix (${seq?'by sequence':'by activity'}) — ${fmtLong(today())}</h2></div>`;
+  let cols=[],order=[],N=0;
+  if(seq)N=Math.max(1,...list.map(r=>roomActs(r).length));else({cols,order}=mxColumns(list));
+  const nCols=seq?N:cols.length;
+  h+=`<div class="mxwrap"><table class="mx ${seq?'seq':''}"><thead><tr><th class="rh">Room</th><th class="cmt">💬 Comment</th>`;
+  h+=seq?Array.from({length:N},(_,i)=>`<th>Step<br><b style="font-size:13px;color:var(--ink)">${i+1}</b></th>`).join('')
+        :cols.map(a=>`<th class="${F.next===a.id?'hl':''} ${a.isHp?'hpcol':''}" title="${esc(a.name)}"><div class="vt">${a.isHp?'◆ HP':`<span class="dot" style="background:${a.color}"></span>${esc(a.name)}`}</div></th>`).join('');
+  h+=`<th><div class="${seq?'':'vt'}">Progress</div></th></tr></thead><tbody>`;
   s.floors.forEach(f=>{
     const rs=list.filter(r=>r.floor===f.id);if(!rs.length)return;
-    h+=`<tr class="fl"><td class="rh">${esc(f.name)}</td><td colspan="${acts.length+2}"></td></tr>`;
+    h+=`<tr class="fl"><td class="rh">${esc(f.name)}</td><td colspan="${nCols+2}"></td></tr>`;
     rs.forEach(r=>{
-      const bl=openBlk(r),ra=roomActs(r);
+      const bl=openBlk(r),ra=roomActs(r),q=cleanSeq(r.acts);
       h+=`<tr><td class="rh"><a href="#" tabindex="-1" data-room="${r.id}"><b>${esc(r.code)}</b></a> <span style="color:var(--mute)">${esc(r.name)}</span>${bl.length?` <span class="badge red">⚠${bl.length}</span>`:''}</td><td class="cmt"><input data-hold data-rnote="${r.id}" value="${esc((r.note||'').replace(/\n/g,' · '))}" placeholder="${isRO()?'':'Add a comment…'}" title="${esc(r.note||'')}" ${isRO()?'readonly':''}></td>`;
-      acts.forEach(a=>{
-        const hl=F.next===a.id?'hl':'';
-        if(!ra.includes(a.id)){h+=`<td class="na ${hl}"></td>`;return;}
-        const sv=st(r,a.id),b=bl.some(x=>x.actId===a.id);
-        h+=`<td class="c s${sv} ${a.isHp?'hp':''} ${b?'b':''} ${hl}" data-cell="${r.id}|${a.id}" title="${esc(r.code+' · '+a.name+' · '+(b?'BLOCKED':lbl(a.id,sv)))}">${b?'!':''}</td>`;
-      });
+      const cell=(a,extra,inner,tipStep)=>{const sv=st(r,a.id),b=bl.some(x=>x.actId===a.id),g=asg(r,a.id);
+        return `<td class="c s${sv} ${a.isHp?'hp':''} ${b?'b':''} ${F.next===a.id?'hl':''} ${extra}" data-cell="${r.id}|${a.id}" title="${esc(r.code+' · '+tipStep+a.name+' · '+(b?'BLOCKED':lbl(a.id,sv))+(g.sub&&!a.isHp?' · '+subName(g.sub):'')+(g.resp?' · '+g.resp:''))}">${b?'!':inner}</td>`;};
+      if(seq){
+        for(let i=0;i<N;i++){const id=ra[i];if(!id){h+=`<td class="empty"></td>`;continue;}const a=actById(id);
+          h+=cell(a,'cq',a.isHp?'◆':`<span style="${st(r,id)===0?'border-bottom:3px solid '+a.color:''}">${esc(a.short||a.name.slice(0,3))}</span>`,`step ${i+1} · `);}
+      }else{
+        const ranked=[...q].sort((x,y)=>order.indexOf(x)-order.indexOf(y));
+        cols.forEach(a=>{
+          if(!ra.includes(a.id)){h+=`<td class="na ${F.next===a.id?'hl':''}"></td>`;return;}
+          if(a.isHp){h+=cell(a,'','','');return;}
+          const k=q.indexOf(a.id),oo=ranked.indexOf(a.id)!==k;
+          h+=cell(a,oo?'oo':'',`<span class="sn">${k+1}</span>`,`step ${k+1}${oo?' (different order)':''} · `);
+        });
+      }
       h+=`<td class="heat">${pc(progress(r))}%</td></tr>`;
     });
   });
@@ -549,6 +587,17 @@ function vMatrix(){
   if(!list.length)h+=`<div class="empty">No room matches the current filters.</div>`;
   return h;
 }
+
+/* Click on a matrix cell: small chooser To do / WIP / Done right at the cell */
+function openPop(td,rid,aid){
+  const r=S.rooms[rid],a=actById(aid),sv=st(r,aid),w=a.isHp?['Pending','Requested','Released']:['To do','WIP','Done'],p=$('#pop');
+  p.innerHTML=`<div style="font-size:12px;margin-bottom:8px"><b>${esc(r.code)}</b> ${esc(r.name)}<br><span style="color:var(--mute)">${esc(a.name)}</span></div><div class="seg">${[0,1,2].map(k=>`<button class="${sv===k?'on'+k:''} ${a.isHp?'hpb':''}" data-set="${rid}|${aid}|${k}">${w[k]}</button>`).join('')}</div><div class="row" style="margin-top:8px"><button class="btn sm" data-newblk="${rid}|${aid}">⚠ Blocker</button><button class="btn sm" data-room="${rid}">Open room</button></div>`;
+  p.classList.add('open');const b=td.getBoundingClientRect(),pw=p.offsetWidth,ph=p.offsetHeight;
+  let x=Math.min(b.left,innerWidth-pw-8),y=b.bottom+4;if(y+ph>innerHeight-8)y=b.top-ph-4;
+  p.style.left=Math.max(8,x)+'px';p.style.top=Math.max(8,y)+'px';
+}
+const closePop=()=>{const p=$('#pop');if(p)p.classList.remove('open');};
+addEventListener('scroll',closePop,true);
 
 function blkRows(){
   const t=today();
@@ -869,8 +918,9 @@ const ACT={
 document.addEventListener('click',e=>{
   const lg=e.target.closest('#login [data-lgpick],#login [data-lgk],#login [data-lgback],#login [data-lgset]');if(lg){loginClick(lg.dataset);return;}
   if(e.target.id==='modal'&&!$('#modal').dataset.lock){closeModal();return;}
+  const inPop=!!e.target.closest('#pop');if(!inPop)closePop();
   const t=e.target.closest('[data-view],[data-f],[data-closeblk],[data-editblk],[data-newblk],[data-set],[data-cell],[data-room],[data-act],[data-actup],[data-actdown],[data-actdel],[data-typedel],[data-delfloor],[data-gonext],[data-preset],[data-pdel],[data-sqmv],[data-sqrm],[data-sqsort],[data-typecopy],[data-asg],[data-subdel]');
-  if(!t)return;const d=t.dataset;
+  if(!t)return;const d=t.dataset;if(inPop)setTimeout(closePop,0);
   if(d.preset){if(confirm(`Reset the PIN of ${d.preset}?\n\nThey will choose a new PIN at their next login.`))store.resetPin(d.preset);return;}
   if(d.pdel){if(!confirm(`Remove ${d.pdel} from the team?\n\nThey will no longer be able to log in. Their past updates stay in the history.`))return;const n=d.pdel;editPeople(l=>{const i=l.findIndex(p=>p.name===n);if(i>=0)l.splice(i,1);});if(S.pins[n])store.resetPin(n);return;}
   if(d.asg){if(roBlock())return;const [rid,aid]=d.asg.split('|');asgModal(rid,aid);return;}
@@ -885,7 +935,7 @@ document.addEventListener('click',e=>{
   if(d.editblk){blkModal(d.editblk);return;}
   if(d.newblk!==undefined){const [rid,aid]=d.newblk.split('|');blkModal(null,rid,aid);return;}
   if(d.set){const [rid,aid,k]=d.set.split('|');setStatus(rid,aid,+k);return;}
-  if(d.cell){const [rid,aid]=d.cell.split('|');if(F.quick&&!isRO())setStatus(rid,aid,(st(S.rooms[rid],aid)+1)%3);else openRoom(rid);return;}
+  if(d.cell){const [rid,aid]=d.cell.split('|');if(isRO())openRoom(rid);else openPop(t,rid,aid);return;}
   if(d.room){e.preventDefault();openRoom(d.room);return;}
   if(d.gonext){Object.assign(F,{view:'overview',next:d.gonext,floor:'all',type:'all',q:'',blk:'all'});render();window.scrollTo(0,0);return;}
   if(d.actup||d.actdown){const i=+(d.actup??d.actdown),j=d.actup!==undefined?i-1:i+1;saveS(s=>{[s.acts[i],s.acts[j]]=[s.acts[j],s.acts[i]];});return;}
@@ -923,6 +973,7 @@ document.addEventListener('change',e=>{
   if(t.id==='restore'&&t.files[0]){const rd=new FileReader();rd.onload=()=>{try{const j=JSON.parse(rd.result);if(!j.settings)throw new Error('Not a tracker backup');if(confirm('Replace ALL current data with this backup?'))store.replaceAll(j);}catch(err){alert('Invalid file: '+err.message);}};rd.readAsText(t.files[0]);}
 });
 document.addEventListener('keydown',e=>{
+  if(e.key==='Escape')closePop();
   // Matrix comments: Enter jumps to the next room's comment (Tab already does, links are skipped)
   if(e.key==='Enter'&&e.target.matches&&e.target.matches('td.cmt input')){e.preventDefault();const all=[...document.querySelectorAll('td.cmt input')],i=all.indexOf(e.target);(all[i+1]||e.target).focus();if(!all[i+1])e.target.blur();return;}
   if(e.key==='Escape'){if($('#modal').classList.contains('open')&&!$('#modal').dataset.lock)closeModal();else if(drawerRoom)closeDrawer();}});
