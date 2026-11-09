@@ -65,6 +65,11 @@ table.mx{border-collapse:separate;border-spacing:0;font-size:12px}
 .mx td.na{background:repeating-linear-gradient(45deg,#f6f7f9,#f6f7f9 4px,#eceef2 4px,#eceef2 8px)}
 .mx tr.fl td{background:var(--acc2);font-weight:700;padding:6px 10px}
 .mx .hl{box-shadow:inset 0 0 0 2px var(--acc)}
+.mx th.cmt{vertical-align:bottom;text-align:left;font-weight:600;padding:6px 8px;min-width:220px}
+.mx td.cmt{padding:2px 4px;min-width:220px;max-width:320px}
+.mx td.cmt input{width:100%;border:1px solid transparent;background:transparent;padding:4px 6px;font-size:12px;border-radius:6px}
+.mx td.cmt input:hover,.mx td.cmt input:focus{border-color:var(--line);background:#fff}
+.mx td.cmt input:not(:placeholder-shown){color:var(--ink)}
 .heat{text-align:center;font-weight:600;font-size:12px;padding:6px 4px}
 #drawer{position:fixed;top:0;right:0;bottom:0;width:min(580px,100%);background:#fff;box-shadow:-8px 0 30px rgba(0,0,0,.15);transform:translateX(105%);transition:transform .2s;z-index:50;overflow-y:auto}
 #drawer.open{transform:none}
@@ -440,7 +445,11 @@ let pending=false,migrating=false;
 const OPEN=new Set();   // keys of <details data-dk> the user has unfolded
 document.addEventListener('toggle',e=>{const d=e.target;if(d.dataset&&d.dataset.dk){if(d.open)OPEN.add(d.dataset.dk);else OPEN.delete(d.dataset.dk);}},true);
 const reopen=root=>root.querySelectorAll('details[data-dk]').forEach(d=>{if(OPEN.has(d.dataset.dk))d.open=true;});
-function render(){
+/* Re-renders are batched and run a few ms later, once the focus has settled: typing in a field and
+   pressing Tab/Enter saves it without the next field being rebuilt under the cursor. */
+let rT=null;
+function render(){clearTimeout(rT);rT=setTimeout(doRender,25);}
+function doRender(){
   if(!S.settings)return;
   const m=me();
   if(!m){closeDrawer();if(!$('#login').classList.contains('open'))showLogin();else if(LG.step==='pick')renderLogin();return;}
@@ -520,13 +529,13 @@ function vMatrix(){
   let h=filterBar('matrix');
   h+=`<div class="legend noprint"><span><i class="sq" style="background:var(--done);border:0"></i>Done</span><span><i class="sq" style="background:var(--wip);border:0"></i>In progress</span><span><i class="sq"></i>To do</span><span><i class="sq" style="background:var(--blk);border:0"></i>Blocked</span><span><i class="sq" style="background:repeating-linear-gradient(45deg,#f6f7f9,#f6f7f9 3px,#e2e5eb 3px,#e2e5eb 6px)"></i>Not applicable</span><span>◆ Hold point: <i class="sq" style="background:var(--hp);border:0"></i>inspection requested · <i class="sq" style="background:var(--done);border:0"></i>released</span><span>${F.quick?'Tap a cell: To do → In progress → Done':'Tap a cell to open the room'}</span></div>`;
   h+=`<div class="printonly"><h2>${esc(s.project)} — Status matrix — ${fmtLong(today())}</h2></div>`;
-  h+=`<div class="mxwrap"><table class="mx"><thead><tr><th class="rh">Room</th>${acts.map(a=>`<th class="${F.next===a.id?'hl':''} ${a.isHp?'hpcol':''}" title="${esc(a.name)}"><div class="vt">${a.isHp?'◆ HP':`<span class="dot" style="background:${a.color}"></span>${esc(a.name)}`}</div></th>`).join('')}<th><div class="vt">Progress</div></th></tr></thead><tbody>`;
+  h+=`<div class="mxwrap"><table class="mx"><thead><tr><th class="rh">Room</th><th class="cmt">💬 Comment</th>${acts.map(a=>`<th class="${F.next===a.id?'hl':''} ${a.isHp?'hpcol':''}" title="${esc(a.name)}"><div class="vt">${a.isHp?'◆ HP':`<span class="dot" style="background:${a.color}"></span>${esc(a.name)}`}</div></th>`).join('')}<th><div class="vt">Progress</div></th></tr></thead><tbody>`;
   s.floors.forEach(f=>{
     const rs=list.filter(r=>r.floor===f.id);if(!rs.length)return;
-    h+=`<tr class="fl"><td class="rh">${esc(f.name)}</td><td colspan="${acts.length+1}"></td></tr>`;
+    h+=`<tr class="fl"><td class="rh">${esc(f.name)}</td><td colspan="${acts.length+2}"></td></tr>`;
     rs.forEach(r=>{
       const bl=openBlk(r),ra=roomActs(r);
-      h+=`<tr><td class="rh"><a href="#" data-room="${r.id}"><b>${esc(r.code)}</b></a> <span style="color:var(--mute)">${esc(r.name)}</span>${bl.length?` <span class="badge red">⚠${bl.length}</span>`:''}</td>`;
+      h+=`<tr><td class="rh"><a href="#" tabindex="-1" data-room="${r.id}"><b>${esc(r.code)}</b></a> <span style="color:var(--mute)">${esc(r.name)}</span>${bl.length?` <span class="badge red">⚠${bl.length}</span>`:''}</td><td class="cmt"><input data-hold data-rnote="${r.id}" value="${esc((r.note||'').replace(/\n/g,' · '))}" placeholder="${isRO()?'':'Add a comment…'}" title="${esc(r.note||'')}" ${isRO()?'readonly':''}></td>`;
       acts.forEach(a=>{
         const hl=F.next===a.id?'hl':'';
         if(!ra.includes(a.id)){h+=`<td class="na ${hl}"></td>`;return;}
@@ -913,7 +922,10 @@ document.addEventListener('change',e=>{
   if(d.typeact){const [tid,aid]=d.typeact.split('|');saveS(s=>{const ty=s.types.find(x=>x.id===tid);ty.acts=ty.acts.filter(x=>x!==aid);if(t.checked)ty.acts.push(aid);});return;}
   if(t.id==='restore'&&t.files[0]){const rd=new FileReader();rd.onload=()=>{try{const j=JSON.parse(rd.result);if(!j.settings)throw new Error('Not a tracker backup');if(confirm('Replace ALL current data with this backup?'))store.replaceAll(j);}catch(err){alert('Invalid file: '+err.message);}};rd.readAsText(t.files[0]);}
 });
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){if($('#modal').classList.contains('open')&&!$('#modal').dataset.lock)closeModal();else if(drawerRoom)closeDrawer();}});
+document.addEventListener('keydown',e=>{
+  // Matrix comments: Enter jumps to the next room's comment (Tab already does, links are skipped)
+  if(e.key==='Enter'&&e.target.matches&&e.target.matches('td.cmt input')){e.preventDefault();const all=[...document.querySelectorAll('td.cmt input')],i=all.indexOf(e.target);(all[i+1]||e.target).focus();if(!all[i+1])e.target.blur();return;}
+  if(e.key==='Escape'){if($('#modal').classList.contains('open')&&!$('#modal').dataset.lock)closeModal();else if(drawerRoom)closeDrawer();}});
 
 /* ===================== BOOT ===================== */
 (async function boot(){
