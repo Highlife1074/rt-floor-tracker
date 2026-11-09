@@ -214,6 +214,7 @@ function defaultSettings(){
     project:'Riviera Tower',
     seqV:2,
     people:[{name:APP_ADMIN,role:'admin'}],
+    subs:[],
     floors:[{id:'f1',name:'Level 1'},{id:'f2',name:'Level 2'},{id:'f3',name:'Level 3'}],
     acts:DEFAULT_ACTS.map(([id,name,short,color])=>({id,name,short,color,hp:['mep1','wp'].includes(id)})),
     types:[
@@ -268,7 +269,7 @@ function roBlock(){if(isRO()){alert('Your account is read only.\n\nYou can view,
 
 /* ===================== STATE ===================== */
 let S={settings:null,rooms:{},blockers:{},log:[],snaps:[],pins:{}};
-let F={view:'overview',floor:'all',next:'all',type:'all',q:'',blk:'all',colorBy:'next',quick:false,bStatus:'open',bFloor:'all',bCat:'all',bOwner:'all',bGroup:'none',bq:''};
+let F={view:'overview',sub:'all',resp:'all',floor:'all',next:'all',type:'all',q:'',blk:'all',colorBy:'next',quick:false,bStatus:'open',bFloor:'all',bCat:'all',bOwner:'all',bGroup:'none',bq:''};
 try{Object.assign(F,JSON.parse(lsGet(LSF,'{}')));}catch(e){}
 let drawerRoom=null;
 
@@ -289,6 +290,19 @@ const floorIdx=id=>{const i=S.settings.floors.findIndex(f=>f.id===id);return i<0
 function roomActs(r){const o=[],seen={};(r.acts||[]).forEach(id=>{if(seen[id])return;seen[id]=1;const a=S.settings.acts.find(x=>x.id===id);if(!a)return;o.push(id);if(a.hp&&!(r.hpOff||[]).includes(id))o.push(id+HP);});return o;}
 const cleanSeq=l=>{const seen={};return (l||[]).filter(x=>{if(seen[x]||!S.settings.acts.some(a=>a.id===x))return false;return seen[x]=1;});};
 const libOrd=id=>S.settings.acts.findIndex(a=>a.id===id);
+/* Assignment: each activity has a default subcontractor (settings.subs id) and responsible (team member),
+   overridable per room in r.asg[actId]. A hold point uses the responsible of its activity. */
+const subName=id=>{const s=(S.settings.subs||[]).find(x=>x.id===id);return s?s.name:'';};
+function asg(r,stepId){const m=mainOf(stepId),o=(r&&r.asg&&r.asg[m])||{},a=S.settings.acts.find(x=>x.id===m)||{};return {sub:o.sub||a.sub||'',resp:o.resp||a.resp||'',ov:!!(o.sub||o.resp)};}
+function asgModal(rid,aid){
+  const r=S.rooms[rid],a=actById(aid),o=(r.asg&&r.asg[aid])||{},subs=S.settings.subs||[];
+  modal(`<h2>${esc(r.code)} · ${esc(a.name)}</h2><p style="margin-top:0;color:var(--mute);font-size:12px">Leave “Default” to follow the activity library.</p><div class="form">
+    <label>Subcontractor<select id="as_sub"><option value="">Default: ${esc(subName(a.sub)||'none')}</option>${subs.map(s=>`<option value="${s.id}" ${o.sub===s.id?'selected':''}>${esc(s.name)}</option>`).join('')}</select></label>
+    <label>Responsible<select id="as_resp"><option value="">Default: ${esc(a.resp||'none')}</option>${people().map(p=>`<option value="${esc(p.name)}" ${o.resp===p.name?'selected':''}>${esc(p.name)}</option>`).join('')}</select></label>
+    <div class="row"><button class="btn pri" id="as_ok">Save</button><button class="btn" id="as_x">Cancel</button></div></div>`);
+  $('#as_x').onclick=closeModal;
+  $('#as_ok').onclick=()=>{store.patchRoom(rid,{['asg.'+aid]:{sub:$('#as_sub').value,resp:$('#as_resp').value}});closeModal();};
+}
 function setSeq(kind,id,fn){if(kind==='type')saveS(s=>{const t=s.types.find(x=>x.id===id);if(t)t.acts=fn(cleanSeq(t.acts));});else{const r=S.rooms[id];if(r)store.patchRoom(id,{acts:fn(cleanSeq(r.acts))});}}
 function seqEditor(kind,id,list){
   list=cleanSeq(list);const avail=S.settings.acts.filter(a=>!list.includes(a.id));const r=kind==='room'?S.rooms[id]:null;
@@ -306,6 +320,7 @@ function passes(r,skipNext){
   if(F.type!=='all'&&r.type!==F.type)return false;
   if(F.q){const q=F.q.toLowerCase();if(!(`${r.code} ${r.name}`.toLowerCase().includes(q)))return false;}
   const bk=openBlk(r).length>0;if(F.blk==='yes'&&!bk)return false;if(F.blk==='no'&&bk)return false;
+  if(F.sub!=='all'||F.resp!=='all'){const n=nextStep(r);if(!n)return false;const g=asg(r,n);if(F.sub!=='all'&&g.sub!==F.sub)return false;if(F.resp!=='all'&&g.resp!==F.resp)return false;}
   if(!skipNext&&F.next!=='all'){const n=nextStep(r);if(F.next==='__done'){if(n)return false;}else if(n!==F.next)return false;}
   return true;
 }
@@ -462,6 +477,8 @@ function filterBar(mode){
   return `<div class="filters noprint">
     <select data-fs="floor">${opt('all','All floors',F.floor)}${s.floors.map(f=>opt(f.id,f.name,F.floor)).join('')}</select>
     <select data-fs="type">${opt('all','All room types',F.type)}${s.types.map(t=>opt(t.id,t.name,F.type)).join('')}</select>
+    <select data-fs="sub" title="Subcontractor of the next step">${opt('all','All subcontractors',F.sub)}${(s.subs||[]).map(x=>opt(x.id,'🏗 '+x.name,F.sub)).join('')}</select>
+    <select data-fs="resp" title="Responsible of the next step">${opt('all','All responsibles',F.resp)}${people().map(p=>opt(p.name,'👷 '+p.name,F.resp)).join('')}</select>
     <select data-fs="blk">${opt('all','Blocked + not blocked',F.blk)}${opt('yes','⚠ Blocked rooms only',F.blk)}${opt('no','Not blocked only',F.blk)}</select>
     <input id="q" data-fs="q" placeholder="🔍 Search room…" value="${esc(F.q)}" style="width:170px">
     ${mode==='tiles'?`<select data-fs="colorBy">${opt('next','Colour = next activity',F.colorBy)}${opt('progress','Colour = % progress',F.colorBy)}</select>`
@@ -495,7 +512,7 @@ function tile(r){
   return `<button class="tile ${bl.length?'is-blk':''}" data-room="${r.id}" style="border-top-color:${top};background:${bg}">
     <div class="t-top"><b>${esc(r.code)}</b>${bl.length?`<span class="badge red">⚠ ${bl.length}</span>`:''}<span class="pct">${pc(p)}%</span></div>
     <div class="t-name">${esc(r.name)}</div><div class="segs">${segs}</div>
-    <div class="t-next">${a?`<span class="dot" style="background:${a.isHp?'var(--hp)':a.color}"></span><span>${a.isHp?'◆ ':''}${stepLabel(r,n)}</span>`:'<span style="color:var(--done);font-weight:700">✓ Complete</span>'}</div></button>`;
+    <div class="t-next">${a?`<span class="dot" style="background:${a.isHp?'var(--hp)':a.color}"></span><span>${a.isHp?'◆ ':''}${stepLabel(r,n)}</span>`+(()=>{const g=asg(r,n),t=a.isHp?(g.resp?'👷 '+g.resp:''):[subName(g.sub)&&'🏗 '+subName(g.sub),g.resp&&'👷 '+g.resp.split(',')[0]].filter(Boolean).join(' · ');return t?`</div><div class="t-name" style="margin:4px 0 0">${esc(t)}`:'';})():'<span style="color:var(--done);font-weight:700">✓ Complete</span>'}</div></button>`;
 }
 
 function vMatrix(){
@@ -587,13 +604,13 @@ function vDash(){
   const lg=S.log.slice(0,25);
   h+=lg.length?lg.map(l=>`<div><small>${ago(l.ts)} · ${esc(l.by)}</small><br><b>${esc(l.code)}</b> ${esc(actById(l.actId)?.name||'')} → <b style="color:${l.to===2?'var(--done)':l.to===1?'#b57800':'var(--mute)'}">${lbl(l.actId,l.to)}</b></div>`).join(''):'<div class="empty">No update yet.</div>';
   h+=`</div></div></div>`;
-  h+=`<div class="card"><h2>Progress by activity & floor</h2><p style="margin:0 0 10px;color:var(--mute);font-size:12px">“Pending” = rooms where this activity is the next step (= available work front). Click a number to see those rooms.</p><div class="tbwrap"><table class="tb"><thead><tr><th>Activity</th>${s.floors.map(f=>`<th style="text-align:center">${esc(f.name)}</th>`).join('')}<th style="text-align:center">Total</th><th style="text-align:center">Done / rooms</th><th style="text-align:center">Pending (next step)</th><th style="text-align:center">Blocked</th></tr></thead><tbody>`;
+  h+=`<div class="card"><h2>Progress by activity & floor</h2><p style="margin:0 0 10px;color:var(--mute);font-size:12px">“Pending” = rooms where this activity is the next step (= available work front). Click a number to see those rooms.</p><div class="tbwrap"><table class="tb"><thead><tr><th>Activity</th><th>Subcontractor · Responsible</th>${s.floors.map(f=>`<th style="text-align:center">${esc(f.name)}</th>`).join('')}<th style="text-align:center">Total</th><th style="text-align:center">Done / rooms</th><th style="text-align:center">Pending (next step)</th><th style="text-align:center">Blocked</th></tr></thead><tbody>`;
   const cell=p=>p===null?`<td class="heat" style="color:#bbb">—</td>`:`<td class="heat" style="background:hsla(145,55%,40%,${(0.07+p*0.85).toFixed(2)});color:${p>.55?'#fff':'var(--ink)'}">${pc(p)}%</td>`;
   const val=(r,a)=>{const x=st(r,a);return x===2?1:x===1?.5:0;};
   allSteps().forEach(a=>{
     const app=rooms.filter(r=>roomActs(r).includes(a.id));if(!app.length)return;
     const nxt=rooms.filter(r=>nextStep(r)===a.id).length,bk=open.filter(b=>b.actId===a.id).length;
-    h+=`<tr><td style="${a.isHp?'padding-left:24px;color:var(--mute)':''}">${a.isHp?'◆ Hold point – released':`<span class="dot" style="background:${a.color}"></span> ${esc(a.name)}`}</td>`;
+    h+=`<tr><td style="${a.isHp?'padding-left:24px;color:var(--mute)':''}">${a.isHp?'◆ Hold point – released':`<span class="dot" style="background:${a.color}"></span> ${esc(a.name)}`}</td><td style="font-size:12px;color:var(--mute)">${a.isHp?esc(actById(a.main).resp||''):[subName(a.sub),a.resp].filter(Boolean).map(esc).join(' · ')}</td>`;
     s.floors.forEach(f=>{const rs=app.filter(r=>r.floor===f.id);h+=cell(rs.length?avg(rs.map(r=>val(r,a.id))):null);});
     h+=cell(avg(app.map(r=>val(r,a.id))))+`<td style="text-align:center">${app.filter(r=>st(r,a.id)===2).length} / ${app.length}</td><td style="text-align:center">${nxt?`<span class="lnk" data-gonext="${a.id}">${nxt}</span>`:'0'}</td><td style="text-align:center;${bk?'color:var(--blk);font-weight:700':''}">${bk}</td></tr>`;
   });
@@ -613,8 +630,10 @@ function vSetup(){
     <div class="row">Signed in as <b>${esc(user())}</b> (${roleName(me())})<button class="btn sm" data-act="user">Log out</button></div>
     <div style="font-size:12px;color:var(--mute)">${USE_FB?'🟢 Shared mode — data is live in Firebase for everyone using this link.':'🟡 Local mode — data is saved in this browser only. Fill the Firebase config in index.html to share it with the team.'}</div></div></div>
     <div class="card"><h2>Floors</h2>${s.floors.map(f=>`<div class="row" style="margin-bottom:6px"><input data-hold data-floorname="${f.id}" value="${esc(f.name)}" style="flex:1"><small style="color:var(--mute);width:70px">${rooms.filter(r=>r.floor===f.id).length} rooms</small><button class="btn sm red" data-delfloor="${f.id}">✕</button></div>`).join('')}<button class="btn sm" data-act="addfloor">+ Add floor</button></div></div>`;
-  h+=`<div class="card"><h2>Activity library (in construction sequence)</h2><p style="margin:0 0 10px;color:var(--mute);font-size:12px">This is the catalogue of activities. Its order is only the default order (matrix columns, “Sort as library”); the real order of works is the sequence of each template and room. Tick <b>◆ Hold point</b> to insert an inspection step right after an activity: the next trade only becomes “next step” once the hold point is released. A room can switch off a hold point in its own “Customize activities”.</p>`;
-  s.acts.forEach((a,i)=>{h+=`<div class="row" style="margin-bottom:6px"><input type="color" data-actcolor="${a.id}" value="${a.color}" style="width:42px;padding:2px;height:34px"><input data-hold data-actname="${a.id}" value="${esc(a.name)}" style="flex:1;min-width:150px"><input data-hold data-actshort="${a.id}" value="${esc(a.short)}" style="width:70px" title="Short code"><label class="chk" title="Adds a linked hold point (inspection) step right after this activity"><input type="checkbox" data-acthp="${a.id}" ${a.hp?'checked':''}><span class="hptag">◆ HP</span>Hold point</label><small style="color:var(--mute);width:70px">${cnt(a.id)} rooms</small><button class="btn sm" data-actup="${i}" ${i?'':'disabled'}>↑</button><button class="btn sm" data-actdown="${i}" ${i<s.acts.length-1?'':'disabled'}>↓</button><button class="btn sm red" data-actdel="${a.id}">✕</button></div>`;});
+  h+=`<div class="card"><h2>🏗 Subcontractors</h2><p style="margin:0 0 10px;color:var(--mute);font-size:12px">Assign a default subcontractor and responsible to each activity in the library below; a room can override them (click the 🏗 line under the activity in the room panel).</p>${(s.subs||[]).map(x=>`<div class="row" style="margin-bottom:6px"><input data-hold data-subname="${x.id}" value="${esc(x.name)}" style="flex:1"><small style="color:var(--mute);width:90px">${s.acts.filter(a=>a.sub===x.id).length} activities</small><button class="btn sm red" data-subdel="${x.id}">✕</button></div>`).join('')}
+    <div class="row"><textarea id="ns_name" rows="2" placeholder="Company name (one per line)" style="flex:1;min-width:200px"></textarea><button class="btn pri" data-act="addsub">+ Add subcontractor</button></div></div>`;
+  h+=`<div class="card"><h2>Activity library (catalogue · default subcontractor &amp; responsible)</h2><p style="margin:0 0 10px;color:var(--mute);font-size:12px">This is the catalogue of activities. Its order is only the default order (matrix columns, “Sort as library”); the real order of works is the sequence of each template and room. Tick <b>◆ Hold point</b> to insert an inspection step right after an activity: the next trade only becomes “next step” once the hold point is released. A room can switch off a hold point in its own “Customize sequence”.</p>`;
+  s.acts.forEach((a,i)=>{h+=`<div class="row" style="margin-bottom:6px"><input type="color" data-actcolor="${a.id}" value="${a.color}" style="width:42px;padding:2px;height:34px"><input data-hold data-actname="${a.id}" value="${esc(a.name)}" style="flex:1;min-width:150px"><input data-hold data-actshort="${a.id}" value="${esc(a.short)}" style="width:70px" title="Short code"><select data-actsub="${a.id}" title="Default subcontractor" style="width:150px"><option value="">🏗 — sub —</option>${(s.subs||[]).map(x=>`<option value="${x.id}" ${a.sub===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select><select data-actresp="${a.id}" title="Default responsible" style="width:160px"><option value="">👷 — responsible —</option>${people().map(p=>`<option value="${esc(p.name)}" ${a.resp===p.name?'selected':''}>${esc(p.name)}</option>`).join('')}</select><label class="chk" title="Adds a linked hold point (inspection) step right after this activity"><input type="checkbox" data-acthp="${a.id}" ${a.hp?'checked':''}><span class="hptag">◆ HP</span>Hold point</label><small style="color:var(--mute);width:70px">${cnt(a.id)} rooms</small><button class="btn sm" data-actup="${i}" ${i?'':'disabled'}>↑</button><button class="btn sm" data-actdown="${i}" ${i<s.acts.length-1?'':'disabled'}>↓</button><button class="btn sm red" data-actdel="${a.id}">✕</button></div>`;});
   h+=`<button class="btn sm" data-act="addact">+ Add activity</button></div>`;
   h+=`<div class="card"><h2>Room types (sequence templates)</h2><p style="margin:0 0 10px;color:var(--mute);font-size:12px">Each template is an ordered <b>sequence</b> of activities: step 1, then step 2… Re-order with ↑ ↓ or drag the rows. New rooms copy the sequence of their template; each room can still be adjusted in its own “Customize sequence”.</p>`;
   s.types.forEach(t=>{h+=`<details data-dk="type_${t.id}" style="border-bottom:1px solid var(--line)"><summary><b>${esc(t.name)}</b> <small style="color:var(--mute)">· ${t.acts.filter(x=>actById(x)).length} activities · ${rooms.filter(r=>r.type===t.id).length} rooms</small></summary><div class="row" style="margin:8px 0"><input data-hold data-typename="${t.id}" value="${esc(t.name)}" style="flex:1"><button class="btn sm" data-typecopy="${t.id}">Duplicate</button><button class="btn sm red" data-typedel="${t.id}">Delete type</button></div>${seqEditor('type',t.id,t.acts)}</details>`;});
@@ -685,11 +704,11 @@ function vWeekly(){
   const opts=`<option value="live" ${sel.id==='live'?'selected':''}>This week so far (live)</option>`+[...snaps].reverse().map(x=>`<option value="${x.id}" ${x.id===sel.id?'selected':''}>Week ending Sat ${fmtD(x.date)} ${x.date.slice(0,4)}</option>`).join('');
   h+=`<div class="banner"><div style="flex:1;min-width:220px"><div style="font-size:12px;opacity:.8">${new Date().getDay()===1&&sel.id!=='live'?'Monday report':'Weekly progress'}</div><div style="font-size:18px;font-weight:800">${title}</div>${prev?`<div style="font-size:12px;opacity:.8">compared with Saturday ${fmtD(prev.date)}</div>`:''}</div><select data-fs="wk" class="noprint">${opts}</select><button class="btn sm noprint" data-act="print">🖨 Print</button></div>`;
   // compute changes between prev and sel
-  const P0=prev?prev.rooms:{},done={},movers=[];let nAct=0,hpRel=0,hpReq=0,started=0;const roomsDone=[],still=[];
+  const P0=prev?prev.rooms:{},done={},movers=[],bySub={};let nAct=0,hpRel=0,hpReq=0,started=0;const roomsDone=[],still=[];
   Object.entries(sel.rooms).forEach(([rid,x])=>{
     const o=(P0[rid]&&P0[rid].st)||{};
     Object.entries(x.st).forEach(([id,v])=>{const pv=o[id]||0;
-      if(v===2&&pv!==2){(done[id]=done[id]||{})[x.f]=(done[id][x.f]||0)+1;if(isHP(id))hpRel++;else nAct++;}
+      if(v===2&&pv!==2){(done[id]=done[id]||{})[x.f]=(done[id][x.f]||0)+1;if(isHP(id))hpRel++;else{nAct++;const k=subName(asg(S.rooms[rid],id).sub)||'(no subcontractor)';bySub[k]=(bySub[k]||0)+1;}}
       if(v>=1&&pv===0){if(isHP(id))hpReq++;else started++;}});
     const p0=P0[rid]?P0[rid].p:0,dp=x.p-p0;
     if(x.p>=.9999&&p0<.9999)roomsDone.push(x.c);
@@ -714,6 +733,8 @@ function vWeekly(){
   h+=`<div class="card"><h2>Completed ${sinceTxt} — by activity</h2>`;
   h+=rows.length?`<div class="tbwrap"><table class="tb"><thead><tr><th>Activity</th>${s.floors.map(f=>`<th style="text-align:center">${esc(f.name)}</th>`).join('')}<th style="text-align:center">Total</th></tr></thead><tbody>${rows.map(a=>{const o=done[a.id],tot=Object.values(o).reduce((x,y)=>x+y,0);return `<tr><td style="${a.isHp?'padding-left:24px;color:var(--mute)':''}">${a.isHp?`<span class="hptag">◆ HP</span>${esc(a.name.slice(5))} – released`:`<span class="dot" style="background:${a.color}"></span> ${esc(a.name)}`}</td>${s.floors.map(f=>`<td style="text-align:center">${o[f.id]||''}</td>`).join('')}<td style="text-align:center"><b>${tot}</b></td></tr>`;}).join('')}</tbody></table></div>`:'<div class="empty">No activity completed in this period.</div>';
   h+='</div>';
+  const subRows=Object.entries(bySub).sort((a,b)=>b[1]-a[1]);
+  if(subRows.length)h+=`<div class="card"><h2>Completed ${sinceTxt} — by subcontractor</h2><table class="tb"><tbody>${subRows.map(([k,v])=>`<tr><td>🏗 ${esc(k)}</td><td style="text-align:right"><b>${v}</b> activities</td></tr>`).join('')}</tbody></table></div>`;
   movers.sort((a,b)=>b.dp-a.dp);
   h+=`<div class="grid2"><div class="card"><h2>Rooms that progressed (${movers.length})</h2>${movers.length?`<table class="tb"><tbody>${movers.slice(0,15).map(m=>`<tr class="click" data-room="${S.rooms[m.rid]?m.rid:''}"><td><b>${esc(m.c)}</b> ${esc(m.n)}<br><small style="color:var(--mute)">${esc(floorById(m.f)?.name||'')}</small></td><td style="text-align:right;white-space:nowrap">${pc(m.p0)}% → <b>${pc(m.p)}%</b><br>${dl(m.dp,'%')}</td></tr>`).join('')}</tbody></table>${movers.length>15?`<div class="empty">+ ${movers.length-15} more</div>`:''}`:'<div class="empty">No room progressed in this period.</div>'}</div>`;
   h+=`<div class="card"><h2>Rooms without progress (${still.length})</h2>${still.length?`<div class="row">${still.map(x=>`<span class="tag" title="${esc(x.n)} · ${pc(x.p)}%">${esc(x.c)}</span>`).join('')}</div><p style="font-size:12px;color:var(--mute)">Not complete and no step moved in this period — check them against the blocking points list.</p>`:'<div class="empty">Every unfinished room moved this week 👍</div>'}</div></div>`;
@@ -738,7 +759,7 @@ function renderDrawer(){
     const dIn=k=>`<input type="date" class="dt" data-hold data-sdate="${r.id}|${id}|${k}" value="${o[k]||o.d||''}" title="Change date if the work was done on another day">`;
     const meta=sv===2?`${hp?'Released':'Done'} ${dIn('dd')}${o.by?' · '+esc(o.by):''}`:sv===1?`${hp?'Requested':'Started'} ${dIn('ds')}${o.by?' · '+esc(o.by):''}`:'';
     const words=hp?['Pending','Req.','Released']:['To do','WIP','Done'];
-    h+=`<div class="arow ${hp?'hp':''} ${b.length?'blk':''}">${hp?'':`<span class="dot" style="background:${a.color}"></span>`}<div class="an">${hp?`<b><span class="hptag">◆ HP</span>Hold point – inspection</b>`:`<b>${esc(a.name)}</b>`}<small>${meta}${b.length?` <span style="color:var(--blk)">⚠ ${esc(b[0].title)}</span>`:''}</small></div>
+    h+=`<div class="arow ${hp?'hp':''} ${b.length?'blk':''}">${hp?'':`<span class="dot" style="background:${a.color}"></span>`}<div class="an">${hp?`<b><span class="hptag">◆ HP</span>Hold point – inspection</b>`:`<b>${esc(a.name)}</b>`}<small>${meta}${b.length?` <span style="color:var(--blk)">⚠ ${esc(b[0].title)}</span>`:''}</small>${(()=>{const g=asg(r,id);return hp?`<small>👷 Inspection by ${esc(g.resp||'—')}</small>`:`<small class="asgl" data-asg="${r.id}|${id}" title="Click to change for this room" style="cursor:pointer">🏗 ${esc(subName(g.sub)||'—')} · 👷 ${esc(g.resp||'—')}${g.ov?' <b style="color:var(--acc)">✎ room-specific</b>':''}</small>`;})()}</div>
       <div class="seg">${[0,1,2].map(k=>`<button class="${sv===k?'on'+k:''} ${hp?'hpb':''}" data-set="${r.id}|${id}|${k}">${words[k]}</button>`).join('')}</div>
       <button class="iconbtn" title="Raise a blocking point on this activity" data-newblk="${r.id}|${id}">⚠</button></div>`;
   });
@@ -765,7 +786,7 @@ function blkModal(bid,roomId,actId){
     <label>Room<select id="m_room"><option value="">— select —</option>${ro}</select></label>
     <label>Activity concerned<select id="m_act"></select></label>
     <label>Description of the blocking point<textarea id="m_title" rows="3">${esc(b.title)}</textarea></label>
-    <div class="row"><label>Category<select id="m_cat">${s.cats.map(c=>`<option ${c===b.cat?'selected':''}>${esc(c)}</option>`).join('')}</select></label><label>Responsible<input id="m_owner" list="m_owners" value="${esc(b.owner)}" placeholder="Who must solve it"><datalist id="m_owners">${owners.map(o=>`<option value="${esc(o)}">`).join('')}</datalist></label></div>
+    <div class="row"><label>Category<select id="m_cat">${s.cats.map(c=>`<option ${c===b.cat?'selected':''}>${esc(c)}</option>`).join('')}</select></label><label>Responsible<input id="m_owner" list="m_owners" value="${esc(b.owner)}" placeholder="Who must solve it"><datalist id="m_owners">${[...new Set([...owners,...(s.subs||[]).map(x=>x.name),...people().map(p=>p.name)])].map(o=>`<option value="${esc(o)}">`).join('')}</datalist></label></div>
     <div class="row"><label>Raised on<input type="date" id="m_raised" value="${b.raised||''}"></label><label>Target date<input type="date" id="m_due" value="${b.due||''}"></label><label>Status<select id="m_status"><option value="open" ${b.status==='open'?'selected':''}>Open</option><option value="closed" ${b.status==='closed'?'selected':''}>Resolved</option></select></label></div>
     <div class="row"><button class="btn pri" id="m_save">Save</button><button class="btn" id="m_cancel">Cancel</button>${bid?'<span class="sp"></span><button class="btn red" id="m_del">Delete</button>':''}</div></div>`);
   const fillActs=()=>{const r=S.rooms[$('#m_room').value];$('#m_act').innerHTML=`<option value="">General / whole room</option>`+(r?roomActs(r):[]).map(id=>`<option value="${id}" ${id===b.actId?'selected':''}>${esc(actById(id).name)}</option>`).join('');};
@@ -792,6 +813,8 @@ function exportAll(){
   const rows=roomsList().map(r=>{const n=nextStep(r),ra=roomActs(r);return [floorById(r.floor)?.name||'',r.code,r.name,typeById(r.type)?.name||'',pc(progress(r)),n?actById(n).name:'Complete',openBlk(r).length,...steps.map(a=>ra.includes(a.id)?(openBlk(r,a.id).length?'BLOCKED':lbl(a.id,st(r,a.id))):'n/a'),r.note||''];});
   X.utils.book_append_sheet(wb,X.utils.aoa_to_sheet([head,...rows]),'Room status');
   X.utils.book_append_sheet(wb,X.utils.json_to_sheet(Object.values(S.blockers).map(blkRow)),'Blocking points');
+  const asRows=[];roomsList().forEach(r=>roomActs(r).forEach((id,i)=>{const g=asg(r,id);asRows.push({Floor:floorById(r.floor)?.name||'',Room:r.code,'Room name':r.name,Step:i+1,Activity:actById(id).name,Status:lbl(id,st(r,id)),Subcontractor:isHP(id)?'':subName(g.sub),Responsible:g.resp,'Room-specific':g.ov?'yes':''});}));
+  X.utils.book_append_sheet(wb,X.utils.json_to_sheet(asRows),'Sequences & assignments');
   X.utils.book_append_sheet(wb,X.utils.json_to_sheet(S.log.map(l=>({Date:new Date(l.ts).toLocaleString('en-GB'),By:l.by,Room:l.code,Activity:actById(l.actId)?.name||l.actId,From:lbl(l.actId,l.from),To:lbl(l.actId,l.to)}))),'Update log');
   const sn=[...S.snaps].sort((a,b)=>a.date.localeCompare(b.date));
   X.utils.book_append_sheet(wb,X.utils.aoa_to_sheet([['Week ending (Saturday)','Overall %',...s.floors.map(f=>f.name+' %')],...sn.map(x=>[x.date,pc(x.overall),...s.floors.map(f=>x.floors&&x.floors[f.id]!=null?pc(x.floors[f.id]):'')])]),'Weekly snapshots');
@@ -803,6 +826,7 @@ const ACT={
   print:()=>window.print(),
   close:closeDrawer,
   user:()=>{if(!confirm('Log out of the Floor Tracker on this device?'))return;lsSet(LSU,'');closeDrawer();showLogin();},
+  addsub:()=>{const lines=$('#ns_name').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);if(!lines.length)return;saveS(s=>{s.subs=s.subs||[];lines.forEach(n=>{if(!s.subs.some(y=>y.name.toLowerCase()===n.toLowerCase()))s.subs.push({id:uid('s'),name:n});});});},
   addperson:()=>{const lines=$('#np_name').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean),role=$('#np_role').value;if(!lines.length)return;
     const have=people().map(p=>normName(p.name));const add=lines.filter((n,i)=>!have.includes(normName(n))&&lines.findIndex(x=>normName(x)===normName(n))===i);
     if(!add.length)return alert('Already in the list.');editPeople(l=>add.forEach(n=>l.push({name:n,role})));},
@@ -836,10 +860,12 @@ const ACT={
 document.addEventListener('click',e=>{
   const lg=e.target.closest('#login [data-lgpick],#login [data-lgk],#login [data-lgback],#login [data-lgset]');if(lg){loginClick(lg.dataset);return;}
   if(e.target.id==='modal'&&!$('#modal').dataset.lock){closeModal();return;}
-  const t=e.target.closest('[data-view],[data-f],[data-closeblk],[data-editblk],[data-newblk],[data-set],[data-cell],[data-room],[data-act],[data-actup],[data-actdown],[data-actdel],[data-typedel],[data-delfloor],[data-gonext],[data-preset],[data-pdel],[data-sqmv],[data-sqrm],[data-sqsort],[data-typecopy]');
+  const t=e.target.closest('[data-view],[data-f],[data-closeblk],[data-editblk],[data-newblk],[data-set],[data-cell],[data-room],[data-act],[data-actup],[data-actdown],[data-actdel],[data-typedel],[data-delfloor],[data-gonext],[data-preset],[data-pdel],[data-sqmv],[data-sqrm],[data-sqsort],[data-typecopy],[data-asg],[data-subdel]');
   if(!t)return;const d=t.dataset;
   if(d.preset){if(confirm(`Reset the PIN of ${d.preset}?\n\nThey will choose a new PIN at their next login.`))store.resetPin(d.preset);return;}
   if(d.pdel){if(!confirm(`Remove ${d.pdel} from the team?\n\nThey will no longer be able to log in. Their past updates stay in the history.`))return;const n=d.pdel;editPeople(l=>{const i=l.findIndex(p=>p.name===n);if(i>=0)l.splice(i,1);});if(S.pins[n])store.resetPin(n);return;}
+  if(d.asg){if(roBlock())return;const [rid,aid]=d.asg.split('|');asgModal(rid,aid);return;}
+  if(d.subdel){const x=(S.settings.subs||[]).find(y=>y.id===d.subdel);if(!confirm(`Delete subcontractor “${x?x.name:''}”? Activities assigned to it become unassigned.`))return;saveS(s=>{s.subs=(s.subs||[]).filter(y=>y.id!==d.subdel);s.acts.forEach(a=>{if(a.sub===d.subdel)a.sub='';});});return;}
   if(d.sqmv){const [k,id,i,dir]=d.sqmv.split('|');setSeq(k,id,l=>{const a=+i,b=a+(+dir);if(b<0||b>=l.length)return l;[l[a],l[b]]=[l[b],l[a]];return l;});return;}
   if(d.sqrm){const [k,id,i]=d.sqrm.split('|');setSeq(k,id,l=>{l.splice(+i,1);return l;});return;}
   if(d.sqsort){const [k,id]=d.sqsort.split('|');if(!confirm('Re-order this sequence like the activity library?'))return;setSeq(k,id,l=>l.sort((a,b)=>libOrd(a)-libOrd(b)));return;}
@@ -875,6 +901,9 @@ document.addEventListener('change',e=>{
   if(d.actname){saveS(s=>s.acts.find(a=>a.id===d.actname).name=t.value.trim()||'Activity');return;}
   if(d.actshort){saveS(s=>s.acts.find(a=>a.id===d.actshort).short=t.value.trim());return;}
   if(d.sqadd!==undefined){if(!t.value)return;const [k,id]=d.sqadd.split('|'),v=t.value;setSeq(k,id,l=>{l.push(v);return l;});return;}
+  if(d.actsub!==undefined){saveS(s=>s.acts.find(a=>a.id===d.actsub).sub=t.value);return;}
+  if(d.actresp!==undefined){saveS(s=>s.acts.find(a=>a.id===d.actresp).resp=t.value);return;}
+  if(d.subname){saveS(s=>{const x=(s.subs||[]).find(y=>y.id===d.subname);if(x)x.name=t.value.trim()||x.name;});return;}
   if(d.prole){const n=d.prole,v=t.value;editPeople(l=>{const p=l.find(x=>x.name===n);if(p)p.role=v;});return;}
   if(d.acthp){saveS(s=>s.acts.find(a=>a.id===d.acthp).hp=t.checked);return;}
   if(d.rhp){const [rid,aid]=d.rhp.split('|'),r=S.rooms[rid];const off=(r.hpOff||[]).filter(x=>x!==aid);if(!t.checked)off.push(aid);store.patchRoom(rid,{hpOff:off});return;}
