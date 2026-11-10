@@ -164,6 +164,11 @@ body.ro [data-set],body.ro [data-newblk],body.ro [data-closeblk],body.ro .rwonly
 .pin{position:absolute;transform:translate(-50%,-50%);border:2px solid #fff;background:var(--c);color:#fff;font:700 11px/1 system-ui,sans-serif;padding:3px 6px;border-radius:9px;cursor:pointer;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.35);text-shadow:0 0 2px rgba(0,0,0,.55);z-index:2}
 .pin{text-align:center}.pin b{font-weight:700}.pin .pn{display:block;font-weight:600;font-size:10px;line-height:1.15;margin-top:2px;max-width:120px;white-space:normal}
 .pin.msel{outline:3px solid #111;outline-offset:1px;z-index:3}.selbox{position:absolute;border:2px dashed var(--hp);background:rgba(45,127,249,.12);z-index:5;pointer-events:none}
+.plines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1}
+.plines .pl{fill:none;stroke:#e5007e;stroke-width:calc(3px*var(--k));stroke-dasharray:calc(10px*var(--k)) calc(5px*var(--k));stroke-linecap:round;stroke-linejoin:round}
+.plines .pl.cur{stroke:var(--hp);stroke-dasharray:none}.plines .pl.rub{stroke:var(--hp);stroke-dasharray:calc(4px*var(--k)) calc(4px*var(--k));stroke-width:calc(2px*var(--k))}.plines .pl.lsel{stroke:var(--hp);stroke-width:calc(5px*var(--k))}
+.plines .plhit{fill:none;stroke:transparent;stroke-width:calc(16px*var(--k));pointer-events:stroke;cursor:pointer}
+.pdraw{background:#e8f0fe;border-radius:8px;padding:6px 8px;margin-bottom:8px;font-size:13px}
 .pin:hover{z-index:4;transform:translate(-50%,-50%) scale(1.15)}
 .pin.blk{box-shadow:0 0 0 3px var(--blk),0 1px 4px rgba(0,0,0,.35);z-index:3}
 .pbadge{position:absolute;top:-10px;right:-10px;min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:var(--blk);color:#fff;border:2px solid #fff;font:800 11px/16px system-ui,sans-serif;font-style:normal;text-align:center;text-shadow:none;box-shadow:0 1px 4px rgba(0,0,0,.4)}
@@ -1024,7 +1029,7 @@ document.addEventListener('keydown',e=>{
    where it appears. Positions placed by hand are never overwritten by a later detection. */
 const PDFJS='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 const CHUNK=900000,ZOOMS=[1,1.5,2,3,4,6];
-const PLAN={tmode:false,ttype:'',multi:false,msel:new Set(),tseq:true,box:null,shown:[],img:{},busy:{},pdf:{},mem:{},edit:false,place:null,sel:null,drag:null,fid:null,pid:null,flash:null,imp:null};
+const PLAN={draw:false,cur:[],lsel:null,tmode:false,ttype:'',multi:false,msel:new Set(),tseq:true,box:null,shown:[],img:{},busy:{},pdf:{},mem:{},edit:false,place:null,sel:null,drag:null,fid:null,pid:null,flash:null,imp:null};
 let pdfjsP=null;
 function pdfjs(){
   if(!pdfjsP)pdfjsP=new Promise((res,rej)=>{if(window.pdfjsLib)return res(window.pdfjsLib);const sc=document.createElement('script');sc.src=PDFJS+'pdf.min.js';
@@ -1258,7 +1263,10 @@ function vPlans(){
     ${adm?`${m.pages>1?`<select data-ppage="${pid}" title="Page of the PDF">${Array.from({length:m.pages},(_,i)=>`<option value="${i+1}" ${(m.page||1)===i+1?'selected':''}>Page ${i+1}</option>`).join('')}</select>`:''}<button class="btn sm" data-act="pimpmodal" title="Create the rooms written on the plans that are not yet in the tracker">🏷 Rooms from plans</button><button class="btn sm" data-act="pdetect">🔎 Detect rooms</button><button class="btn sm" data-act="prename" title="Rename this sheet">✎</button><label class="btn sm" title="Replace the PDF of this sheet">⬆ Replace${fin(false,pid)}</label><button class="btn sm red" data-act="pdel" title="Remove this sheet">✕</button>`:''}</div>`;
   if(PLAN.edit){
     const sel=PLAN.sel&&S.rooms[PLAN.sel];
-    h+=`<div class="card noprint pedit"><b>✥ Move labels:</b> drag a label to move it (saved for everyone) · ${PLAN.place?`<span class="tag" style="background:var(--hp);color:#fff">Click on the plan ${PLAN.place==='__new'?'where the new room is':'to place '+esc(S.rooms[PLAN.place]?.code||'')}</span> <button class="btn sm" data-pplace="">Cancel</button>`:'pick a room below, then click on the plan to place it'}${sel?` · selected <b>${esc(sel.code)}</b> ${adm?` <button class="btn sm" data-act="psplit" title="Cut this room into several rooms (e.g. a parking zone)">✂ Split</button>`:''} <button class="btn sm red" data-punpin="${sel.id}">Remove from this sheet</button>`:''}${adm&&!PLAN.place?` · <button class="btn sm pri" data-pplace="__new">+ New room</button> <small style="color:var(--mute)">then click on the plan</small>`:''}
+    const dr=!adm?'':PLAN.draw?`<div class="row pdraw"><b>✏ Draw a limit:</b> click on the plan to add points · <b>double-click</b> (or Enter) to finish · Shift = horizontal / vertical · Backspace = undo point · Esc = cancel
+        ${PLAN.cur.length>=4?`<button class="btn sm pri" data-act="pdrawend">✓ Finish line</button>`:''}<button class="btn sm" data-act="pdraw">Close drawing</button></div>`
+      :`<div class="row" style="margin-bottom:8px"><button class="btn sm" data-act="pdraw" title="Mark the boundary between two rooms (e.g. after a split)">✏ Draw a limit</button>${PLAN.lsel&&(m.lines||{})[PLAN.lsel]?`<span>limit selected</span><button class="btn sm red" data-act="plinedel">Delete this limit</button>`:`<small style="color:var(--mute)">click an existing limit to select it</small>`}</div>`;
+    h+=`<div class="card noprint pedit">${dr}<b>✥ Move labels:</b> drag a label to move it (saved for everyone) · ${PLAN.place?`<span class="tag" style="background:var(--hp);color:#fff">Click on the plan ${PLAN.place==='__new'?'where the new room is':'to place '+esc(S.rooms[PLAN.place]?.code||'')}</span> <button class="btn sm" data-pplace="">Cancel</button>`:'pick a room below, then click on the plan to place it'}${sel?` · selected <b>${esc(sel.code)}</b> ${adm?` <button class="btn sm" data-act="psplit" title="Cut this room into several rooms (e.g. a parking zone)">✂ Split</button>`:''} <button class="btn sm red" data-punpin="${sel.id}">Remove from this sheet</button>`:''}${adm&&!PLAN.place?` · <button class="btn sm pri" data-pplace="__new">+ New room</button> <small style="color:var(--mute)">then click on the plan</small>`:''}
       <div class="chips" style="margin:8px 0 0">${unplaced.length?unplaced.map(r=>`<button class="chip ${PLAN.place===r.id?'on':''}" data-pplace="${r.id}"><b>${esc(r.code)}</b> ${esc(r.name)}</button>`).join(''):'<span style="color:var(--done);font-size:13px">✓ All rooms of this floor are on the plans.</span>'}</div>${(()=>{const o=onF.filter(r=>!pins[r.id]&&onFloorPlans(r,fid)).sort(byCode);return o.length?`<div style="margin-top:8px;font-size:12px">Also show on this sheet (room drawn on both sheets): <select data-paddsheet><option value="">— room —</option>${o.map(r=>`<option value="${r.id}">${esc(r.code)} ${esc(r.name)}</option>`).join('')}</select></div>`:'';})()}</div>`;
   }
   if(PLAN.tmode){
@@ -1272,7 +1280,10 @@ function vPlans(){
   h+=`<div class="printonly"><h2>${esc(s.project)} — ${esc(floorById(fid)?.name||'')}${sheets.length>1?' — '+esc(m.sheet||''):''} — ${fmtLong(today())}</h2></div>`;
   if(!im){planImage(pid);return h+`<div class="planwrap" id="planwrap"><div class="empty" style="padding:30px;text-align:center">Loading the plan…</div></div>`;}
   if(im.err)return h+`<div class="card"><b>The plan could not be displayed:</b> ${esc(im.err)} <button class="btn sm" data-act="pretry">Retry</button></div>`;
-  h+=`<div class="planwrap" id="planwrap"><div class="planin ${PLAN.edit?'editing':''} ${PLAN.place||(PLAN.tmode&&PLAN.multi)?'placing':''}" id="planin" style="width:${z*100}%"><img src="${im.url}" alt="" draggable="false">`;
+  h+=`<div class="planwrap" id="planwrap"><div class="planin ${PLAN.edit?'editing':''} ${PLAN.place||PLAN.draw||(PLAN.tmode&&PLAN.multi)?'placing':''}" id="planin" style="width:${z*100}%"><img src="${im.url}" alt="" draggable="false">`;
+  {const L=m.lines||{},pts=a=>{let o=[];for(let i=0;i+1<a.length;i+=2)o.push((a[i]*im.w).toFixed(1)+','+(a[i+1]*im.h).toFixed(1));return o.join(' ');};
+   const sel=PLAN.edit&&!PLAN.draw,k=im.w/Math.max(300,((document.getElementById('planwrap')||{}).clientWidth||1200)*z);   // screen px → image px
+   h+=`<svg class="plines ${sel?'selectable':''}" style="--k:${k.toFixed(3)}" viewBox="0 0 ${im.w} ${im.h}" preserveAspectRatio="none">${Object.entries(L).map(([id,l])=>`<polyline points="${pts(l.p||[])}" class="pl ${PLAN.lsel===id&&sel?'lsel':''}"/>${sel?`<polyline points="${pts(l.p||[])}" class="plhit" data-line="${id}"/>`:''}`).join('')}${PLAN.draw?`<polyline id="pcur" points="${pts(PLAN.cur)}" class="pl cur"/><line id="prub" class="pl rub" x1="0" y1="0" x2="0" y2="0" style="display:none"/>`:''}</svg>`;}
   here.forEach(r=>{const p=pins[r.id],n=nextStep(r),a=n&&actById(n),pr=progress(r),bl=openBlk(r);
     const c=PLAN.tmode?typeCol(r.type):F.colorBy==='progress'?heat(pr):(a?(a.isHp?'var(--hp)':a.color):'var(--done)');
     const oth=r.floor!==fid,tip=`${r.code} ${r.name} — ${typeById(r.type)?.name||'no type'}${oth?` — double height, room of ${floorById(r.floor)?.name||'another level'}`:''} — ${pc(pr)}% — ${a?(a.isHp?'Awaiting '+a.name:'Next: '+a.name):'Complete'}${bl.length?` — ⚠ ${bl.length} blocking point(s)`:''}`;
@@ -1297,7 +1308,7 @@ document.addEventListener('pointerup',()=>{
   const pins=(S.plans[PLAN.pid]||{}).pins||{};PLAN.shown.forEach(id=>{const p=pins[id];if(p&&p.x>=x1&&p.x<=x2&&p.y>=y1&&p.y<=y2)PLAN.msel.add(id);});render();
 });
 document.addEventListener('pointerdown',e=>{
-  if(!PLAN.edit)return;const p=e.target.closest&&e.target.closest('.pin[data-pin]');if(!p)return;const box=$('#planin');if(!box)return;
+  if(!PLAN.edit||PLAN.draw)return;const p=e.target.closest&&e.target.closest('.pin[data-pin]');if(!p)return;const box=$('#planin');if(!box)return;
   PLAN.drag={rid:p.dataset.pin,el:p,box:box.getBoundingClientRect(),sx:e.clientX,sy:e.clientY,moved:false};try{p.setPointerCapture(e.pointerId);}catch(_){}e.preventDefault();
 });
 document.addEventListener('pointermove',e=>{
@@ -1312,6 +1323,12 @@ document.addEventListener('pointerup',()=>{
 /* returns true when the click was a plan action */
 function planClick(e){
   const pi=e.target.closest('#planin');
+  if(PLAN.edit&&!PLAN.draw){const ln=e.target.closest('[data-line]');if(ln){PLAN.lsel=PLAN.lsel===ln.dataset.line?null:ln.dataset.line;render();return true;}}
+  if(PLAN.draw&&pi){const b=pi.getBoundingClientRect();let x=clamp01((e.clientX-b.left)/b.width),y=clamp01((e.clientY-b.top)/b.height);const c=PLAN.cur,n=c.length;
+    const now=Date.now(),lc=PLAN.lastClick;PLAN.lastClick={t:now,x:e.clientX,y:e.clientY};
+    if(lc&&now-lc.t<400&&Math.hypot(e.clientX-lc.x,e.clientY-lc.y)<8){PLAN.lastClick=null;drawFinish();return true;}   // double-click = finish (the view is re-rendered between the clicks)
+    if(n>=2&&e.shiftKey){const im=PLAN.img[planKey(PLAN.pid)]||{w:1,h:1};if(Math.abs(x-c[n-2])*im.w>Math.abs(y-c[n-1])*im.h)y=c[n-1];else x=c[n-2];}
+    c.push(x,y);render();return true;}
   if(PLAN.tmode){
     if(PLAN.boxEnd&&Date.now()-PLAN.boxEnd<300)return true;
     const pn=e.target.closest('.pin[data-pin]');if(pn){const id=pn.dataset.pin;if(PLAN.multi){PLAN.msel.has(id)?PLAN.msel.delete(id):PLAN.msel.add(id);render();}else assignType([id]);return true;}
@@ -1385,8 +1402,27 @@ async function splitOk(){
   await store.addRooms(parts);await store.patchPlan(pid,pins);
   if(del){const bl=Object.values(S.blockers).filter(b=>b.roomId===r.id);for(const b of bl)await store.setBlocker({...b,roomId:parts[0].id});
     if(drawerRoom===r.id)closeDrawer();await store.delRooms([r.id],[]);}
-  PLAN.sel=null;render();
+  PLAN.sel=null;PLAN.draw=true;PLAN.cur=[];render();   // next step: draw the limits between the new rooms
 }
+/* ---- limits (boundary lines, e.g. between the parts of a split room); stored per sheet as flat [x1,y1,x2,y2…] (0..1) ---- */
+function drawFinish(){
+  const c=PLAN.cur,o=[];for(let i=0;i+1<c.length;i+=2){const k=o.length;if(k>=2&&Math.hypot(c[i]-o[k-2],c[i+1]-o[k-1])<.002)continue;o.push(c[i],c[i+1]);}  // double-click adds the last point twice
+  PLAN.cur=[];if(o.length<4){render();return;}
+  store.patchPlan(PLAN.pid,{['lines.'+uid('l')]:{p:o,by:user(),ts:Date.now()}});render();
+}
+document.addEventListener('pointermove',e=>{
+  if(!PLAN.draw||PLAN.cur.length<2)return;const pi=$('#planin'),rb=document.getElementById('prub');if(!pi||!rb)return;
+  const b=pi.getBoundingClientRect(),im=PLAN.img[planKey(PLAN.pid)];if(!im)return;const c=PLAN.cur,n=c.length;
+  let x=clamp01((e.clientX-b.left)/b.width),y=clamp01((e.clientY-b.top)/b.height);
+  if(e.shiftKey){if(Math.abs(x-c[n-2])*im.w>Math.abs(y-c[n-1])*im.h)y=c[n-1];else x=c[n-2];}
+  rb.setAttribute('x1',c[n-2]*im.w);rb.setAttribute('y1',c[n-1]*im.h);rb.setAttribute('x2',x*im.w);rb.setAttribute('y2',y*im.h);rb.style.display='';
+});
+document.addEventListener('keydown',e=>{
+  if(!PLAN.draw||F.view!=='plans'||(e.target.matches&&e.target.matches('input,textarea,select')))return;
+  if(e.key==='Enter'){e.preventDefault();drawFinish();}
+  else if(e.key==='Backspace'){e.preventDefault();PLAN.cur.splice(-2,2);render();}
+  else if(e.key==='Escape'){e.stopPropagation();if(PLAN.cur.length){PLAN.cur=[];}else PLAN.draw=false;render();}
+},true);
 /* ---- room types on the plan ---- */
 const TYPE_COLS=['#1e88e5','#e53935','#43a047','#fb8c00','#8e24aa','#00897b','#6d4c41','#d81b60','#3949ab','#c0ca33','#5d4037','#00acc1','#f4511e','#7cb342'];
 const typeCol=id=>{const i=S.settings.types.findIndex(t=>t.id===id);return i<0?'#9e9e9e':TYPE_COLS[i%TYPE_COLS.length];};
@@ -1399,6 +1435,9 @@ function assignType(ids){
   PLAN.msel.clear();return store.addRooms(rs.map(r=>({...r,...up(r)})));
 }
 Object.assign(ACT,{
+  pdraw:()=>{PLAN.draw=!PLAN.draw;PLAN.cur=[];PLAN.lsel=null;PLAN.place=null;render();},
+  pdrawend:drawFinish,
+  plinedel:()=>{if(!PLAN.lsel||!confirm('Delete this limit?'))return;store.patchPlan(PLAN.pid,{['lines.'+PLAN.lsel]:null});PLAN.lsel=null;},
   ptype:()=>{PLAN.tmode=!PLAN.tmode;PLAN.edit=false;PLAN.place=null;PLAN.sel=null;PLAN.msel.clear();render();},
   ptone:()=>{PLAN.multi=false;PLAN.msel.clear();render();},
   ptmulti:()=>{PLAN.multi=true;render();},
@@ -1410,7 +1449,7 @@ Object.assign(ACT,{
   psplitok:splitOk,
   mclose:()=>{PLAN.imp=null;closeModal();},
   pname:()=>{F.pname=F.pname===false;render();},
-  pedit:()=>{PLAN.edit=!PLAN.edit;PLAN.tmode=false;PLAN.place=null;PLAN.sel=null;render();},
+  pedit:()=>{PLAN.edit=!PLAN.edit;PLAN.tmode=false;PLAN.draw=false;PLAN.cur=[];PLAN.lsel=null;PLAN.place=null;PLAN.sel=null;render();},
   pimpmodal:()=>importModal(PLAN.fid),
   pimport:doImport,
   pdetect:()=>{const m=S.plans[PLAN.pid];if(!m)return;const man=Object.values(m.pins||{}).some(p=>p.m);
