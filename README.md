@@ -24,6 +24,10 @@ zone tagged several times, like a parking) is created once and gets a pin on eac
 and creates them already placed. Tags without a number (`P1.`) are reported, not imported.
 Rooms not found are placed by hand (✋ Edit positions); pins can be dragged; manual positions are
 never overwritten by "🔎 Detect rooms".
+**✏ Draw a limit** (admin, in ✥ Move labels; opens automatically after a ✂ Split): click points on
+the plan, double-click or Enter to finish, Shift = horizontal/vertical, Backspace = undo point, Esc =
+cancel. Limits are pink dashed lines shown to everyone; click one in Move labels mode to delete it.
+Stored per sheet in `ft_plans/<sheetId>.lines` (flat [x1,y1,x2,y2…], 0..1).
 **🏷 Room types** (admin): labels coloured by type with a legend; pick a type, then click labels
 to assign it, or Multi-select (click / drag a box / "select all shown") and assign at once. Option:
 replace the room's sequence with the template of the new type (statuses kept).
