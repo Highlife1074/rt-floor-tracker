@@ -159,7 +159,15 @@ body.ro [data-set],body.ro [data-newblk],body.ro [data-closeblk],body.ro .rwonly
 .grip{cursor:grab;color:#b6bcc8;font-size:12px;letter-spacing:-2px;flex:none}
 .sqname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .printonly{display:none}
-@media print{.sticky,.noprint,#drawer,#scrim,#modal{display:none!important}.printonly{display:block}body{background:#fff}main{padding:0;max-width:none}.tile{break-inside:avoid}.mxwrap,.tbwrap{max-height:none;overflow:visible;border:0}.tb tr{break-inside:avoid}}
+.planwrap{position:relative;overflow:auto;max-height:calc(100vh - 240px);min-height:320px;background:#fff;border:1px solid var(--line);border-radius:var(--rad)}
+.planin{position:relative;min-width:100%}.planin img{display:block;width:100%;height:auto;user-select:none;-webkit-user-select:none;-webkit-user-drag:none}
+.pin{position:absolute;transform:translate(-50%,-50%);border:2px solid #fff;background:var(--c);color:#fff;font:700 11px/1 system-ui,sans-serif;padding:3px 6px;border-radius:9px;cursor:pointer;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.35);text-shadow:0 0 2px rgba(0,0,0,.55);z-index:2}
+.pin:hover{z-index:4;transform:translate(-50%,-50%) scale(1.15)}
+.pin.blk{box-shadow:0 0 0 3px var(--blk),0 1px 4px rgba(0,0,0,.35)}.pin.dim{opacity:.22}.pin.sel{outline:3px solid var(--hp);z-index:3}
+.pin.flash{animation:pinf .9s 4}@keyframes pinf{50%{transform:translate(-50%,-50%) scale(1.9)}}
+.planin.editing .pin{touch-action:none;cursor:move}.planin.placing,.planin.placing img{cursor:crosshair}
+.pedit{border-color:var(--hp);background:#f3f8ff}.pedit .chips{flex-wrap:wrap;max-height:120px;overflow:auto}
+@media print{.sticky,.noprint,#drawer,#scrim,#modal{display:none!important}.printonly{display:block}body{background:#fff}main{padding:0;max-width:none}.tile{break-inside:avoid}.mxwrap,.tbwrap{max-height:none;overflow:visible;border:0}.tb tr{break-inside:avoid}.planwrap{max-height:none;overflow:visible;border:0}.planin{width:100%!important}}
 @media (max-width:640px){.grid2{grid-template-columns:1fr}.tiles{grid-template-columns:repeat(auto-fill,minmax(145px,1fr))}main{padding:10px}.seg button{padding:7px 7px}}
 </style>
 </head>
@@ -173,6 +181,7 @@ body.ro [data-set],body.ro [data-newblk],body.ro [data-closeblk],body.ro .rwonly
   <nav class="tabs">
     <button data-view="overview">🗺 Overview</button>
     <button data-view="matrix">▦ Matrix</button>
+    <button data-view="plans">📐 Plans</button>
     <button data-view="blockers">⚠ Blocking points<span class="nb" id="nbk"></span></button>
     <button data-view="weekly">📈 Weekly progress</button>
     <button data-view="dash">📊 Dashboard</button>
@@ -284,7 +293,7 @@ const user=()=>{const m=me();return m?m.name:'auto';};
 function roBlock(){if(isRO()){alert('Your account is read only.\n\nYou can view, print and export everything, but not change it. Ask '+APP_ADMIN+' if you need to edit.');return true;}return false;}
 
 /* ===================== STATE ===================== */
-let S={settings:null,rooms:{},blockers:{},log:[],snaps:[],pins:{}};
+let S={settings:null,rooms:{},blockers:{},log:[],snaps:[],pins:{},plans:{}};
 let F={view:'overview',mx:'act',sub:'all',resp:'all',floor:'all',next:'all',type:'all',q:'',blk:'all',colorBy:'next',quick:false,bStatus:'open',bFloor:'all',bCat:'all',bOwner:'all',bGroup:'none',bq:''};
 try{Object.assign(F,JSON.parse(lsGet(LSF,'{}')));}catch(e){}
 let drawerRoom=null;
@@ -359,6 +368,21 @@ const store={
   savePin(name,hash){if(USE_FB)return fb.setDoc(dref('auth','pins'),{[name]:hash},{merge:true});S.pins[name]=hash;persist();return Promise.resolve();},
   resetPin(name){if(USE_FB)return fb.setDoc(dref('auth','pins'),{[name]:fb.deleteField()},{merge:true}).catch(fail);delete S.pins[name];persist();},
   saveSnaps(list){if(!list.length)return;if(USE_FB)return runOps(list.map(x=>['set','snapshots',x.id,x])).catch(e=>console.error(e));list.forEach(x=>{S.snaps=S.snaps.filter(y=>y.id!==x.id);S.snaps.push(x);});persist();},
+  async savePlan(fid,meta,str,prog){if(roBlock())return;const old=S.plans[fid];
+    if(USE_FB){for(let i=0;i<meta.chunks;i++){prog&&prog(i+1,meta.chunks);await fb.setDoc(dref('planchunks',`${fid}_${meta.ver}_${i}`),{d:str.slice(i*CHUNK,(i+1)*CHUNK)});}
+      await fb.setDoc(dref('plans',fid),meta);
+      if(old&&old.ver!==meta.ver)runOps(Array.from({length:old.chunks||0},(_,i)=>['del','planchunks',`${fid}_${old.ver}_${i}`])).catch(e=>console.error(e));return;}
+    PLAN.mem[fid]=str;try{localStorage.setItem('rtft_plan_'+fid,str);}catch(e){alert('Local mode: this PDF is too big to be kept in the browser and will be lost when the page is reloaded.');}
+    S.plans[fid]=meta;persist();},
+  async loadPlanFile(fid,m){
+    if(USE_FB){const ds=await Promise.all(Array.from({length:m.chunks},(_,i)=>fb.getDoc(dref('planchunks',`${fid}_${m.ver}_${i}`))));if(ds.some(d=>!d.exists()))throw new Error('The plan file is incomplete — please upload it again.');return ds.map(d=>d.data().d).join('');}
+    const v=PLAN.mem[fid]||lsGet('rtft_plan_'+fid,'');if(!v)throw new Error('The PDF is no longer in this browser — please upload it again.');return v;},
+  patchPlan(fid,patch){if(roBlock())return;
+    if(USE_FB){const p={};for(const k in patch)p[k]=patch[k]===null?fb.deleteField():patch[k];return fb.updateDoc(dref('plans',fid),p).catch(fail);}
+    const m=S.plans[fid];if(!m)return;for(const k in patch){if(patch[k]===null){const ks=k.split('.');let o=m;for(let i=0;i<ks.length-1;i++)o=o[ks[i]]||{};delete o[ks[ks.length-1]];}else setPath(m,k,patch[k]);}persist();},
+  delPlan(fid){if(roBlock())return;const m=S.plans[fid];if(!m)return;
+    if(USE_FB)return runOps([['del','plans',fid],...Array.from({length:m.chunks||0},(_,i)=>['del','planchunks',`${fid}_${m.ver}_${i}`])]).catch(fail);
+    delete PLAN.mem[fid];try{localStorage.removeItem('rtft_plan_'+fid);}catch(e){}delete S.plans[fid];persist();},
   async addRooms(rooms){if(roBlock())return;if(USE_FB)return runOps(rooms.map(r=>['set','rooms',r.id,r])).catch(fail);rooms.forEach(r=>S.rooms[r.id]=r);persist();},
   async delRooms(roomIds,blkIds){if(roBlock())return;if(USE_FB)return runOps([...roomIds.map(id=>['del','rooms',id]),...blkIds.map(id=>['del','blockers',id])]).catch(fail);roomIds.forEach(id=>delete S.rooms[id]);blkIds.forEach(id=>delete S.blockers[id]);persist();},
   async replaceAll(d){if(roBlock())return;
@@ -384,6 +408,7 @@ async function initFB(){
     fs.onSnapshot(dref('settings','main'),d=>{S.settings=d.exists()?d.data():null;got.s=1;ready();},rej);
     fs.onSnapshot(fs.collection(db,P+'rooms'),q=>{S.rooms={};q.forEach(d=>S.rooms[d.id]=d.data());got.r=1;ready();},rej);
     fs.onSnapshot(fs.collection(db,P+'blockers'),q=>{S.blockers={};q.forEach(d=>S.blockers[d.id]=d.data());got.b=1;ready();},rej);
+    fs.onSnapshot(fs.collection(db,P+'plans'),q=>{S.plans={};q.forEach(d=>S.plans[d.id]=d.data());if(booted)render();},e=>console.error(e));
     fs.onSnapshot(fs.query(fs.collection(db,P+'log'),fs.orderBy('ts','desc'),fs.limit(400)),q=>{S.log=q.docs.map(d=>d.data());if(booted)render();},()=>{});
   });
 }
@@ -466,6 +491,7 @@ function doRender(){
   if(!m){closeDrawer();if(!$('#login').classList.contains('open'))showLogin();else if(LG.step==='pick')renderLogin();return;}
   const ae=document.activeElement;
   if(ae&&ae.matches&&ae.matches('[data-hold]')){pending=true;return;}
+  if(PLAN.drag)return;   // a pin is being dragged: pointerup re-renders
   if(isAdmin()&&!S.settings.seqV&&!migrating){migrating=true;const srt=l=>cleanSeq(l).sort((a,b)=>libOrd(a)-libOrd(b));
     const rs=Object.values(S.rooms).map(r=>({...r,acts:srt(r.acts)}));saveS(s=>{s.types.forEach(t=>t.acts=srt(t.acts));s.seqV=2;});if(rs.length)store.addRooms(rs);}
   document.body.classList.toggle('ro',isRO());
@@ -478,9 +504,11 @@ function doRender(){
   const nOpen=Object.values(S.blockers).filter(b=>b.status==='open').length;
   $('#nbk').textContent=nOpen||'';$('#nbk').style.display=nOpen?'':'none';
   document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.view===F.view));
-  const v={overview:vOverview,matrix:vMatrix,blockers:vBlockers,weekly:vWeekly,dash:vDash,setup:vSetup}[F.view]||vOverview;
+  const v={overview:vOverview,matrix:vMatrix,plans:vPlans,blockers:vBlockers,weekly:vWeekly,dash:vDash,setup:vSetup}[F.view]||vOverview;
   const fid=ae&&ae.id,pos=ae&&ae.selectionStart;
+  const pw=$('#planwrap'),psc=pw&&[pw.scrollLeft,pw.scrollTop];
   $('#view').innerHTML=v();reopen($('#view'));
+  const pw2=$('#planwrap');if(pw2&&psc){pw2.scrollLeft=psc[0];pw2.scrollTop=psc[1];}
   if(fid&&(fid==='q'||fid==='bq')){const el=document.getElementById(fid);if(el){el.focus();try{el.setSelectionRange(pos,pos);}catch(e){}}}
   if(drawerRoom)renderDrawer();
   setTimeout(ensureSnapshots,0);
@@ -495,13 +523,13 @@ function filterBar(mode){
   if(done||F.next==='__done')chips+=`<button class="chip ${F.next==='__done'?'on':''}" data-f="next" data-v="__done">✓ Complete <span class="n">${done}</span></button>`;
   const opt=(v,l,cur)=>`<option value="${v}" ${cur===v?'selected':''}>${esc(l)}</option>`;
   return `<div class="filters noprint">
-    <select data-fs="floor">${opt('all','All floors',F.floor)}${s.floors.map(f=>opt(f.id,f.name,F.floor)).join('')}</select>
+    ${mode==='plan'?'':`<select data-fs="floor">${opt('all','All floors',F.floor)}${s.floors.map(f=>opt(f.id,f.name,F.floor)).join('')}</select>`}
     <select data-fs="type">${opt('all','All room types',F.type)}${s.types.map(t=>opt(t.id,t.name,F.type)).join('')}</select>
     <select data-fs="sub" title="Subcontractor of the next step">${opt('all','All subcontractors',F.sub)}${(s.subs||[]).map(x=>opt(x.id,'🏗 '+x.name,F.sub)).join('')}</select>
     <select data-fs="resp" title="Responsible of the next step">${opt('all','All responsibles',F.resp)}${people().map(p=>opt(p.name,'👷 '+p.name,F.resp)).join('')}</select>
     <select data-fs="blk">${opt('all','Blocked + not blocked',F.blk)}${opt('yes','⚠ Blocked rooms only',F.blk)}${opt('no','Not blocked only',F.blk)}</select>
     <input id="q" data-fs="q" placeholder="🔍 Search room…" value="${esc(F.q)}" style="width:170px">
-    ${mode==='tiles'?`<select data-fs="colorBy">${opt('next','Colour = next activity',F.colorBy)}${opt('progress','Colour = % progress',F.colorBy)}</select>`
+    ${mode!=='matrix'?`<select data-fs="colorBy">${opt('next','Colour = next activity',F.colorBy)}${opt('progress','Colour = % progress',F.colorBy)}</select>`
       :`<div class="seg" title="Matrix layout"><button class="${F.mx!=='seq'?'on0':''}" data-f="mx" data-v="act">▦ By activity</button><button class="${F.mx==='seq'?'on0':''}" data-f="mx" data-v="seq">➜ By sequence</button></div>`}
     <span class="sp"></span><button class="btn sm" data-act="print">🖨 Print</button>
   </div><div class="chips noprint">${chips}</div>`;
@@ -808,7 +836,7 @@ function renderDrawer(){
   if(ae&&D.contains(ae)&&ae.matches('[data-hold]')){pending=true;return;}
   const sc=D.scrollTop;
   const s=S.settings,f=floorById(r.floor),t=typeById(r.type),n=nextStep(r),p=progress(r),bl=openBlk(r),acts=roomActs(r);
-  let h=`<div class="dh"><div class="row" style="flex-wrap:nowrap"><div style="flex:1;min-width:0"><div style="font-size:20px;font-weight:800">${esc(r.code)} <span style="font-weight:500">${esc(r.name)}</span></div><div style="color:var(--mute);font-size:12px">${esc(f?f.name:'')} · ${esc(t?t.name:'—')}</div></div><button class="iconbtn" data-act="close">✕</button></div>
+  let h=`<div class="dh"><div class="row" style="flex-wrap:nowrap"><div style="flex:1;min-width:0"><div style="font-size:20px;font-weight:800">${esc(r.code)} <span style="font-weight:500">${esc(r.name)}</span></div><div style="color:var(--mute);font-size:12px">${esc(f?f.name:'')} · ${esc(t?t.name:'—')}${r.area?' · '+esc(r.area):''}${(()=>{const o=[...new Set(pinSheets(r).filter(m=>m.floor!==r.floor).map(m=>floorById(m.floor)?.name).filter(Boolean))];return o.length?` · <span class="tag" style="background:#e8f0fe;color:var(--hp)">⇕ double height, also on ${esc(o.join(', '))}</span>`:'';})()}${pinSheets(r).length?` · <a href="#" class="lnk" data-showpin="${r.id}">📐 Show on plan</a>`:''}</div></div><button class="iconbtn" data-act="close">✕</button></div>
     <div class="row" style="margin-top:8px"><div class="bar" style="max-width:none"><i style="width:${pc(p)}%"></i></div><b>${pc(p)}%</b></div>
     <div style="margin-top:6px;font-size:13px">${n?`Next step: <b>${esc(actById(n).name)}</b>`:'<b style="color:var(--done)">✓ All activities complete</b>'}${bl.length?` · <span style="color:var(--blk);font-weight:700">⚠ ${bl.length} open blocking point(s)</span>`:''}</div></div><div class="db"><h3>Activities</h3>`;
   if(!acts.length)h+=`<div class="empty">No activity assigned. Open “Customize activities” below.</div>`;
@@ -919,6 +947,7 @@ document.addEventListener('click',e=>{
   const lg=e.target.closest('#login [data-lgpick],#login [data-lgk],#login [data-lgback],#login [data-lgset]');if(lg){loginClick(lg.dataset);return;}
   if(e.target.id==='modal'&&!$('#modal').dataset.lock){closeModal();return;}
   const inPop=!!e.target.closest('#pop');if(!inPop)closePop();
+  if(planClick(e))return;
   const t=e.target.closest('[data-view],[data-f],[data-closeblk],[data-editblk],[data-newblk],[data-set],[data-cell],[data-room],[data-act],[data-actup],[data-actdown],[data-actdel],[data-typedel],[data-delfloor],[data-gonext],[data-preset],[data-pdel],[data-sqmv],[data-sqrm],[data-sqsort],[data-typecopy],[data-asg],[data-subdel]');
   if(!t)return;const d=t.dataset;if(inPop)setTimeout(closePop,0);
   if(d.preset){if(confirm(`Reset the PIN of ${d.preset}?\n\nThey will choose a new PIN at their next login.`))store.resetPin(d.preset);return;}
@@ -970,6 +999,7 @@ document.addEventListener('change',e=>{
   if(d.actcolor){saveS(s=>s.acts.find(a=>a.id===d.actcolor).color=t.value);return;}
   if(d.typename){saveS(s=>s.types.find(x=>x.id===d.typename).name=t.value.trim()||'Type');return;}
   if(d.typeact){const [tid,aid]=d.typeact.split('|');saveS(s=>{const ty=s.types.find(x=>x.id===tid);ty.acts=ty.acts.filter(x=>x!==aid);if(t.checked)ty.acts.push(aid);});return;}
+  if(planChange(t))return;
   if(t.id==='restore'&&t.files[0]){const rd=new FileReader();rd.onload=()=>{try{const j=JSON.parse(rd.result);if(!j.settings)throw new Error('Not a tracker backup');if(confirm('Replace ALL current data with this backup?'))store.replaceAll(j);}catch(err){alert('Invalid file: '+err.message);}};rd.readAsText(t.files[0]);}
 });
 document.addEventListener('keydown',e=>{
@@ -977,6 +1007,312 @@ document.addEventListener('keydown',e=>{
   // Matrix comments: Enter jumps to the next room's comment (Tab already does, links are skipped)
   if(e.key==='Enter'&&e.target.matches&&e.target.matches('td.cmt input')){e.preventDefault();const all=[...document.querySelectorAll('td.cmt input')],i=all.indexOf(e.target);(all[i+1]||e.target).focus();if(!all[i+1])e.target.blur();return;}
   if(e.key==='Escape'){if($('#modal').classList.contains('open')&&!$('#modal').dataset.lock)closeModal();else if(drawerRoom)closeDrawer();}});
+
+/* ===================== FLOOR PLANS (PDF) =====================
+   A floor can have SEVERAL SHEETS (e.g. a level cut in two: North + South, with an overlap zone).
+   Firestore: ft_plans/<sheetId> = {floor, sheet, file info, pins:{roomId:{x,y,m}}} (x,y = 0..1 of the page);
+   the PDF itself is cut base64 into ft_planchunks/<sheetId>_<ver>_<i> (a Firestore doc is limited to 1 MB).
+   ROOM RECOGNITION (vector PDF exported from AutoCAD/Revit, not a scan): the text layer is read with pdf.js.
+   A ROOM TAG is a code-like word (P1.23, 2.05, B2-03…) with an AREA (“39.43 m²”) written just below it,
+   the words in between being the room name — this excludes door tags, grid axes, levels, dimensions.
+   NO DUPLICATES: a room is identified by its CODE on its floor. The same code found on two sheets (overlap
+   zone) or several times on one sheet (a big parking zone) is ONE room; it simply gets a pin on each sheet
+   where it appears. Positions placed by hand are never overwritten by a later detection. */
+const PDFJS='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+const CHUNK=900000,ZOOMS=[1,1.5,2,3,4,6];
+const PLAN={img:{},busy:{},pdf:{},mem:{},edit:false,place:null,sel:null,drag:null,fid:null,pid:null,flash:null,imp:null};
+let pdfjsP=null;
+function pdfjs(){
+  if(!pdfjsP)pdfjsP=new Promise((res,rej)=>{if(window.pdfjsLib)return res(window.pdfjsLib);const sc=document.createElement('script');sc.src=PDFJS+'pdf.min.js';
+    sc.onload=()=>{pdfjsLib.GlobalWorkerOptions.workerSrc=PDFJS+'pdf.worker.min.js';res(pdfjsLib);};
+    sc.onerror=()=>{pdfjsP=null;rej(new Error('PDF library not loaded (check internet connection).'));};document.head.appendChild(sc);});
+  return pdfjsP;
+}
+const toB64=buf=>{const u=new Uint8Array(buf);let s='';for(let i=0;i<u.length;i+=0x8000)s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000));return btoa(s);};
+const fromB64=s=>{const b=atob(s),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u;};
+const clamp01=v=>Math.max(0,Math.min(1,v));
+const byCode=(a,b)=>String(a.code).localeCompare(String(b.code),undefined,{numeric:true});
+const sheetsOf=fid=>Object.entries(S.plans||{}).map(([id,m])=>({id,...m,floor:m.floor||id})).filter(m=>m.floor===fid).sort((a,b)=>(a.ts||0)-(b.ts||0));
+/* sheets showing a room: its own floor first, then other floors (double-height rooms, e.g. a P2 plantroom also drawn on P1) */
+const pinSheets=r=>{const all=Object.entries(S.plans||{}).map(([id,m])=>({id,...m,floor:m.floor||id})).filter(m=>m.pins&&m.pins[r.id]);return [...all.filter(m=>m.floor===r.floor),...all.filter(m=>m.floor!==r.floor)];};
+const onFloorPlans=(r,fid)=>sheetsOf(fid).some(m=>m.pins&&m.pins[r.id]);
+const roomPre=c=>String(c||'').replace(/[.\-_/][^.\-_/]*$/,'');
+/* floor of a code prefix (P2 → the floor whose rooms are P2.xx, or named “P2” / “Level 2”) */
+function floorForPrefix(pfx){
+  const c={};Object.values(S.rooms).forEach(r=>{if(kLoose(roomPre(r.code))===kLoose(pfx))c[r.floor]=(c[r.floor]||0)+1;});
+  const best=Object.keys(c).sort((a,b)=>c[b]-c[a])[0];if(best&&floorById(best))return best;
+  const dg=(pfx.match(/\d+/g)||[]),fl=S.settings.floors;
+  const f=fl.find(f=>kLoose(f.name)===kLoose(pfx))||(dg.length===1&&fl.find(f=>{const d=f.name.match(/\d+/g)||[];return d.length===1&&+d[0]===+dg[0];}));
+  return f?f.id:'';
+}
+const planKey=pid=>{const m=S.plans[pid];return m?pid+'|'+m.ver+'|'+(m.page||1):'';};
+function planDoc(pid){
+  const m=S.plans[pid],k=pid+'|'+m.ver;
+  if(!PLAN.pdf[k])PLAN.pdf[k]=(async()=>{const L=await pdfjs();const str=await store.loadPlanFile(pid,m);return L.getDocument({data:fromB64(str)}).promise;})().catch(e=>{delete PLAN.pdf[k];throw e;});
+  return PLAN.pdf[k];
+}
+/* Render the page once to a bitmap (re-used by every re-render of the view; zoom = CSS width) */
+async function planImage(pid){
+  const k=planKey(pid);if(!k||PLAN.img[k]||PLAN.busy[k])return;PLAN.busy[k]=1;
+  try{
+    const pg=await (await planDoc(pid)).getPage(S.plans[pid].page||1),v1=pg.getViewport({scale:1});
+    const sc=Math.min(6,5000/Math.max(v1.width,v1.height),Math.sqrt(14e6/(v1.width*v1.height)));
+    const vp=pg.getViewport({scale:sc}),c=document.createElement('canvas');c.width=Math.floor(vp.width);c.height=Math.floor(vp.height);
+    const ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);
+    await pg.render({canvasContext:ctx,viewport:vp}).promise;
+    const blob=await new Promise(r=>c.toBlob(r,'image/png'));
+    PLAN.img[k]={url:URL.createObjectURL(blob),w:c.width,h:c.height};
+  }catch(e){console.error(e);PLAN.img[k]={err:e.message};}
+  delete PLAN.busy[k];render();
+}
+/* Words of a page: centre in page px (px,py, y downwards) and 0..1 (x,y), text height h, whole = complete text run */
+async function pageWords(doc,pageNo){
+  const L=await pdfjs(),pg=await doc.getPage(pageNo),vp=pg.getViewport({scale:1}),W=vp.width,H=vp.height,out=[];
+  const tc=await pg.getTextContent();
+  const items=tc.items.filter(it=>it.str&&it.str.trim()).map(it=>{
+    const t=L.Util.transform(vp.transform,it.transform),sx=Math.hypot(t[0],t[1])||1,fh=Math.hypot(t[2],t[3])||1;
+    const d=[t[0]/sx,t[1]/sx],u=[t[2]/fh,t[3]/fh],w=it.width||fh*it.str.length*.55;
+    const at=f=>[t[4]+d[0]*w*f+u[0]*fh*.35,t[5]+d[1]*w*f+u[1]*fh*.35];
+    return {str:it.str,h:fh,at,end:[t[4]+d[0]*w,t[5]+d[1]*w],start:[t[4],t[5]]};
+  });
+  const push=(str,p,h,whole)=>out.push({str:str.trim(),px:p[0],py:p[1],x:p[0]/W,y:p[1]/H,h,whole});
+  items.forEach((it,i)=>{
+    push(it.str,it.at(.5),it.h,true);
+    const re=/\S+/g;let mt;const n=it.str.length;
+    while((mt=re.exec(it.str))){if(mt[0].length===it.str.trim().length)continue;push(mt[0],it.at((mt.index+mt[0].length/2)/n),it.h,false);}
+    const nx=items[i+1];   // "2." + "05" split by the PDF writer
+    if(nx&&Math.abs(nx.h-it.h)<it.h*.3&&Math.hypot(nx.start[0]-it.end[0],nx.start[1]-it.end[1])<it.h*1.2){const a=it.at(.5),b=nx.at(.5);push(it.str+nx.str,[(a[0]+b[0])/2,(a[1]+b[1])/2],it.h,false);}
+  });
+  // AutoCAD "DWG To PDF" draws SHX fonts as lines but keeps the text as invisible comments
+  try{(await pg.getAnnotations()).forEach(a=>{const s=(a.contentsObj&&a.contentsObj.str)||a.contents||'';if(!s.trim()||!a.rect)return;const r=vp.convertToViewportRectangle(a.rect);
+    const lines=s.split(/\r?\n/).filter(l=>l.trim()),x=(r[0]+r[2])/2,y0=Math.min(r[1],r[3]),hh=Math.abs(r[3]-r[1])/Math.max(1,lines.length);
+    lines.forEach((l,i)=>{const c=[x,y0+hh*(i+.5)];push(l,c,hh*.8,true);l.trim().split(/\s+/).forEach(w=>push(w,c,hh*.8,false));});});}catch(e){}
+  return out.filter(w=>w.str);
+}
+const kExact=s=>String(s||'').toLowerCase().replace(/\s+/g,'');
+const kLoose=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+const CODE_RE=/^[A-Z]{0,4}\d{0,4}[A-Z]?[.\-_/]\d{1,4}[A-Z]?$/i, CODE_INC=/^[A-Z]{0,4}\d{1,4}[A-Z]?[.\-_]$/i;
+const isArea=s=>/m(²|2)$/i.test(s);
+/* Room tags = code + (name) + area just below */
+function findTags(words){
+  const whole=words.filter(w=>w.whole),tags=[],inc=[];
+  whole.forEach(w=>{
+    const ok=CODE_RE.test(w.str),bad=!ok&&CODE_INC.test(w.str);if(!ok&&!bad)return;
+    const below=whole.filter(v=>v!==w&&v.py>w.py+w.h*.3&&v.py-w.py<w.h*3.8&&Math.abs(v.px-w.px)<w.h*10);
+    const area=below.filter(v=>isArea(v.str)).sort((a,b)=>a.py-b.py)[0];if(!area)return;
+    const name=below.filter(v=>v.py<area.py-w.h*.4&&Math.abs(v.px-w.px)<w.h*4&&/[a-z]/i.test(v.str)&&!CODE_RE.test(v.str)&&!/^(?=.*\d)(?=.*[a-z])[a-z0-9.\-_]+$/i.test(v.str)).sort((a,b)=>a.py-b.py||a.px-b.px).map(v=>v.str).join(' ');
+    let at=area.str;if(/^m(²|2)$/i.test(at)){const num=whole.filter(v=>Math.abs(v.py-area.py)<w.h*.5&&v.px<area.px&&area.px-v.px<w.h*8&&/^[\d.,]+$/.test(v.str)).sort((a,b)=>b.px-a.px)[0];at=(num?num.str+' ':'')+'m²';}
+    (ok?tags:inc).push({code:w.str,name,area:at.replace(/m2$/i,'m²'),w});
+  });
+  return {tags,inc};
+}
+/* Read one sheet: room tags + where each tracker room of the floor is */
+async function readSheet(doc,pageNo,fid){
+  const words=await pageWords(doc,pageNo),{tags,inc}=findTags(words),tagW=new Set(tags.map(t=>t.w));
+  const rooms=Object.values(S.rooms).filter(r=>String(r.code||'').trim());   // other floors: double-height rooms, matched on a room tag only
+  const ex={},lo={};words.forEach(w=>{const a=kExact(w.str),b=kLoose(w.str);(ex[a]=ex[a]||[]).push(w);if(b.length>=2)(lo[b]=lo[b]||[]).push(w);});
+  const found={};
+  rooms.forEach(r=>{let c=ex[kExact(r.code)]||(kLoose(r.code).length>=2&&lo[kLoose(r.code)]);if(c&&r.floor!==fid)c=c.filter(w=>tagW.has(w));if(!c||!c.length)return;
+    const t=c.filter(w=>tagW.has(w)),w=(t.length?t:c).reduce((a,b)=>b.h>a.h?b:a);found[r.id]={x:clamp01(w.x),y:clamp01(w.y)};});
+  return {found,tags,inc,words:words.length};
+}
+/* Tags of every sheet of a floor, merged by code (duplicates removed) */
+async function floorTags(fid){
+  const map={},inc=[],sheets=sheetsOf(fid);
+  for(const m of sheets){const d=await readSheet(await planDoc(m.id),m.page||1,fid);
+    d.tags.forEach(t=>{const k=kLoose(t.code);const e=map[k]=map[k]||{code:t.code,name:t.name,area:t.area,names:new Set(),sheets:{},n:0};
+      e.n++;if(t.name)e.names.add(t.name);if(!e.name&&t.name)e.name=t.name;if(!e.sheets[m.id]||t.w.h>e.sheets[m.id].h)e.sheets[m.id]={x:clamp01(t.w.x),y:clamp01(t.w.y),h:t.w.h};});
+    d.inc.forEach(t=>inc.push({...t,sheet:m.sheet}));}
+  // Room numbers follow one format (P1.23 → "A9.99"): wall / door / finish tags (CLG-103, IDT10.01…) that
+  // happen to sit above an area are dropped; a code with another prefix (P2.06 on the P1 plan) is flagged.
+  let list=Object.values(map);const cnt=(f)=>{const c={};list.forEach(e=>{const k=f(e.code);c[k]=(c[k]||0)+Object.keys(e.sheets).length;});return c;};
+  const sig=c=>c.replace(/[a-z]/gi,'A').replace(/\d/g,'9'),sc=cnt(sig),mx=Math.max(0,...Object.values(sc));
+  list=list.filter(e=>sc[sig(e.code)]>=mx*.25);
+  const pre=roomPre,pc0=cnt(pre),main=Object.keys(pc0).sort((a,b)=>pc0[b]-pc0[a])[0];
+  list.forEach(e=>{e.odd=pre(e.code)!==main?pre(e.code):'';});   // e.g. P2.06 on the P1 plan = double-height room of P2
+  return {list:list.sort(byCode),inc,sheets};
+}
+function guessType(name){
+  const n=String(name||'').toLowerCase(),T=S.settings.types,by=re=>(T.find(t=>re.test(t.name.toLowerCase()))||{}).id;
+  if(/\bwc\b|toilet|changing|shower|bath/.test(n))return by(/bath|wc/);
+  if(/kitchen|pantry/.test(n))return by(/kitchen/);
+  if(/stair/.test(n))return by(/stair/);
+  if(/circulation|corridor|lobby|vestibule|vesitbule|hall/.test(n))return by(/corridor|lobby/);
+  if(/terrace|balcony/.test(n))return by(/terrace|balcony/);
+  if(/plant|mep|transformer|generator|technical|bms|fcc|telecom|\blv\b|\bmv\b|ventilation|electrical|riser/.test(n))return by(/technical/);
+  return '';
+}
+async function importModal(fid){
+  if(!isAdmin()||roBlock())return;
+  modal(`<h2>🏷 Rooms on the plans</h2><p>Reading the room tags of every sheet…</p>`,true);
+  try{
+    const {list,inc,sheets}=await floorTags(fid),have={};Object.values(S.rooms).filter(r=>r.floor===fid).forEach(r=>have[kLoose(r.code)]=r);
+    // a double-height room already created on its own floor is not created again: it is just pinned on these sheets
+    const ex=e=>have[kLoose(e.code)]||(e.odd&&Object.values(S.rooms).find(r=>kLoose(r.code)===kLoose(e.code)));
+    const link={};list.forEach(e=>{const r=ex(e);if(!r||r.floor===fid)return;Object.entries(e.sheets).forEach(([pid,p])=>{if(!(S.plans[pid].pins||{})[r.id])(link[pid]=link[pid]||{})['pins.'+r.id]={x:p.x,y:p.y};});});
+    for(const pid in link)await store.patchPlan(pid,link[pid]);
+    const sn=id=>(sheets.find(m=>m.id===id)||{}).sheet||'?',fresh=list.filter(e=>!ex(e)),over=list.filter(e=>Object.keys(e.sheets).length>1),dh=list.filter(e=>e.odd);
+    PLAN.imp={fid,list:fresh};const anyOdd=fresh.some(e=>e.odd);
+    const fo=e=>{const d=floorForPrefix(e.odd);return S.settings.floors.map(f=>`<option value="${f.id}" ${f.id===d?'selected':''}>${esc(f.name)}</option>`).join('')+(d?'':`<option value="__new" selected>+ new floor “${esc(e.odd)}”</option>`);};
+    const to=(sel)=>`<option value="">— default type —</option>`+S.settings.types.map(t=>`<option value="${t.id}" ${t.id===sel?'selected':''}>${esc(t.name)}</option>`).join('');
+    let h=`<h2>🏷 Rooms on the plans — ${esc(floorById(fid)?.name||'')}</h2>
+      <p style="font-size:13px;margin-top:0"><b>${list.length}</b> different room codes on ${sheets.length} sheet(s)${over.length?` · <b>${over.length}</b> in the overlap zone (${over.map(e=>esc(e.code)).join(', ')}) counted once`:''}${dh.length?` · <b>${dh.length}</b> double-height room(s) of another level (${dh.map(e=>esc(e.code)).join(', ')}): one room, on its own level, also shown on this plan`:''} · <b>${list.length-fresh.length}</b> already in the tracker · <b>${fresh.length}</b> new.</p>`;
+    if(inc.length)h+=`<p style="font-size:12px;color:#b57800">⚠ ${inc.length} tag(s) without a complete number on the plan, not imported: ${inc.map(t=>`“${esc(t.code)}” ${esc(t.name)} ${esc(t.area)} (${esc(t.sheet)})`).join(' · ')}. Add these rooms by hand if needed.</p>`;
+    if(fresh.length){
+      h+=`<div class="row" style="margin:6px 0"><label style="font-size:12px">Default type (names not recognised) <select id="imp_def">${S.settings.types.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select></label></div>
+      <div class="tbwrap" style="max-height:48vh"><table class="tb"><thead><tr><th><input type="checkbox" id="imp_all" checked></th><th>Code</th><th>Name</th><th>Area</th><th>Sheet(s)</th>${anyOdd?'<th>Level</th>':''}<th>Room type</th></tr></thead><tbody>${fresh.map((e,i)=>`<tr><td><input type="checkbox" data-imp="${i}" checked></td><td><b>${esc(e.code)}</b>${e.odd?` <span class="tag" style="background:#e8f0fe;color:var(--hp)" title="Code of another level: double-height room. Created once, on its own level, and also shown on this plan">⇕ double height</span>`:''}</td><td>${esc(e.name)}${e.names.size>1?` <span class="tag red" title="${esc([...e.names].join(' / '))}">names differ</span>`:''}</td><td style="white-space:nowrap">${esc(e.area)}</td><td style="white-space:nowrap">${Object.keys(e.sheets).map(sn).map(esc).join(' + ')}${e.n>Object.keys(e.sheets).length?` <small style="color:var(--mute)">(tag ×${e.n})</small>`:''}</td>${anyOdd?`<td>${e.odd?`<select data-impfloor="${i}">${fo(e)}</select>`:esc(floorById(fid)?.name||'')}</td>`:''}<td><select data-imptype="${i}">${to(guessType(e.name))}</select></td></tr>`).join('')}</tbody></table></div>`;
+    }else h+=`<p style="color:var(--done)">✓ Every room tag of the plans is already in the tracker.</p>`;
+    h+=`<div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn" data-act="mclose">${fresh.length?'Cancel':'OK'}</button>${fresh.length?`<button class="btn pri" data-act="pimport">Create selected rooms</button>`:''}</div>`;
+    modal(h);
+  }catch(e){console.error(e);closeModal();alert('Could not read the plans: '+e.message);}
+}
+async function doImport(){
+  const I=PLAN.imp;if(!I)return;const def=$('#imp_def').value,rooms=[],pins={};
+  const newF={};
+  I.list.forEach((e,i)=>{const cb=document.querySelector(`[data-imp="${i}"]`);if(!cb||!cb.checked)return;
+    const type=document.querySelector(`[data-imptype="${i}"]`).value||def,t=typeById(type),id=uid('r');
+    const fs=document.querySelector(`[data-impfloor="${i}"]`);let floor=fs?fs.value:I.fid;
+    if(floor==='__new'){floor=newF[e.odd]=newF[e.odd]||uid('f');}
+    rooms.push({id,floor,code:e.code,name:e.name||'',area:e.area||'',type,acts:[...((t&&t.acts)||[])],st:{},note:''});
+    Object.entries(e.sheets).forEach(([pid,p])=>{(pins[pid]=pins[pid]||{})['pins.'+id]={x:p.x,y:p.y};});});
+  if(!rooms.length)return alert('Nothing selected.');
+  closeModal();PLAN.imp=null;
+  if(Object.keys(newF).length)await store.saveSettings((()=>{const s=JSON.parse(JSON.stringify(S.settings));Object.entries(newF).forEach(([n,id])=>s.floors.push({id,name:n}));return s;})());
+  await store.addRooms(rooms);
+  for(const pid in pins)await store.patchPlan(pid,pins[pid]);
+  alert(`${rooms.length} room(s) created and placed on the plan.`);
+}
+async function uploadPlans(fid,files,replacePid){
+  if(roBlock()||!isAdmin())return;files=[...files];
+  const bad=files.find(f=>!/\.pdf$/i.test(f.name)&&f.type!=='application/pdf');if(bad)return alert(`“${bad.name}” is not a PDF.\n\nFrom AutoCAD: Plot / Export → PDF (“DWG To PDF.pc3”).`);
+  const big=files.find(f=>f.size>30e6);if(big)return alert(`“${big.name}” is larger than 30 MB. Export only the plan sheet (without raster images) and try again.`);
+  modal(`<h2>📐 Uploading plan${files.length>1?'s':''}</h2><p id="upmsg">Reading the PDF…</p>`,true);
+  const msg=t=>{const e=$('#upmsg');if(e)e.textContent=t;};let rep='',last=null,tagsTot=0;
+  try{
+    const L=await pdfjs();
+    for(const [fi,file] of files.entries()){
+      const tag=files.length>1?`${file.name} (${fi+1}/${files.length}) — `:'';
+      msg(tag+'reading…');
+      const buf=await file.arrayBuffer(),str=toB64(buf),doc=await L.getDocument({data:new Uint8Array(buf)}).promise;
+      const same=sheetsOf(fid).find(m=>m.name===file.name),pid=replacePid||(same&&same.id)||uid('pl'),old=S.plans[pid],ver=uid('v');
+      const guess=(file.name.match(/north|south|east|west|nord|sud|est|ouest/i)||[''])[0];
+      const sheet=old?old.sheet:(guess?guess[0].toUpperCase()+guess.slice(1).toLowerCase():'Sheet '+(sheetsOf(fid).length+1));
+      msg(tag+'recognising the rooms…');
+      const d=await readSheet(doc,1,fid);tagsTot+=d.tags.length;
+      const keep={};Object.entries((old&&old.pins)||{}).forEach(([rid,p])=>{if(p.m)keep[rid]=p;});
+      const meta={floor:fid,sheet,name:file.name,size:file.size,pages:doc.numPages,page:1,chunks:Math.ceil(str.length/CHUNK),ver,by:user(),ts:(old&&old.ts)||Date.now(),pins:{...d.found,...keep}};
+      PLAN.pdf[pid+'|'+ver]=Promise.resolve(doc);
+      await store.savePlan(pid,meta,str,(i,n)=>msg(tag+`saving to the server… ${i}/${n}`));
+      S.plans[pid]=meta;last=pid;
+      rep+=`<li><b>${esc(sheet)}</b> — ${esc(file.name)}: ${d.words?`${Object.keys(d.found).length} tracker room(s) found · ${d.tags.length} room tag(s) read`:'<span style="color:var(--blk)">no text in this PDF (scan?) — rooms must be placed by hand</span>'}${doc.numPages>1?` · ${doc.numPages} pages, page 1 used`:''}</li>`;
+    }
+    F.psheet=last;
+    const placed=Object.values(S.rooms).filter(r=>r.floor===fid&&onFloorPlans(r,fid)).length,tot=Object.values(S.rooms).filter(r=>r.floor===fid).length;
+    modal(`<h2>📐 Plan${files.length>1?'s':''} uploaded</h2><ul style="padding-left:18px;font-size:13px">${rep}</ul><p style="font-size:13px">${tot?`<b>${placed} of ${tot}</b> rooms of this floor are on the plans.`:'No room on this floor in the tracker yet.'}</p>${tagsTot?`<p style="font-size:13px">Click <b>🏷 Rooms from plans</b> to create the rooms written on the plans that are not yet in the tracker (one room per code, overlap between sheets removed).</p>`:''}
+      <div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn" data-act="mclose">OK</button>${tagsTot?`<button class="btn pri" data-act="pimpmodal">🏷 Rooms from plans</button>`:''}</div>`);
+  }catch(e){console.error(e);closeModal();alert('Upload failed: '+e.message);}
+}
+async function redetect(pid,all){
+  const m=S.plans[pid];if(!m||roBlock())return;
+  modal(`<h2>🔎 Detecting rooms…</h2><p>Reading the plan…</p>`,true);
+  try{const d=await readSheet(await planDoc(pid),m.page||1,m.floor||pid),pins={};
+    Object.entries(m.pins||{}).forEach(([rid,p])=>{if(S.rooms[rid]&&p.m&&!all)pins[rid]=p;});
+    Object.entries(d.found).forEach(([rid,p])=>{if(!pins[rid])pins[rid]=p;});
+    await store.patchPlan(pid,{pins});S.plans[pid].pins=pins;
+    const fid=m.floor||pid,rs=Object.values(S.rooms).filter(r=>r.floor===fid),miss=rs.filter(r=>!onFloorPlans(r,fid)).sort(byCode);
+    modal(`<h2>🔎 ${esc(m.sheet||'Plan')}</h2>${d.words?`<p><b>${Object.keys(d.found).length}</b> tracker room(s) found on this sheet · <b>${rs.length-miss.length} of ${rs.length}</b> rooms of the floor are on the plans.</p>`:'<p><b>This PDF contains no text</b> (scan, or text exported as lines): place the rooms by hand with ✋ Edit positions, or export again from AutoCAD as a vector PDF.</p>'}${miss.length?`<p style="color:var(--mute);font-size:13px">On no sheet (${miss.length}): ${miss.slice(0,40).map(r=>`<b>${esc(r.code)}</b>`).join(', ')}${miss.length>40?'…':''} — place them with ✋ Edit positions.</p>`:''}<div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn pri" data-act="mclose">OK</button></div>`);}
+  catch(e){console.error(e);closeModal();alert('Detection failed: '+e.message);}
+}
+function setZoom(z){
+  const w=$('#planwrap'),f=w?[(w.scrollLeft+w.clientWidth/2)/w.scrollWidth,(w.scrollTop+w.clientHeight/2)/w.scrollHeight]:null;
+  F.pzoom=z;doRender();
+  const n=$('#planwrap');if(n&&f){n.scrollLeft=f[0]*n.scrollWidth-n.clientWidth/2;n.scrollTop=f[1]*n.scrollHeight-n.clientHeight/2;}
+}
+function showOnPlan(rid){
+  const r=S.rooms[rid];if(!r)return;const ps=pinSheets(r);if(!ps.length)return;closeDrawer();
+  const sh=ps.find(m=>m.id===F.psheet)||ps[0];
+  Object.assign(F,{view:'plans',pfloor:sh.floor,psheet:sh.id});PLAN.flash=rid;doRender();
+  const go=(n)=>{const p=document.querySelector(`.pin[data-pin="${rid}"]`),w=$('#planwrap');if(p&&w){const a=p.getBoundingClientRect(),b=w.getBoundingClientRect();w.scrollLeft+=a.left-b.left-w.clientWidth/2;w.scrollTop+=a.top-b.top-w.clientHeight/2;}else if(n)setTimeout(()=>go(n-1),300);};
+  setTimeout(()=>go(15),60);setTimeout(()=>{PLAN.flash=null;},3500);
+}
+function vPlans(){
+  const s=S.settings;let fid=F.pfloor;if(!floorById(fid))fid=(s.floors.find(f=>sheetsOf(f.id).length)||s.floors[0]||{}).id;
+  const sheets=sheetsOf(fid);let pid=F.psheet;if(!sheets.some(m=>m.id===pid))pid=sheets[0]&&sheets[0].id;
+  if(PLAN.pid!==pid||PLAN.fid!==fid){PLAN.fid=fid;PLAN.pid=pid;PLAN.place=null;PLAN.sel=null;}
+  const m=pid&&S.plans[pid],adm=isAdmin()&&!isRO();if(!adm)PLAN.edit=false;
+  let h=filterBar('plan');
+  h+=`<div class="chips noprint">${s.floors.map(f=>{const n=sheetsOf(f.id).length;return `<button class="chip ${f.id===fid?'on':''}" data-f="pfloor" data-v="${f.id}">${esc(f.name)}${n?` <span class="n">📐${n>1?' '+n:''}</span>`:''}</button>`;}).join('')}</div>`;
+  const fin=(multi,rep)=>`<input type="file" ${multi?'multiple':''} data-planfile="${fid}" ${rep?`data-prep="${rep}"`:''} accept="application/pdf,.pdf" hidden>`;
+  if(!m)return h+`<div class="card"><h2>No plan for ${esc(floorById(fid)?.name||'this floor')} yet</h2>${adm?`<p style="color:var(--mute);font-size:13px;margin-top:0">Upload the floor plan as a <b>PDF exported from AutoCAD / Revit</b> (vector, not a scan). If the level is cut into several sheets (e.g. North + South), select <b>all the PDFs of the level at once</b>: each becomes a sheet, and rooms in the overlap zone are not duplicated (a room = one code). Rooms are recognised by their tag: <b>code</b> (e.g. “P1.23”), name, and area “… m²” below.</p><label class="btn pri">⬆ Upload PDF plan(s)${fin(true)}</label>`:'<p style="color:var(--mute)">Ask an admin to upload the PDF plan of this floor.</p>'}</div>`;
+  const z=ZOOMS.includes(+F.pzoom)?+F.pzoom:1,zi=ZOOMS.indexOf(z),k=planKey(pid),im=PLAN.img[k];
+  const onF=Object.values(S.rooms).filter(r=>r.floor===fid),pins=m.pins||{},here=Object.values(S.rooms).filter(r=>pins[r.id]),unplaced=onF.filter(r=>!onFloorPlans(r,fid)).sort(byCode);
+  const ok=r=>{const f=F.floor;F.floor='all';const v=passes(r,false);F.floor=f;return v;};
+  if(sheets.length>1||adm)h+=`<div class="chips noprint" style="align-items:center"><small style="color:var(--mute)">Sheets:</small>${sheets.map(x=>`<button class="chip ${x.id===pid?'on':''}" data-f="psheet" data-v="${x.id}">📄 ${esc(x.sheet||'Sheet')} <span class="n">${Object.keys(x.pins||{}).filter(id=>S.rooms[id]).length}</span></button>`).join('')}${adm?`<label class="chip">+ Add sheet(s)${fin(true)}</label>`:''}</div>`;
+  h+=`<div class="filters noprint"><div class="seg"><button data-pzoom="${ZOOMS[Math.max(0,zi-1)]}" ${zi?'':'disabled'}>−</button><button data-pzoom="1" class="${z===1?'on0':''}">Fit</button><button data-pzoom="${ZOOMS[Math.min(ZOOMS.length-1,zi+1)]}" ${zi<ZOOMS.length-1?'':'disabled'}>+</button></div><small style="color:var(--mute)">${Math.round(z*100)}% · ${here.length} rooms on this sheet${here.some(r=>r.floor!==fid)?` (incl. ${here.filter(r=>r.floor!==fid).length} double-height)`:''} · ${onF.length-unplaced.length}/${onF.length} of the floor on the plans · ${esc(m.name)}</small><span class="sp"></span>
+    ${adm?`${m.pages>1?`<select data-ppage="${pid}" title="Page of the PDF">${Array.from({length:m.pages},(_,i)=>`<option value="${i+1}" ${(m.page||1)===i+1?'selected':''}>Page ${i+1}</option>`).join('')}</select>`:''}<button class="btn sm" data-act="pimpmodal" title="Create the rooms written on the plans that are not yet in the tracker">🏷 Rooms from plans</button><button class="btn sm" data-act="pdetect">🔎 Detect rooms</button><button class="btn sm ${PLAN.edit?'pri':''}" data-act="pedit">✋ ${PLAN.edit?'Done editing':'Edit positions'}</button><button class="btn sm" data-act="prename" title="Rename this sheet">✎</button><label class="btn sm" title="Replace the PDF of this sheet">⬆ Replace${fin(false,pid)}</label><button class="btn sm red" data-act="pdel" title="Remove this sheet">✕</button>`:''}</div>`;
+  if(PLAN.edit){
+    const sel=PLAN.sel&&S.rooms[PLAN.sel];
+    h+=`<div class="card noprint pedit"><b>✋ Edit positions:</b> drag a pin to move it · ${PLAN.place?`<span class="tag" style="background:var(--hp);color:#fff">Click on the plan to place ${esc(S.rooms[PLAN.place]?.code||'')}</span> <button class="btn sm" data-pplace="">Cancel</button>`:'pick a room below, then click on the plan to place it'}${sel?` · selected <b>${esc(sel.code)}</b> <button class="btn sm red" data-punpin="${sel.id}">Remove from this sheet</button>`:''}
+      <div class="chips" style="margin:8px 0 0">${unplaced.length?unplaced.map(r=>`<button class="chip ${PLAN.place===r.id?'on':''}" data-pplace="${r.id}"><b>${esc(r.code)}</b> ${esc(r.name)}</button>`).join(''):'<span style="color:var(--done);font-size:13px">✓ All rooms of this floor are on the plans.</span>'}</div></div>`;
+  }
+  h+=`<div class="printonly"><h2>${esc(s.project)} — ${esc(floorById(fid)?.name||'')}${sheets.length>1?' — '+esc(m.sheet||''):''} — ${fmtLong(today())}</h2></div>`;
+  if(!im){planImage(pid);return h+`<div class="planwrap" id="planwrap"><div class="empty" style="padding:30px;text-align:center">Loading the plan…</div></div>`;}
+  if(im.err)return h+`<div class="card"><b>The plan could not be displayed:</b> ${esc(im.err)} <button class="btn sm" data-act="pretry">Retry</button></div>`;
+  h+=`<div class="planwrap" id="planwrap"><div class="planin ${PLAN.edit?'editing':''} ${PLAN.place?'placing':''}" id="planin" style="width:${z*100}%"><img src="${im.url}" alt="" draggable="false">`;
+  here.forEach(r=>{const p=pins[r.id],n=nextStep(r),a=n&&actById(n),pr=progress(r),bl=openBlk(r);
+    const c=F.colorBy==='progress'?heat(pr):(a?(a.isHp?'var(--hp)':a.color):'var(--done)');
+    const oth=r.floor!==fid,tip=`${r.code} ${r.name}${oth?` — double height, room of ${floorById(r.floor)?.name||'another level'}`:''} — ${pc(pr)}% — ${a?(a.isHp?'Awaiting '+a.name:'Next: '+a.name):'Complete'}${bl.length?` — ⚠ ${bl.length} blocking point(s)`:''}`;
+    h+=`<button class="pin ${bl.length?'blk':''} ${ok(r)?'':'dim'} ${PLAN.sel===r.id&&PLAN.edit?'sel':''} ${PLAN.flash===r.id?'flash':''}" data-pin="${r.id}" ${PLAN.edit?'':`data-room="${r.id}"`} style="left:${p.x*100}%;top:${p.y*100}%;--c:${c}" title="${esc(tip)}">${oth?'⇕ ':''}${bl.length?'⚠ ':''}${esc(r.code)}${F.colorBy==='progress'?` · ${pc(pr)}%`:''}</button>`;});
+  h+=`</div></div>`;
+  if(!PLAN.edit&&unplaced.length)h+=`<div class="empty noprint">${unplaced.length} room(s) of this floor on no plan${adm?' — use ✋ Edit positions to place them':''}: ${unplaced.slice(0,30).map(r=>`<a href="#" data-room="${r.id}">${esc(r.code)}</a>`).join(', ')}${unplaced.length>30?'…':''}</div>`;
+  return h;
+}
+document.addEventListener('pointerdown',e=>{
+  if(!PLAN.edit)return;const p=e.target.closest&&e.target.closest('.pin[data-pin]');if(!p)return;const box=$('#planin');if(!box)return;
+  PLAN.drag={rid:p.dataset.pin,el:p,box:box.getBoundingClientRect(),sx:e.clientX,sy:e.clientY,moved:false};try{p.setPointerCapture(e.pointerId);}catch(_){}e.preventDefault();
+});
+document.addEventListener('pointermove',e=>{
+  const g=PLAN.drag;if(!g)return;if(!g.moved&&Math.abs(e.clientX-g.sx)+Math.abs(e.clientY-g.sy)<5)return;g.moved=true;
+  g.x=clamp01((e.clientX-g.box.left)/g.box.width);g.y=clamp01((e.clientY-g.box.top)/g.box.height);g.el.style.left=g.x*100+'%';g.el.style.top=g.y*100+'%';
+});
+document.addEventListener('pointerup',()=>{
+  const g=PLAN.drag;if(!g)return;PLAN.drag=null;
+  if(g.moved){PLAN.sel=g.rid;store.patchPlan(PLAN.pid,{['pins.'+g.rid]:{x:g.x,y:g.y,m:1}});}else PLAN.sel=PLAN.sel===g.rid?null:g.rid;
+  render();
+});
+/* returns true when the click was a plan action */
+function planClick(e){
+  const pi=e.target.closest('#planin');
+  if(pi&&PLAN.edit&&PLAN.place&&!e.target.closest('.pin')){const b=pi.getBoundingClientRect(),rid=PLAN.place;PLAN.place=null;PLAN.sel=rid;
+    store.patchPlan(PLAN.pid,{['pins.'+rid]:{x:clamp01((e.clientX-b.left)/b.width),y:clamp01((e.clientY-b.top)/b.height),m:1}});render();return true;}
+  if(e.target.id==='imp_all'){document.querySelectorAll('[data-imp]').forEach(c=>c.checked=e.target.checked);return true;}
+  const t=e.target.closest('[data-pzoom],[data-pplace],[data-punpin],[data-showpin]');if(!t)return false;const d=t.dataset;
+  if(d.pzoom){setZoom(+d.pzoom);return true;}
+  if(d.pplace!==undefined){PLAN.place=d.pplace||null;render();return true;}
+  if(d.punpin){PLAN.sel=null;store.patchPlan(PLAN.pid,{['pins.'+d.punpin]:null});return true;}
+  if(d.showpin){e.preventDefault();showOnPlan(d.showpin);return true;}
+  return false;
+}
+/* returns true when the change was a plan action */
+function planChange(t){
+  const d=t.dataset;
+  if(d.planfile&&t.files.length){const fs=[...t.files];t.value='';uploadPlans(d.planfile,fs,d.prep||null);return true;}
+  if(d.ppage){const pid=d.ppage,n=+t.value,m=S.plans[pid];if(!m)return true;
+    if(Object.keys(m.pins||{}).length&&!confirm(`Use page ${n} of the PDF?\n\nThe room positions of this sheet are detected again on that page (positions placed by hand are reset).`)){t.value=m.page||1;return true;}
+    Promise.resolve(store.patchPlan(pid,{page:n,pins:{}})).then(()=>{S.plans[pid].page=n;S.plans[pid].pins={};redetect(pid,true);});return true;}
+  return false;
+}
+Object.assign(ACT,{
+  mclose:()=>{PLAN.imp=null;closeModal();},
+  pedit:()=>{PLAN.edit=!PLAN.edit;PLAN.place=null;PLAN.sel=null;render();},
+  pimpmodal:()=>importModal(PLAN.fid),
+  pimport:doImport,
+  pdetect:()=>{const m=S.plans[PLAN.pid];if(!m)return;const man=Object.values(m.pins||{}).some(p=>p.m);
+    if(man&&!confirm('Detect the rooms of this sheet again from the plan text?\n\nRooms you placed by hand keep their position.'))return;redetect(PLAN.pid,false);},
+  prename:()=>{const m=S.plans[PLAN.pid];if(!m)return;const n=prompt('Sheet name (e.g. North, South, Part A):',m.sheet||'');if(n&&n.trim())store.patchPlan(PLAN.pid,{sheet:n.trim()});},
+  pdel:()=>{const m=S.plans[PLAN.pid];if(!m||!confirm(`Remove the sheet “${m.sheet||m.name}” (${m.name}) from ${floorById(PLAN.fid)?.name||'this floor'}?\n\nRoom positions on this sheet are deleted too. Rooms and statuses are not affected.`))return;store.delPlan(PLAN.pid);},
+  pretry:()=>{const k=planKey(PLAN.pid);delete PLAN.img[k];delete PLAN.pdf[PLAN.pid+'|'+(S.plans[PLAN.pid]||{}).ver];render();},
+});
 
 /* ===================== BOOT ===================== */
 (async function boot(){
@@ -986,7 +1322,7 @@ document.addEventListener('keydown',e=>{
     catch(err){$('#sync').textContent='🔴 Offline';$('#view').innerHTML=`<div class="card"><h2>Connection problem</h2><p>${esc(err.message)}</p><p>Check in the Firebase console: Firestore database created · Authentication → Anonymous sign-in enabled · Firestore rules published.</p></div>`;return;}
   }else{
     let d={};try{d=JSON.parse(lsGet(LSK,'{}'))||{};}catch(e){}
-    S={settings:d.settings||null,rooms:d.rooms||{},blockers:d.blockers||{},log:d.log||[],snaps:d.snaps||[],pins:d.pins||{}};
+    S={settings:d.settings||null,rooms:d.rooms||{},blockers:d.blockers||{},log:d.log||[],snaps:d.snaps||[],pins:d.pins||{},plans:d.plans||{}};
     $('#sync').textContent='🟡 Local mode';
   }
   // Monday: first opening of the day shows the weekly progress of last week
