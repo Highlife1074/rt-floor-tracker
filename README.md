@@ -24,4 +24,7 @@ zone tagged several times, like a parking) is created once and gets a pin on eac
 and creates them already placed. Tags without a number (`P1.`) are reported, not imported.
 Rooms not found are placed by hand (✋ Edit positions); pins can be dragged; manual positions are
 never overwritten by "🔎 Detect rooms".
+**🏷 Room types** (admin): labels coloured by type with a legend; pick a type, then click labels
+to assign it, or Multi-select (click / drag a box / "select all shown") and assign at once. Option:
+replace the room's sequence with the template of the new type (statuses kept).
 Storage: `ft_plans/<sheetId>` (floor, sheet, positions) and `ft_planchunks/*` (PDF in 900 kB parts).
