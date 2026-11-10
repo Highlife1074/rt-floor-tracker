@@ -1045,7 +1045,8 @@ const sheetsOf=fid=>Object.entries(S.plans||{}).map(([id,m])=>({id,...m,floor:m.
 /* sheets showing a room: its own floor first, then other floors (double-height rooms, e.g. a P2 plantroom also drawn on P1) */
 const pinSheets=r=>{const all=Object.entries(S.plans||{}).map(([id,m])=>({id,...m,floor:m.floor||id})).filter(m=>m.pins&&m.pins[r.id]);return [...all.filter(m=>m.floor===r.floor),...all.filter(m=>m.floor!==r.floor)];};
 const onFloorPlans=(r,fid)=>sheetsOf(fid).some(m=>m.pins&&m.pins[r.id]);
-const roomPre=c=>String(c||'').replace(/[.\-_/][^.\-_/]*$/,'');
+const roomPre=c=>String(c||'').split(/[.\-_/]/)[0];                 // level part of a code: P1.23 → P1, LO.CA.034 → LO
+const codeStem=c=>String(c||'').replace(/[.\-_/][^.\-_/]*$/,'');    // all but the last part: LO.CA.034 → LO.CA
 /* floor of a code prefix (P2 → the floor whose rooms are P2.xx, or named “P2” / “Level 2”) */
 function floorForPrefix(pfx){
   const c={};Object.values(S.rooms).forEach(r=>{if(kLoose(roomPre(r.code))===kLoose(pfx))c[r.floor]=(c[r.floor]||0)+1;});
@@ -1100,29 +1101,32 @@ async function pageWords(doc,pageNo){
 }
 const kExact=s=>String(s||'').toLowerCase().replace(/\s+/g,'');
 const kLoose=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
-const CODE_RE=/^[A-Z]{0,4}\d{0,4}[A-Z]?[.\-_/]\d{1,4}[A-Z]?$/i, CODE_INC=/^[A-Z]{0,4}\d{1,4}[A-Z]?[.\-_]$/i;
+const CODE_RE=/^[A-Z0-9]{1,6}(?:[.\-_/][A-Z0-9]{1,6}){0,2}[.\-_/][A-Z]{0,2}\d{1,4}[A-Z]?$/i,   // P1.23, 2.05, B2-03, LO.CA.034
+      CODE_INC=/^[A-Z]{0,4}\d{1,4}[A-Z]?[.\-_]$/i;
 const isArea=s=>/m(²|2)$/i.test(s);
 /* Room tags = code + (name) + area just below */
 function findTags(words){
   const whole=words.filter(w=>w.whole),tags=[],inc=[];
   whole.forEach(w=>{
-    const ok=CODE_RE.test(w.str),bad=!ok&&CODE_INC.test(w.str);if(!ok&&!bad)return;
+    let cs=w.str;const pp=cs.split(/\s+/);if(pp.length===2&&pp[0].length<=2&&CODE_RE.test(pp[1]))cs=pp[1];   // "L LO.CA.034" → LO.CA.034
+    const ok=CODE_RE.test(cs),bad=!ok&&CODE_INC.test(cs);if(!ok&&!bad)return;
     const below=whole.filter(v=>v!==w&&v.py>w.py+w.h*.3&&v.py-w.py<w.h*3.8&&Math.abs(v.px-w.px)<w.h*10);
     const area=below.filter(v=>isArea(v.str)).sort((a,b)=>a.py-b.py)[0];if(!area)return;
     const name=below.filter(v=>v.py<area.py-w.h*.4&&Math.abs(v.px-w.px)<w.h*4&&/[a-z]/i.test(v.str)&&!CODE_RE.test(v.str)&&!/^(?=.*\d)(?=.*[a-z])[a-z0-9.\-_]+$/i.test(v.str)).sort((a,b)=>a.py-b.py||a.px-b.px).map(v=>v.str).join(' ');
     let at=area.str;if(/^m(²|2)$/i.test(at)){const num=whole.filter(v=>Math.abs(v.py-area.py)<w.h*.5&&v.px<area.px&&area.px-v.px<w.h*8&&/^[\d.,]+$/.test(v.str)).sort((a,b)=>b.px-a.px)[0];at=(num?num.str+' ':'')+'m²';}
-    (ok?tags:inc).push({code:w.str,name,area:at.replace(/m2$/i,'m²'),w});
+    (ok?tags:inc).push({code:cs,name,area:at.replace(/m2$/i,'m²'),w});
   });
   return {tags,inc};
 }
 /* Read one sheet: room tags + where each tracker room of the floor is */
 async function readSheet(doc,pageNo,fid){
-  const words=await pageWords(doc,pageNo),{tags,inc}=findTags(words),tagW=new Set(tags.map(t=>t.w));
+  const words=await pageWords(doc,pageNo),{tags,inc}=findTags(words);
   const rooms=Object.values(S.rooms).filter(r=>String(r.code||'').trim());   // other floors: double-height rooms, matched on a room tag only
   const ex={},lo={};words.forEach(w=>{const a=kExact(w.str),b=kLoose(w.str);(ex[a]=ex[a]||[]).push(w);if(b.length>=2)(lo[b]=lo[b]||[]).push(w);});
   const found={};
-  rooms.forEach(r=>{let c=ex[kExact(r.code)]||(kLoose(r.code).length>=2&&lo[kLoose(r.code)]);if(c&&r.floor!==fid)c=c.filter(w=>tagW.has(w));if(!c||!c.length)return;
-    const t=c.filter(w=>tagW.has(w)),w=(t.length?t:c).reduce((a,b)=>b.h>a.h?b:a);found[r.id]={x:clamp01(w.x),y:clamp01(w.y)};});
+  const byTag={};tags.forEach(t=>{const k=kLoose(t.code);(byTag[k]=byTag[k]||[]).push(t.w);});   // room tags first (code may carry a prefix: "L LO.CA.034")
+  rooms.forEach(r=>{let c=byTag[kLoose(r.code)];if(!c&&r.floor===fid)c=ex[kExact(r.code)]||(kLoose(r.code).length>=2&&lo[kLoose(r.code)]);if(!c||!c.length)return;
+    const w=c.reduce((a,b)=>b.h>a.h?b:a);found[r.id]={x:clamp01(w.x),y:clamp01(w.y)};});
   return {found,tags,inc,words:words.length};
 }
 /* Tags of every sheet of a floor, merged by code (duplicates removed) */
@@ -1148,7 +1152,7 @@ function guessType(name){
   if(/stair/.test(n))return by(/stair/);
   if(/circulation|corridor|lobby|vestibule|vesitbule|hall/.test(n))return by(/corridor|lobby/);
   if(/terrace|balcony/.test(n))return by(/terrace|balcony/);
-  if(/plant|mep|transformer|generator|technical|bms|fcc|telecom|\blv\b|\bmv\b|ventilation|electrical|riser/.test(n))return by(/technical/);
+  if(/plant|mep|transformer|generator|technical|bms|fcc|telecom|\blv\b|\bmv\b|ventilation|electrical|\belec\b|riser|\blsr\b|\blifts?\b|garbage|chute|recycling|\bcom\b/.test(n))return by(/technical/);
   return '';
 }
 async function importModal(fid){
@@ -1362,11 +1366,11 @@ function planChange(t){
 const typeOpts=sel=>S.settings.types.map(t=>`<option value="${t.id}" ${t.id===sel?'selected':''}>${esc(t.name)}</option>`).join('');
 const codeTaken=(fid,code)=>Object.values(S.rooms).some(r=>r.floor===fid&&kLoose(r.code)===kLoose(code));
 function nextFreeCode(fid){
-  const rs=Object.values(S.rooms).filter(r=>r.floor===fid),cnt={};rs.forEach(r=>{const k=roomPre(r.code);cnt[k]=(cnt[k]||0)+1;});
+  const rs=Object.values(S.rooms).filter(r=>r.floor===fid),cnt={};rs.forEach(r=>{const k=codeStem(r.code);cnt[k]=(cnt[k]||0)+1;});
   const pre=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0];if(!pre)return '';
-  const sep=(rs.find(r=>roomPre(r.code)===pre).code.charAt(pre.length))||'.';
+  const sep=(rs.find(r=>codeStem(r.code)===pre).code.charAt(pre.length))||'.';
   // after the highest number (gaps like P1.10 may be rooms of another drawing)
-  let n=1+Math.max(0,...rs.filter(r=>roomPre(r.code)===pre).map(r=>{const m=String(r.code).slice(pre.length+1).match(/^\d+/);return m?+m[0]:0;}));
+  let n=1+Math.max(0,...rs.filter(r=>codeStem(r.code)===pre).map(r=>{const m=String(r.code).slice(pre.length+1).match(/^\d+/);return m?+m[0]:0;}));
   while(codeTaken(fid,pre+sep+String(n).padStart(2,'0')))n++;return pre+sep+String(n).padStart(2,'0');
 }
 function newRoomModal(pid,x,y){
