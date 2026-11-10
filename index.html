@@ -163,6 +163,7 @@ body.ro [data-set],body.ro [data-newblk],body.ro [data-closeblk],body.ro .rwonly
 .planin{position:relative;min-width:100%}.planin img{display:block;width:100%;height:auto;user-select:none;-webkit-user-select:none;-webkit-user-drag:none}
 .pin{position:absolute;transform:translate(-50%,-50%);border:2px solid #fff;background:var(--c);color:#fff;font:700 11px/1 system-ui,sans-serif;padding:3px 6px;border-radius:9px;cursor:pointer;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.35);text-shadow:0 0 2px rgba(0,0,0,.55);z-index:2}
 .pin{text-align:center}.pin b{font-weight:700}.pin .pn{display:block;font-weight:600;font-size:10px;line-height:1.15;margin-top:2px;max-width:120px;white-space:normal}
+.pin.msel{outline:3px solid #111;outline-offset:1px;z-index:3}.selbox{position:absolute;border:2px dashed var(--hp);background:rgba(45,127,249,.12);z-index:5;pointer-events:none}
 .pin:hover{z-index:4;transform:translate(-50%,-50%) scale(1.15)}
 .pin.blk{box-shadow:0 0 0 3px var(--blk),0 1px 4px rgba(0,0,0,.35)}.pin.dim{opacity:.22}.pin.sel{outline:3px solid var(--hp);z-index:3}
 .pin.flash{animation:pinf .9s 4}@keyframes pinf{50%{transform:translate(-50%,-50%) scale(1.9)}}
@@ -492,7 +493,7 @@ function doRender(){
   if(!m){closeDrawer();if(!$('#login').classList.contains('open'))showLogin();else if(LG.step==='pick')renderLogin();return;}
   const ae=document.activeElement;
   if(ae&&ae.matches&&ae.matches('[data-hold]')){pending=true;return;}
-  if(PLAN.drag)return;   // a pin is being dragged: pointerup re-renders
+  if(PLAN.drag||PLAN.box)return;   // a pin is being dragged: pointerup re-renders
   if(isAdmin()&&!S.settings.seqV&&!migrating){migrating=true;const srt=l=>cleanSeq(l).sort((a,b)=>libOrd(a)-libOrd(b));
     const rs=Object.values(S.rooms).map(r=>({...r,acts:srt(r.acts)}));saveS(s=>{s.types.forEach(t=>t.acts=srt(t.acts));s.seqV=2;});if(rs.length)store.addRooms(rs);}
   document.body.classList.toggle('ro',isRO());
@@ -1021,7 +1022,7 @@ document.addEventListener('keydown',e=>{
    where it appears. Positions placed by hand are never overwritten by a later detection. */
 const PDFJS='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 const CHUNK=900000,ZOOMS=[1,1.5,2,3,4,6];
-const PLAN={img:{},busy:{},pdf:{},mem:{},edit:false,place:null,sel:null,drag:null,fid:null,pid:null,flash:null,imp:null};
+const PLAN={tmode:false,ttype:'',multi:false,msel:new Set(),tseq:true,box:null,shown:[],img:{},busy:{},pdf:{},mem:{},edit:false,place:null,sel:null,drag:null,fid:null,pid:null,flash:null,imp:null};
 let pdfjsP=null;
 function pdfjs(){
   if(!pdfjsP)pdfjsP=new Promise((res,rej)=>{if(window.pdfjsLib)return res(window.pdfjsLib);const sc=document.createElement('script');sc.src=PDFJS+'pdf.min.js';
@@ -1240,7 +1241,7 @@ function vPlans(){
   const s=S.settings;let fid=F.pfloor;if(!floorById(fid))fid=(s.floors.find(f=>sheetsOf(f.id).length)||s.floors[0]||{}).id;
   const sheets=sheetsOf(fid);let pid=F.psheet;if(!sheets.some(m=>m.id===pid))pid=sheets[0]&&sheets[0].id;
   if(PLAN.pid!==pid||PLAN.fid!==fid){PLAN.fid=fid;PLAN.pid=pid;PLAN.place=null;PLAN.sel=null;}
-  const m=pid&&S.plans[pid],adm=isAdmin()&&!isRO(),mv=!isRO();if(!mv)PLAN.edit=false;const shownm=F.pname!==false;
+  const m=pid&&S.plans[pid],adm=isAdmin()&&!isRO(),mv=!isRO();if(!mv)PLAN.edit=false;if(!adm)PLAN.tmode=false;const shownm=F.pname!==false;
   let h=filterBar('plan');
   h+=`<div class="chips noprint">${s.floors.map(f=>{const n=sheetsOf(f.id).length;return `<button class="chip ${f.id===fid?'on':''}" data-f="pfloor" data-v="${f.id}">${esc(f.name)}${n?` <span class="n">📐${n>1?' '+n:''}</span>`:''}</button>`;}).join('')}</div>`;
   const fin=(multi,rep)=>`<input type="file" ${multi?'multiple':''} data-planfile="${fid}" ${rep?`data-prep="${rep}"`:''} accept="application/pdf,.pdf" hidden>`;
@@ -1251,25 +1252,48 @@ function vPlans(){
   if(sheets.length>1||adm)h+=`<div class="chips noprint" style="align-items:center"><small style="color:var(--mute)">Sheets:</small>${sheets.map(x=>`<button class="chip ${x.id===pid?'on':''}" data-f="psheet" data-v="${x.id}">📄 ${esc(x.sheet||'Sheet')} <span class="n">${Object.keys(x.pins||{}).filter(id=>S.rooms[id]).length}</span></button>`).join('')}${adm?`<label class="chip">+ Add sheet(s)${fin(true)}</label>`:''}</div>`;
   h+=`<div class="filters noprint"><div class="seg"><button data-pzoom="${ZOOMS[Math.max(0,zi-1)]}" ${zi?'':'disabled'}>−</button><button data-pzoom="1" class="${z===1?'on0':''}">Fit</button><button data-pzoom="${ZOOMS[Math.min(ZOOMS.length-1,zi+1)]}" ${zi<ZOOMS.length-1?'':'disabled'}>+</button></div>
     <div class="seg" title="Room name on the labels"><button data-act="pname" class="${shownm?'on0':''}">🏷 Name: show</button><button data-act="pname" class="${shownm?'':'on0'}">hide</button></div>
-    ${mv?`<button class="btn sm ${PLAN.edit?'pri':''}" data-act="pedit" title="Drag the labels to move them">✥ ${PLAN.edit?'Done moving':'Move labels'}</button>`:''}<small style="color:var(--mute)">${Math.round(z*100)}% · ${here.length} rooms on this sheet${here.some(r=>r.floor!==fid)?` (incl. ${here.filter(r=>r.floor!==fid).length} double-height)`:''} · ${onF.length-unplaced.length}/${onF.length} of the floor on the plans · ${esc(m.name)}</small><span class="sp"></span>
+    ${mv?`<button class="btn sm ${PLAN.edit?'pri':''}" data-act="pedit" title="Drag the labels to move them">✥ ${PLAN.edit?'Done moving':'Move labels'}</button>`:''}${adm?`<button class="btn sm ${PLAN.tmode?'pri':''}" data-act="ptype" title="Change the room type directly on the plan">🏷 ${PLAN.tmode?'Done with types':'Room types'}</button>`:''}<small style="color:var(--mute)">${Math.round(z*100)}% · ${here.length} rooms on this sheet${here.some(r=>r.floor!==fid)?` (incl. ${here.filter(r=>r.floor!==fid).length} double-height)`:''} · ${onF.length-unplaced.length}/${onF.length} of the floor on the plans · ${esc(m.name)}</small><span class="sp"></span>
     ${adm?`${m.pages>1?`<select data-ppage="${pid}" title="Page of the PDF">${Array.from({length:m.pages},(_,i)=>`<option value="${i+1}" ${(m.page||1)===i+1?'selected':''}>Page ${i+1}</option>`).join('')}</select>`:''}<button class="btn sm" data-act="pimpmodal" title="Create the rooms written on the plans that are not yet in the tracker">🏷 Rooms from plans</button><button class="btn sm" data-act="pdetect">🔎 Detect rooms</button><button class="btn sm" data-act="prename" title="Rename this sheet">✎</button><label class="btn sm" title="Replace the PDF of this sheet">⬆ Replace${fin(false,pid)}</label><button class="btn sm red" data-act="pdel" title="Remove this sheet">✕</button>`:''}</div>`;
   if(PLAN.edit){
     const sel=PLAN.sel&&S.rooms[PLAN.sel];
     h+=`<div class="card noprint pedit"><b>✥ Move labels:</b> drag a label to move it (saved for everyone) · ${PLAN.place?`<span class="tag" style="background:var(--hp);color:#fff">Click on the plan ${PLAN.place==='__new'?'where the new room is':'to place '+esc(S.rooms[PLAN.place]?.code||'')}</span> <button class="btn sm" data-pplace="">Cancel</button>`:'pick a room below, then click on the plan to place it'}${sel?` · selected <b>${esc(sel.code)}</b> ${adm?` <button class="btn sm" data-act="psplit" title="Cut this room into several rooms (e.g. a parking zone)">✂ Split</button>`:''} <button class="btn sm red" data-punpin="${sel.id}">Remove from this sheet</button>`:''}${adm&&!PLAN.place?` · <button class="btn sm pri" data-pplace="__new">+ New room</button> <small style="color:var(--mute)">then click on the plan</small>`:''}
       <div class="chips" style="margin:8px 0 0">${unplaced.length?unplaced.map(r=>`<button class="chip ${PLAN.place===r.id?'on':''}" data-pplace="${r.id}"><b>${esc(r.code)}</b> ${esc(r.name)}</button>`).join(''):'<span style="color:var(--done);font-size:13px">✓ All rooms of this floor are on the plans.</span>'}</div>${(()=>{const o=onF.filter(r=>!pins[r.id]&&onFloorPlans(r,fid)).sort(byCode);return o.length?`<div style="margin-top:8px;font-size:12px">Also show on this sheet (room drawn on both sheets): <select data-paddsheet><option value="">— room —</option>${o.map(r=>`<option value="${r.id}">${esc(r.code)} ${esc(r.name)}</option>`).join('')}</select></div>`:'';})()}</div>`;
   }
+  if(PLAN.tmode){
+    if(!typeById(PLAN.ttype))PLAN.ttype=(s.types[0]||{}).id||'';const tt=typeById(PLAN.ttype),cnt={};here.forEach(r=>cnt[r.type]=(cnt[r.type]||0)+1);
+    h+=`<div class="card noprint pedit"><div class="row"><b>🏷 Room types:</b><select data-ptt>${s.types.map(t=>`<option value="${t.id}" ${t.id===PLAN.ttype?'selected':''}>${esc(t.name)}</option>`).join('')}</select>
+      <div class="seg"><button data-act="ptone" class="${PLAN.multi?'':'on0'}">👆 Click = assign</button><button data-act="ptmulti" class="${PLAN.multi?'on0':''}">☑ Multi-select</button></div>
+      ${PLAN.multi?`<b>${PLAN.msel.size}</b> selected <button class="btn sm pri" data-act="ptassign" ${PLAN.msel.size?'':'disabled'}>Assign “${esc(tt?tt.name:'')}”</button><button class="btn sm" data-act="ptall">Select all shown</button><button class="btn sm" data-act="ptclear" ${PLAN.msel.size?'':'disabled'}>Clear</button><small style="color:var(--mute)">click labels or drag a box on the plan</small>`:`<small style="color:var(--mute)">click a label to give it the type “${esc(tt?tt.name:'')}”</small>`}</div>
+      <label class="chk" style="margin-top:6px"><input type="checkbox" data-ptseq ${PLAN.tseq?'checked':''}>Also replace the room’s sequence with the template of the new type (statuses already entered are kept)</label>
+      <div class="legend" style="margin:8px 0 0">${s.types.map((t,i)=>`<span class="lnk" style="text-decoration:none;color:var(--ink);font-weight:${t.id===PLAN.ttype?800:400}" data-ptlegend="${t.id}"><i class="sq" style="background:${typeCol(t.id)};border:0"></i>${esc(t.name)} (${cnt[t.id]||0})</span>`).join('')}${cnt['']||Object.keys(cnt).some(k=>k&&!typeById(k))?`<span><i class="sq" style="background:#9e9e9e;border:0"></i>No type</span>`:''}</div></div>`;
+  }
   h+=`<div class="printonly"><h2>${esc(s.project)} — ${esc(floorById(fid)?.name||'')}${sheets.length>1?' — '+esc(m.sheet||''):''} — ${fmtLong(today())}</h2></div>`;
   if(!im){planImage(pid);return h+`<div class="planwrap" id="planwrap"><div class="empty" style="padding:30px;text-align:center">Loading the plan…</div></div>`;}
   if(im.err)return h+`<div class="card"><b>The plan could not be displayed:</b> ${esc(im.err)} <button class="btn sm" data-act="pretry">Retry</button></div>`;
-  h+=`<div class="planwrap" id="planwrap"><div class="planin ${PLAN.edit?'editing':''} ${PLAN.place?'placing':''}" id="planin" style="width:${z*100}%"><img src="${im.url}" alt="" draggable="false">`;
+  h+=`<div class="planwrap" id="planwrap"><div class="planin ${PLAN.edit?'editing':''} ${PLAN.place||(PLAN.tmode&&PLAN.multi)?'placing':''}" id="planin" style="width:${z*100}%"><img src="${im.url}" alt="" draggable="false">`;
   here.forEach(r=>{const p=pins[r.id],n=nextStep(r),a=n&&actById(n),pr=progress(r),bl=openBlk(r);
-    const c=F.colorBy==='progress'?heat(pr):(a?(a.isHp?'var(--hp)':a.color):'var(--done)');
-    const oth=r.floor!==fid,tip=`${r.code} ${r.name}${oth?` — double height, room of ${floorById(r.floor)?.name||'another level'}`:''} — ${pc(pr)}% — ${a?(a.isHp?'Awaiting '+a.name:'Next: '+a.name):'Complete'}${bl.length?` — ⚠ ${bl.length} blocking point(s)`:''}`;
-    h+=`<button class="pin ${bl.length?'blk':''} ${ok(r)?'':'dim'} ${PLAN.sel===r.id&&PLAN.edit?'sel':''} ${PLAN.flash===r.id?'flash':''}" data-pin="${r.id}" ${PLAN.edit?'':`data-room="${r.id}"`} style="left:${p.x*100}%;top:${p.y*100}%;--c:${c}" title="${esc(tip)}"><b>${oth?'⇕ ':''}${bl.length?'⚠ ':''}${esc(r.code)}${F.colorBy==='progress'?` · ${pc(pr)}%`:''}</b>${shownm&&r.name?`<span class="pn">${esc(r.name)}</span>`:''}</button>`;});
+    const c=PLAN.tmode?typeCol(r.type):F.colorBy==='progress'?heat(pr):(a?(a.isHp?'var(--hp)':a.color):'var(--done)');
+    const oth=r.floor!==fid,tip=`${r.code} ${r.name} — ${typeById(r.type)?.name||'no type'}${oth?` — double height, room of ${floorById(r.floor)?.name||'another level'}`:''} — ${pc(pr)}% — ${a?(a.isHp?'Awaiting '+a.name:'Next: '+a.name):'Complete'}${bl.length?` — ⚠ ${bl.length} blocking point(s)`:''}`;
+    h+=`<button class="pin ${bl.length?'blk':''} ${ok(r)?'':'dim'} ${PLAN.sel===r.id&&PLAN.edit?'sel':''} ${PLAN.flash===r.id?'flash':''} ${PLAN.tmode&&PLAN.msel.has(r.id)?'msel':''}" data-pin="${r.id}" ${PLAN.edit||PLAN.tmode?'':`data-room="${r.id}"`} style="left:${p.x*100}%;top:${p.y*100}%;--c:${c}" title="${esc(tip)}"><b>${oth?'⇕ ':''}${bl.length?'⚠ ':''}${esc(r.code)}${F.colorBy==='progress'?` · ${pc(pr)}%`:''}</b>${shownm&&r.name?`<span class="pn">${esc(r.name)}</span>`:''}</button>`;});
+  PLAN.shown=here.filter(ok).map(r=>r.id);
   h+=`</div></div>`;
   if(!PLAN.edit&&unplaced.length)h+=`<div class="empty noprint">${unplaced.length} room(s) of this floor on no plan${adm?' — use ✥ Move labels to place them':''}: ${unplaced.slice(0,30).map(r=>`<a href="#" data-room="${r.id}">${esc(r.code)}</a>`).join(', ')}${unplaced.length>30?'…':''}</div>`;
   return h;
 }
+/* type mode, multi-select: drag a box on the plan to select the labels inside */
+document.addEventListener('pointerdown',e=>{
+  if(!(PLAN.tmode&&PLAN.multi)||!e.target.closest||e.target.closest('.pin'))return;const pi=e.target.closest('#planin');if(!pi)return;
+  const el=document.createElement('div');el.className='selbox';pi.appendChild(el);PLAN.box={b:pi.getBoundingClientRect(),sx:e.clientX,sy:e.clientY,el,moved:false};e.preventDefault();
+});
+document.addEventListener('pointermove',e=>{
+  const g=PLAN.box;if(!g)return;if(Math.abs(e.clientX-g.sx)+Math.abs(e.clientY-g.sy)>5)g.moved=true;g.ex=e.clientX;g.ey=e.clientY;
+  const x1=Math.min(g.sx,e.clientX)-g.b.left,y1=Math.min(g.sy,e.clientY)-g.b.top;Object.assign(g.el.style,{left:x1+'px',top:y1+'px',width:Math.abs(e.clientX-g.sx)+'px',height:Math.abs(e.clientY-g.sy)+'px'});
+});
+document.addEventListener('pointerup',()=>{
+  const g=PLAN.box;if(!g)return;PLAN.box=null;g.el.remove();if(!g.moved)return;PLAN.boxEnd=Date.now();
+  const nx=v=>(v-g.b.left)/g.b.width,ny=v=>(v-g.b.top)/g.b.height,x1=nx(Math.min(g.sx,g.ex)),x2=nx(Math.max(g.sx,g.ex)),y1=ny(Math.min(g.sy,g.ey)),y2=ny(Math.max(g.sy,g.ey));
+  const pins=(S.plans[PLAN.pid]||{}).pins||{};PLAN.shown.forEach(id=>{const p=pins[id];if(p&&p.x>=x1&&p.x<=x2&&p.y>=y1&&p.y<=y2)PLAN.msel.add(id);});render();
+});
 document.addEventListener('pointerdown',e=>{
   if(!PLAN.edit)return;const p=e.target.closest&&e.target.closest('.pin[data-pin]');if(!p)return;const box=$('#planin');if(!box)return;
   PLAN.drag={rid:p.dataset.pin,el:p,box:box.getBoundingClientRect(),sx:e.clientX,sy:e.clientY,moved:false};try{p.setPointerCapture(e.pointerId);}catch(_){}e.preventDefault();
@@ -1286,6 +1310,11 @@ document.addEventListener('pointerup',()=>{
 /* returns true when the click was a plan action */
 function planClick(e){
   const pi=e.target.closest('#planin');
+  if(PLAN.tmode){
+    if(PLAN.boxEnd&&Date.now()-PLAN.boxEnd<300)return true;
+    const pn=e.target.closest('.pin[data-pin]');if(pn){const id=pn.dataset.pin;if(PLAN.multi){PLAN.msel.has(id)?PLAN.msel.delete(id):PLAN.msel.add(id);render();}else assignType([id]);return true;}
+    const lg=e.target.closest('[data-ptlegend]');if(lg){PLAN.ttype=lg.dataset.ptlegend;render();return true;}
+  }
   if(pi&&PLAN.edit&&PLAN.place==='__new'&&!e.target.closest('.pin')){const b=pi.getBoundingClientRect();PLAN.place=null;
     newRoomModal(PLAN.pid,clamp01((e.clientX-b.left)/b.width),clamp01((e.clientY-b.top)/b.height));render();return true;}
   if(pi&&PLAN.edit&&PLAN.place&&!e.target.closest('.pin')){const b=pi.getBoundingClientRect(),rid=PLAN.place;PLAN.place=null;PLAN.sel=rid;
@@ -1302,6 +1331,8 @@ function planClick(e){
 function planChange(t){
   const d=t.dataset;
   if(d.planfile&&t.files.length){const fs=[...t.files];t.value='';uploadPlans(d.planfile,fs,d.prep||null);return true;}
+  if(d.ptt!==undefined){PLAN.ttype=t.value;render();return true;}
+  if(d.ptseq!==undefined){PLAN.tseq=t.checked;return true;}
   if(d.paddsheet!==undefined){if(t.value){PLAN.place=t.value;render();}return true;}
   if(d.ppage){const pid=d.ppage,n=+t.value,m=S.plans[pid];if(!m)return true;
     if(Object.keys(m.pins||{}).length&&!confirm(`Use page ${n} of the PDF?\n\nThe room positions of this sheet are detected again on that page (positions placed by hand are reset).`)){t.value=m.page||1;return true;}
@@ -1354,13 +1385,30 @@ async function splitOk(){
     if(drawerRoom===r.id)closeDrawer();await store.delRooms([r.id],[]);}
   PLAN.sel=null;render();
 }
+/* ---- room types on the plan ---- */
+const TYPE_COLS=['#1e88e5','#e53935','#43a047','#fb8c00','#8e24aa','#00897b','#6d4c41','#d81b60','#3949ab','#c0ca33','#5d4037','#00acc1','#f4511e','#7cb342'];
+const typeCol=id=>{const i=S.settings.types.findIndex(t=>t.id===id);return i<0?'#9e9e9e':TYPE_COLS[i%TYPE_COLS.length];};
+function assignType(ids){
+  const t=typeById(PLAN.ttype);if(!t||roBlock())return;
+  const rs=ids.map(id=>S.rooms[id]).filter(r=>r&&r.type!==t.id);if(!rs.length)return;
+  const up=r=>PLAN.tseq?{type:t.id,acts:[...t.acts]}:{type:t.id};
+  if(rs.length===1)return store.patchRoom(rs[0].id,up(rs[0]));
+  if(!confirm(`Give the type “${t.name}” to ${rs.length} rooms?${PLAN.tseq?'\n\nTheir sequence is replaced with the template of this type (statuses already entered are kept).':''}`))return;
+  PLAN.msel.clear();return store.addRooms(rs.map(r=>({...r,...up(r)})));
+}
 Object.assign(ACT,{
+  ptype:()=>{PLAN.tmode=!PLAN.tmode;PLAN.edit=false;PLAN.place=null;PLAN.sel=null;PLAN.msel.clear();render();},
+  ptone:()=>{PLAN.multi=false;PLAN.msel.clear();render();},
+  ptmulti:()=>{PLAN.multi=true;render();},
+  ptassign:()=>assignType([...PLAN.msel]),
+  ptall:()=>{PLAN.shown.forEach(id=>PLAN.msel.add(id));render();},
+  ptclear:()=>{PLAN.msel.clear();render();},
   pnewok:newRoomOk,
   psplit:splitModal,
   psplitok:splitOk,
   mclose:()=>{PLAN.imp=null;closeModal();},
   pname:()=>{F.pname=F.pname===false;render();},
-  pedit:()=>{PLAN.edit=!PLAN.edit;PLAN.place=null;PLAN.sel=null;render();},
+  pedit:()=>{PLAN.edit=!PLAN.edit;PLAN.tmode=false;PLAN.place=null;PLAN.sel=null;render();},
   pimpmodal:()=>importModal(PLAN.fid),
   pimport:doImport,
   pdetect:()=>{const m=S.plans[PLAN.pid];if(!m)return;const man=Object.values(m.pins||{}).some(p=>p.m);
