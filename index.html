@@ -836,7 +836,7 @@ function renderDrawer(){
   if(ae&&D.contains(ae)&&ae.matches('[data-hold]')){pending=true;return;}
   const sc=D.scrollTop;
   const s=S.settings,f=floorById(r.floor),t=typeById(r.type),n=nextStep(r),p=progress(r),bl=openBlk(r),acts=roomActs(r);
-  let h=`<div class="dh"><div class="row" style="flex-wrap:nowrap"><div style="flex:1;min-width:0"><div style="font-size:20px;font-weight:800">${esc(r.code)} <span style="font-weight:500">${esc(r.name)}</span></div><div style="color:var(--mute);font-size:12px">${esc(f?f.name:'')} · ${esc(t?t.name:'—')}${r.area?' · '+esc(r.area):''}${pinSheets(r).length?` · <a href="#" class="lnk" data-showpin="${r.id}">📐 Show on plan</a>`:''}</div></div><button class="iconbtn" data-act="close">✕</button></div>
+  let h=`<div class="dh"><div class="row" style="flex-wrap:nowrap"><div style="flex:1;min-width:0"><div style="font-size:20px;font-weight:800">${esc(r.code)} <span style="font-weight:500">${esc(r.name)}</span></div><div style="color:var(--mute);font-size:12px">${esc(f?f.name:'')} · ${esc(t?t.name:'—')}${r.area?' · '+esc(r.area):''}${(()=>{const o=[...new Set(pinSheets(r).filter(m=>m.floor!==r.floor).map(m=>floorById(m.floor)?.name).filter(Boolean))];return o.length?` · <span class="tag" style="background:#e8f0fe;color:var(--hp)">⇕ double height, also on ${esc(o.join(', '))}</span>`:'';})()}${pinSheets(r).length?` · <a href="#" class="lnk" data-showpin="${r.id}">📐 Show on plan</a>`:''}</div></div><button class="iconbtn" data-act="close">✕</button></div>
     <div class="row" style="margin-top:8px"><div class="bar" style="max-width:none"><i style="width:${pc(p)}%"></i></div><b>${pc(p)}%</b></div>
     <div style="margin-top:6px;font-size:13px">${n?`Next step: <b>${esc(actById(n).name)}</b>`:'<b style="color:var(--done)">✓ All activities complete</b>'}${bl.length?` · <span style="color:var(--blk);font-weight:700">⚠ ${bl.length} open blocking point(s)</span>`:''}</div></div><div class="db"><h3>Activities</h3>`;
   if(!acts.length)h+=`<div class="empty">No activity assigned. Open “Customize activities” below.</div>`;
@@ -1033,7 +1033,18 @@ const fromB64=s=>{const b=atob(s),u=new Uint8Array(b.length);for(let i=0;i<b.len
 const clamp01=v=>Math.max(0,Math.min(1,v));
 const byCode=(a,b)=>String(a.code).localeCompare(String(b.code),undefined,{numeric:true});
 const sheetsOf=fid=>Object.entries(S.plans||{}).map(([id,m])=>({id,...m,floor:m.floor||id})).filter(m=>m.floor===fid).sort((a,b)=>(a.ts||0)-(b.ts||0));
-const pinSheets=r=>sheetsOf(r.floor).filter(m=>m.pins&&m.pins[r.id]);
+/* sheets showing a room: its own floor first, then other floors (double-height rooms, e.g. a P2 plantroom also drawn on P1) */
+const pinSheets=r=>{const all=Object.entries(S.plans||{}).map(([id,m])=>({id,...m,floor:m.floor||id})).filter(m=>m.pins&&m.pins[r.id]);return [...all.filter(m=>m.floor===r.floor),...all.filter(m=>m.floor!==r.floor)];};
+const onFloorPlans=(r,fid)=>sheetsOf(fid).some(m=>m.pins&&m.pins[r.id]);
+const roomPre=c=>String(c||'').replace(/[.\-_/][^.\-_/]*$/,'');
+/* floor of a code prefix (P2 → the floor whose rooms are P2.xx, or named “P2” / “Level 2”) */
+function floorForPrefix(pfx){
+  const c={};Object.values(S.rooms).forEach(r=>{if(kLoose(roomPre(r.code))===kLoose(pfx))c[r.floor]=(c[r.floor]||0)+1;});
+  const best=Object.keys(c).sort((a,b)=>c[b]-c[a])[0];if(best&&floorById(best))return best;
+  const dg=(pfx.match(/\d+/g)||[]),fl=S.settings.floors;
+  const f=fl.find(f=>kLoose(f.name)===kLoose(pfx))||(dg.length===1&&fl.find(f=>{const d=f.name.match(/\d+/g)||[];return d.length===1&&+d[0]===+dg[0];}));
+  return f?f.id:'';
+}
 const planKey=pid=>{const m=S.plans[pid];return m?pid+'|'+m.ver+'|'+(m.page||1):'';};
 function planDoc(pid){
   const m=S.plans[pid],k=pid+'|'+m.ver;
@@ -1098,10 +1109,10 @@ function findTags(words){
 /* Read one sheet: room tags + where each tracker room of the floor is */
 async function readSheet(doc,pageNo,fid){
   const words=await pageWords(doc,pageNo),{tags,inc}=findTags(words),tagW=new Set(tags.map(t=>t.w));
-  const rooms=Object.values(S.rooms).filter(r=>r.floor===fid&&String(r.code||'').trim());
+  const rooms=Object.values(S.rooms).filter(r=>String(r.code||'').trim());   // other floors: double-height rooms, matched on a room tag only
   const ex={},lo={};words.forEach(w=>{const a=kExact(w.str),b=kLoose(w.str);(ex[a]=ex[a]||[]).push(w);if(b.length>=2)(lo[b]=lo[b]||[]).push(w);});
   const found={};
-  rooms.forEach(r=>{const c=ex[kExact(r.code)]||(kLoose(r.code).length>=2&&lo[kLoose(r.code)]);if(!c||!c.length)return;
+  rooms.forEach(r=>{let c=ex[kExact(r.code)]||(kLoose(r.code).length>=2&&lo[kLoose(r.code)]);if(c&&r.floor!==fid)c=c.filter(w=>tagW.has(w));if(!c||!c.length)return;
     const t=c.filter(w=>tagW.has(w)),w=(t.length?t:c).reduce((a,b)=>b.h>a.h?b:a);found[r.id]={x:clamp01(w.x),y:clamp01(w.y)};});
   return {found,tags,inc,words:words.length};
 }
@@ -1117,8 +1128,8 @@ async function floorTags(fid){
   let list=Object.values(map);const cnt=(f)=>{const c={};list.forEach(e=>{const k=f(e.code);c[k]=(c[k]||0)+Object.keys(e.sheets).length;});return c;};
   const sig=c=>c.replace(/[a-z]/gi,'A').replace(/\d/g,'9'),sc=cnt(sig),mx=Math.max(0,...Object.values(sc));
   list=list.filter(e=>sc[sig(e.code)]>=mx*.25);
-  const pre=c=>c.replace(/[.\-_/][^.\-_/]*$/,''),pc0=cnt(pre),main=Object.keys(pc0).sort((a,b)=>pc0[b]-pc0[a])[0];
-  list.forEach(e=>{e.odd=pre(e.code)!==main?main:'';});
+  const pre=roomPre,pc0=cnt(pre),main=Object.keys(pc0).sort((a,b)=>pc0[b]-pc0[a])[0];
+  list.forEach(e=>{e.odd=pre(e.code)!==main?pre(e.code):'';});   // e.g. P2.06 on the P1 plan = double-height room of P2
   return {list:list.sort(byCode),inc,sheets};
 }
 function guessType(name){
@@ -1136,15 +1147,20 @@ async function importModal(fid){
   modal(`<h2>🏷 Rooms on the plans</h2><p>Reading the room tags of every sheet…</p>`,true);
   try{
     const {list,inc,sheets}=await floorTags(fid),have={};Object.values(S.rooms).filter(r=>r.floor===fid).forEach(r=>have[kLoose(r.code)]=r);
-    const sn=id=>(sheets.find(m=>m.id===id)||{}).sheet||'?',fresh=list.filter(e=>!have[kLoose(e.code)]),over=list.filter(e=>Object.keys(e.sheets).length>1);
-    PLAN.imp={fid,list:fresh};
+    // a double-height room already created on its own floor is not created again: it is just pinned on these sheets
+    const ex=e=>have[kLoose(e.code)]||(e.odd&&Object.values(S.rooms).find(r=>kLoose(r.code)===kLoose(e.code)));
+    const link={};list.forEach(e=>{const r=ex(e);if(!r||r.floor===fid)return;Object.entries(e.sheets).forEach(([pid,p])=>{if(!(S.plans[pid].pins||{})[r.id])(link[pid]=link[pid]||{})['pins.'+r.id]={x:p.x,y:p.y};});});
+    for(const pid in link)await store.patchPlan(pid,link[pid]);
+    const sn=id=>(sheets.find(m=>m.id===id)||{}).sheet||'?',fresh=list.filter(e=>!ex(e)),over=list.filter(e=>Object.keys(e.sheets).length>1),dh=list.filter(e=>e.odd);
+    PLAN.imp={fid,list:fresh};const anyOdd=fresh.some(e=>e.odd);
+    const fo=e=>{const d=floorForPrefix(e.odd);return S.settings.floors.map(f=>`<option value="${f.id}" ${f.id===d?'selected':''}>${esc(f.name)}</option>`).join('')+(d?'':`<option value="__new" selected>+ new floor “${esc(e.odd)}”</option>`);};
     const to=(sel)=>`<option value="">— default type —</option>`+S.settings.types.map(t=>`<option value="${t.id}" ${t.id===sel?'selected':''}>${esc(t.name)}</option>`).join('');
     let h=`<h2>🏷 Rooms on the plans — ${esc(floorById(fid)?.name||'')}</h2>
-      <p style="font-size:13px;margin-top:0"><b>${list.length}</b> different room codes on ${sheets.length} sheet(s)${over.length?` · <b>${over.length}</b> in the overlap zone (${over.map(e=>esc(e.code)).join(', ')}) counted once`:''} · <b>${list.length-fresh.length}</b> already in the tracker · <b>${fresh.length}</b> new.</p>`;
+      <p style="font-size:13px;margin-top:0"><b>${list.length}</b> different room codes on ${sheets.length} sheet(s)${over.length?` · <b>${over.length}</b> in the overlap zone (${over.map(e=>esc(e.code)).join(', ')}) counted once`:''}${dh.length?` · <b>${dh.length}</b> double-height room(s) of another level (${dh.map(e=>esc(e.code)).join(', ')}): one room, on its own level, also shown on this plan`:''} · <b>${list.length-fresh.length}</b> already in the tracker · <b>${fresh.length}</b> new.</p>`;
     if(inc.length)h+=`<p style="font-size:12px;color:#b57800">⚠ ${inc.length} tag(s) without a complete number on the plan, not imported: ${inc.map(t=>`“${esc(t.code)}” ${esc(t.name)} ${esc(t.area)} (${esc(t.sheet)})`).join(' · ')}. Add these rooms by hand if needed.</p>`;
     if(fresh.length){
       h+=`<div class="row" style="margin:6px 0"><label style="font-size:12px">Default type (names not recognised) <select id="imp_def">${S.settings.types.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select></label></div>
-      <div class="tbwrap" style="max-height:48vh"><table class="tb"><thead><tr><th><input type="checkbox" id="imp_all" checked></th><th>Code</th><th>Name</th><th>Area</th><th>Sheet(s)</th><th>Room type</th></tr></thead><tbody>${fresh.map((e,i)=>`<tr><td><input type="checkbox" data-imp="${i}" ${e.odd?'':'checked'}></td><td><b>${esc(e.code)}</b>${e.odd?` <span class="tag red" title="The other rooms of this plan start with ${esc(e.odd)} — check the drawing">other level?</span>`:''}</td><td>${esc(e.name)}${e.names.size>1?` <span class="tag red" title="${esc([...e.names].join(' / '))}">names differ</span>`:''}</td><td style="white-space:nowrap">${esc(e.area)}</td><td style="white-space:nowrap">${Object.keys(e.sheets).map(sn).map(esc).join(' + ')}${e.n>Object.keys(e.sheets).length?` <small style="color:var(--mute)">(tag ×${e.n})</small>`:''}</td><td><select data-imptype="${i}">${to(guessType(e.name))}</select></td></tr>`).join('')}</tbody></table></div>`;
+      <div class="tbwrap" style="max-height:48vh"><table class="tb"><thead><tr><th><input type="checkbox" id="imp_all" checked></th><th>Code</th><th>Name</th><th>Area</th><th>Sheet(s)</th>${anyOdd?'<th>Level</th>':''}<th>Room type</th></tr></thead><tbody>${fresh.map((e,i)=>`<tr><td><input type="checkbox" data-imp="${i}" checked></td><td><b>${esc(e.code)}</b>${e.odd?` <span class="tag" style="background:#e8f0fe;color:var(--hp)" title="Code of another level: double-height room. Created once, on its own level, and also shown on this plan">⇕ double height</span>`:''}</td><td>${esc(e.name)}${e.names.size>1?` <span class="tag red" title="${esc([...e.names].join(' / '))}">names differ</span>`:''}</td><td style="white-space:nowrap">${esc(e.area)}</td><td style="white-space:nowrap">${Object.keys(e.sheets).map(sn).map(esc).join(' + ')}${e.n>Object.keys(e.sheets).length?` <small style="color:var(--mute)">(tag ×${e.n})</small>`:''}</td>${anyOdd?`<td>${e.odd?`<select data-impfloor="${i}">${fo(e)}</select>`:esc(floorById(fid)?.name||'')}</td>`:''}<td><select data-imptype="${i}">${to(guessType(e.name))}</select></td></tr>`).join('')}</tbody></table></div>`;
     }else h+=`<p style="color:var(--done)">✓ Every room tag of the plans is already in the tracker.</p>`;
     h+=`<div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn" data-act="mclose">${fresh.length?'Cancel':'OK'}</button>${fresh.length?`<button class="btn pri" data-act="pimport">Create selected rooms</button>`:''}</div>`;
     modal(h);
@@ -1152,12 +1168,17 @@ async function importModal(fid){
 }
 async function doImport(){
   const I=PLAN.imp;if(!I)return;const def=$('#imp_def').value,rooms=[],pins={};
+  const newF={};
   I.list.forEach((e,i)=>{const cb=document.querySelector(`[data-imp="${i}"]`);if(!cb||!cb.checked)return;
     const type=document.querySelector(`[data-imptype="${i}"]`).value||def,t=typeById(type),id=uid('r');
-    rooms.push({id,floor:I.fid,code:e.code,name:e.name||'',area:e.area||'',type,acts:[...((t&&t.acts)||[])],st:{},note:''});
+    const fs=document.querySelector(`[data-impfloor="${i}"]`);let floor=fs?fs.value:I.fid;
+    if(floor==='__new'){floor=newF[e.odd]=newF[e.odd]||uid('f');}
+    rooms.push({id,floor,code:e.code,name:e.name||'',area:e.area||'',type,acts:[...((t&&t.acts)||[])],st:{},note:''});
     Object.entries(e.sheets).forEach(([pid,p])=>{(pins[pid]=pins[pid]||{})['pins.'+id]={x:p.x,y:p.y};});});
   if(!rooms.length)return alert('Nothing selected.');
-  closeModal();PLAN.imp=null;await store.addRooms(rooms);
+  closeModal();PLAN.imp=null;
+  if(Object.keys(newF).length)await store.saveSettings((()=>{const s=JSON.parse(JSON.stringify(S.settings));Object.entries(newF).forEach(([n,id])=>s.floors.push({id,name:n}));return s;})());
+  await store.addRooms(rooms);
   for(const pid in pins)await store.patchPlan(pid,pins[pid]);
   alert(`${rooms.length} room(s) created and placed on the plan.`);
 }
@@ -1186,7 +1207,7 @@ async function uploadPlans(fid,files,replacePid){
       rep+=`<li><b>${esc(sheet)}</b> — ${esc(file.name)}: ${d.words?`${Object.keys(d.found).length} tracker room(s) found · ${d.tags.length} room tag(s) read`:'<span style="color:var(--blk)">no text in this PDF (scan?) — rooms must be placed by hand</span>'}${doc.numPages>1?` · ${doc.numPages} pages, page 1 used`:''}</li>`;
     }
     F.psheet=last;
-    const placed=Object.values(S.rooms).filter(r=>r.floor===fid&&pinSheets(r).length).length,tot=Object.values(S.rooms).filter(r=>r.floor===fid).length;
+    const placed=Object.values(S.rooms).filter(r=>r.floor===fid&&onFloorPlans(r,fid)).length,tot=Object.values(S.rooms).filter(r=>r.floor===fid).length;
     modal(`<h2>📐 Plan${files.length>1?'s':''} uploaded</h2><ul style="padding-left:18px;font-size:13px">${rep}</ul><p style="font-size:13px">${tot?`<b>${placed} of ${tot}</b> rooms of this floor are on the plans.`:'No room on this floor in the tracker yet.'}</p>${tagsTot?`<p style="font-size:13px">Click <b>🏷 Rooms from plans</b> to create the rooms written on the plans that are not yet in the tracker (one room per code, overlap between sheets removed).</p>`:''}
       <div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn" data-act="mclose">OK</button>${tagsTot?`<button class="btn pri" data-act="pimpmodal">🏷 Rooms from plans</button>`:''}</div>`);
   }catch(e){console.error(e);closeModal();alert('Upload failed: '+e.message);}
@@ -1198,7 +1219,7 @@ async function redetect(pid,all){
     Object.entries(m.pins||{}).forEach(([rid,p])=>{if(S.rooms[rid]&&p.m&&!all)pins[rid]=p;});
     Object.entries(d.found).forEach(([rid,p])=>{if(!pins[rid])pins[rid]=p;});
     await store.patchPlan(pid,{pins});S.plans[pid].pins=pins;
-    const fid=m.floor||pid,rs=Object.values(S.rooms).filter(r=>r.floor===fid),miss=rs.filter(r=>!pinSheets(r).length).sort(byCode);
+    const fid=m.floor||pid,rs=Object.values(S.rooms).filter(r=>r.floor===fid),miss=rs.filter(r=>!onFloorPlans(r,fid)).sort(byCode);
     modal(`<h2>🔎 ${esc(m.sheet||'Plan')}</h2>${d.words?`<p><b>${Object.keys(d.found).length}</b> tracker room(s) found on this sheet · <b>${rs.length-miss.length} of ${rs.length}</b> rooms of the floor are on the plans.</p>`:'<p><b>This PDF contains no text</b> (scan, or text exported as lines): place the rooms by hand with ✋ Edit positions, or export again from AutoCAD as a vector PDF.</p>'}${miss.length?`<p style="color:var(--mute);font-size:13px">On no sheet (${miss.length}): ${miss.slice(0,40).map(r=>`<b>${esc(r.code)}</b>`).join(', ')}${miss.length>40?'…':''} — place them with ✋ Edit positions.</p>`:''}<div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn pri" data-act="mclose">OK</button></div>`);}
   catch(e){console.error(e);closeModal();alert('Detection failed: '+e.message);}
 }
@@ -1209,7 +1230,8 @@ function setZoom(z){
 }
 function showOnPlan(rid){
   const r=S.rooms[rid];if(!r)return;const ps=pinSheets(r);if(!ps.length)return;closeDrawer();
-  Object.assign(F,{view:'plans',pfloor:r.floor,psheet:ps.some(m=>m.id===F.psheet)?F.psheet:ps[0].id});PLAN.flash=rid;doRender();
+  const sh=ps.find(m=>m.id===F.psheet)||ps[0];
+  Object.assign(F,{view:'plans',pfloor:sh.floor,psheet:sh.id});PLAN.flash=rid;doRender();
   const go=(n)=>{const p=document.querySelector(`.pin[data-pin="${rid}"]`),w=$('#planwrap');if(p&&w){const a=p.getBoundingClientRect(),b=w.getBoundingClientRect();w.scrollLeft+=a.left-b.left-w.clientWidth/2;w.scrollTop+=a.top-b.top-w.clientHeight/2;}else if(n)setTimeout(()=>go(n-1),300);};
   setTimeout(()=>go(15),60);setTimeout(()=>{PLAN.flash=null;},3500);
 }
@@ -1223,10 +1245,10 @@ function vPlans(){
   const fin=(multi,rep)=>`<input type="file" ${multi?'multiple':''} data-planfile="${fid}" ${rep?`data-prep="${rep}"`:''} accept="application/pdf,.pdf" hidden>`;
   if(!m)return h+`<div class="card"><h2>No plan for ${esc(floorById(fid)?.name||'this floor')} yet</h2>${adm?`<p style="color:var(--mute);font-size:13px;margin-top:0">Upload the floor plan as a <b>PDF exported from AutoCAD / Revit</b> (vector, not a scan). If the level is cut into several sheets (e.g. North + South), select <b>all the PDFs of the level at once</b>: each becomes a sheet, and rooms in the overlap zone are not duplicated (a room = one code). Rooms are recognised by their tag: <b>code</b> (e.g. “P1.23”), name, and area “… m²” below.</p><label class="btn pri">⬆ Upload PDF plan(s)${fin(true)}</label>`:'<p style="color:var(--mute)">Ask an admin to upload the PDF plan of this floor.</p>'}</div>`;
   const z=ZOOMS.includes(+F.pzoom)?+F.pzoom:1,zi=ZOOMS.indexOf(z),k=planKey(pid),im=PLAN.img[k];
-  const onF=Object.values(S.rooms).filter(r=>r.floor===fid),pins=m.pins||{},here=onF.filter(r=>pins[r.id]),unplaced=onF.filter(r=>!pinSheets(r).length).sort(byCode);
+  const onF=Object.values(S.rooms).filter(r=>r.floor===fid),pins=m.pins||{},here=Object.values(S.rooms).filter(r=>pins[r.id]),unplaced=onF.filter(r=>!onFloorPlans(r,fid)).sort(byCode);
   const ok=r=>{const f=F.floor;F.floor='all';const v=passes(r,false);F.floor=f;return v;};
   if(sheets.length>1||adm)h+=`<div class="chips noprint" style="align-items:center"><small style="color:var(--mute)">Sheets:</small>${sheets.map(x=>`<button class="chip ${x.id===pid?'on':''}" data-f="psheet" data-v="${x.id}">📄 ${esc(x.sheet||'Sheet')} <span class="n">${Object.keys(x.pins||{}).filter(id=>S.rooms[id]).length}</span></button>`).join('')}${adm?`<label class="chip">+ Add sheet(s)${fin(true)}</label>`:''}</div>`;
-  h+=`<div class="filters noprint"><div class="seg"><button data-pzoom="${ZOOMS[Math.max(0,zi-1)]}" ${zi?'':'disabled'}>−</button><button data-pzoom="1" class="${z===1?'on0':''}">Fit</button><button data-pzoom="${ZOOMS[Math.min(ZOOMS.length-1,zi+1)]}" ${zi<ZOOMS.length-1?'':'disabled'}>+</button></div><small style="color:var(--mute)">${Math.round(z*100)}% · ${here.length} rooms on this sheet · ${onF.length-unplaced.length}/${onF.length} of the floor on the plans · ${esc(m.name)}</small><span class="sp"></span>
+  h+=`<div class="filters noprint"><div class="seg"><button data-pzoom="${ZOOMS[Math.max(0,zi-1)]}" ${zi?'':'disabled'}>−</button><button data-pzoom="1" class="${z===1?'on0':''}">Fit</button><button data-pzoom="${ZOOMS[Math.min(ZOOMS.length-1,zi+1)]}" ${zi<ZOOMS.length-1?'':'disabled'}>+</button></div><small style="color:var(--mute)">${Math.round(z*100)}% · ${here.length} rooms on this sheet${here.some(r=>r.floor!==fid)?` (incl. ${here.filter(r=>r.floor!==fid).length} double-height)`:''} · ${onF.length-unplaced.length}/${onF.length} of the floor on the plans · ${esc(m.name)}</small><span class="sp"></span>
     ${adm?`${m.pages>1?`<select data-ppage="${pid}" title="Page of the PDF">${Array.from({length:m.pages},(_,i)=>`<option value="${i+1}" ${(m.page||1)===i+1?'selected':''}>Page ${i+1}</option>`).join('')}</select>`:''}<button class="btn sm" data-act="pimpmodal" title="Create the rooms written on the plans that are not yet in the tracker">🏷 Rooms from plans</button><button class="btn sm" data-act="pdetect">🔎 Detect rooms</button><button class="btn sm ${PLAN.edit?'pri':''}" data-act="pedit">✋ ${PLAN.edit?'Done editing':'Edit positions'}</button><button class="btn sm" data-act="prename" title="Rename this sheet">✎</button><label class="btn sm" title="Replace the PDF of this sheet">⬆ Replace${fin(false,pid)}</label><button class="btn sm red" data-act="pdel" title="Remove this sheet">✕</button>`:''}</div>`;
   if(PLAN.edit){
     const sel=PLAN.sel&&S.rooms[PLAN.sel];
@@ -1239,8 +1261,8 @@ function vPlans(){
   h+=`<div class="planwrap" id="planwrap"><div class="planin ${PLAN.edit?'editing':''} ${PLAN.place?'placing':''}" id="planin" style="width:${z*100}%"><img src="${im.url}" alt="" draggable="false">`;
   here.forEach(r=>{const p=pins[r.id],n=nextStep(r),a=n&&actById(n),pr=progress(r),bl=openBlk(r);
     const c=F.colorBy==='progress'?heat(pr):(a?(a.isHp?'var(--hp)':a.color):'var(--done)');
-    const tip=`${r.code} ${r.name} — ${pc(pr)}% — ${a?(a.isHp?'Awaiting '+a.name:'Next: '+a.name):'Complete'}${bl.length?` — ⚠ ${bl.length} blocking point(s)`:''}`;
-    h+=`<button class="pin ${bl.length?'blk':''} ${ok(r)?'':'dim'} ${PLAN.sel===r.id&&PLAN.edit?'sel':''} ${PLAN.flash===r.id?'flash':''}" data-pin="${r.id}" ${PLAN.edit?'':`data-room="${r.id}"`} style="left:${p.x*100}%;top:${p.y*100}%;--c:${c}" title="${esc(tip)}">${bl.length?'⚠ ':''}${esc(r.code)}${F.colorBy==='progress'?` · ${pc(pr)}%`:''}</button>`;});
+    const oth=r.floor!==fid,tip=`${r.code} ${r.name}${oth?` — double height, room of ${floorById(r.floor)?.name||'another level'}`:''} — ${pc(pr)}% — ${a?(a.isHp?'Awaiting '+a.name:'Next: '+a.name):'Complete'}${bl.length?` — ⚠ ${bl.length} blocking point(s)`:''}`;
+    h+=`<button class="pin ${bl.length?'blk':''} ${ok(r)?'':'dim'} ${PLAN.sel===r.id&&PLAN.edit?'sel':''} ${PLAN.flash===r.id?'flash':''}" data-pin="${r.id}" ${PLAN.edit?'':`data-room="${r.id}"`} style="left:${p.x*100}%;top:${p.y*100}%;--c:${c}" title="${esc(tip)}">${oth?'⇕ ':''}${bl.length?'⚠ ':''}${esc(r.code)}${F.colorBy==='progress'?` · ${pc(pr)}%`:''}</button>`;});
   h+=`</div></div>`;
   if(!PLAN.edit&&unplaced.length)h+=`<div class="empty noprint">${unplaced.length} room(s) of this floor on no plan${adm?' — use ✋ Edit positions to place them':''}: ${unplaced.slice(0,30).map(r=>`<a href="#" data-room="${r.id}">${esc(r.code)}</a>`).join(', ')}${unplaced.length>30?'…':''}</div>`;
   return h;

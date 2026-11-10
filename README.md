@@ -13,8 +13,11 @@ level at once; each becomes a sheet (named from NORTH/SOUTH/… in the file name
 
 Room recognition: a **room tag** = a code (`P1.23`) with an area (`39.43 m²`) just below it, the
 words in between being the name. Door / wall / finish tags (`IDT10.01`, `CLG-103`…) are discarded
-because they don't follow the dominant code format of the floor; codes with another prefix
-(`P2.06` on the P1 plan) are flagged and unticked.
+because they don't follow the dominant code format of the floor.
+**Double-height rooms:** a code of another level on the plan (`P2.06` on the P1 plan) is a room of
+that level (P2) also visible on P1. It is created once, on its own level (found from the codes of
+that level's rooms or from the floor name "P2" / "Level 2"), counted only there, and gets a ⇕ pin
+on the P1 sheets too. If it already exists on P2 it is not created again, just pinned.
 **No duplicates:** a room = one code per floor. A room in the overlap zone of two sheets (or a
 zone tagged several times, like a parking) is created once and gets a pin on each sheet.
 "🏷 Rooms from plans" lists the tags not yet in the tracker (name, area, sheets, guessed type)
