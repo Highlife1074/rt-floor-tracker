@@ -154,6 +154,12 @@ input.dt{padding:1px 4px;font-size:11px;border:1px dashed #c5cad4;border-radius:
 body.ro [data-set],body.ro [data-newblk],body.ro [data-closeblk],body.ro .rwonly{display:none!important}
 .seqed{border:1px solid var(--line);border-radius:8px;padding:6px;margin:6px 0 10px;background:#fafbfc}
 .sqrow{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;background:#fff;border:1px solid var(--line);margin-bottom:4px;font-size:13px}
+.sqpick{position:relative;flex:1;min-width:220px}.sqpick input{width:100%}
+.sqopts{display:none;position:absolute;left:0;right:0;top:100%;margin-top:2px;max-height:240px;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.12);z-index:30;padding:3px}
+.sqpick:focus-within .sqopts{display:block}
+.sqopt{display:flex;align-items:center;gap:8px;width:100%;text-align:left;border:0;background:none;font:inherit;font-size:13px;padding:6px 8px;border-radius:6px;cursor:pointer;color:var(--ink)}
+.sqopt:hover{background:#f1f4f8}.sqopt.hi{background:var(--acc2,#e3ecfb)}.sqopt[hidden],.sqnone[hidden]{display:none}
+.sqnone{padding:6px 8px;color:var(--mute);font-size:12px}
 .sqrow.over{border-color:var(--acc);box-shadow:0 0 0 2px var(--acc2)}
 .sqn{width:20px;text-align:right;font-weight:700;color:var(--mute);font-size:12px;flex:none}
 .grip{cursor:grab;color:#b6bcc8;font-size:12px;letter-spacing:-2px;flex:none}
@@ -337,12 +343,48 @@ function asgModal(rid,aid){
   $('#as_x').onclick=closeModal;
   $('#as_ok').onclick=()=>{store.patchRoom(rid,{['asg.'+aid]:{sub:$('#as_sub').value,resp:$('#as_resp').value}});closeModal();};
 }
+/* "Add an activity" picker: alphabetical list filtered as you type (accent/case-insensitive).
+   ↑ ↓ move, Enter adds, Escape clears. Focus + typed text survive the re-render that follows an add. */
+const normTxt=t=>String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+let SQF=null;
+function sqFilter(inp){
+  const box=inp.parentNode.querySelector('.sqopts'),q=normTxt(inp.value).trim().split(/\s+/).filter(Boolean);let first=null;
+  box.querySelectorAll('.sqopt').forEach(o=>{const ok=q.every(w=>o.dataset.nm.includes(w));o.hidden=!ok;o.classList.remove('hi');if(ok&&!first)first=o;});
+  if(first)first.classList.add('hi');
+  const nm=box.querySelector('.sqnm');if(nm)nm.hidden=!!first||!box.querySelector('.sqopt');
+}
+function sqMove(inp,dir){
+  const vis=[...inp.parentNode.querySelectorAll('.sqopt:not([hidden])')];if(!vis.length)return;
+  let i=vis.findIndex(o=>o.classList.contains('hi'));if(i>=0)vis[i].classList.remove('hi');
+  i=Math.max(0,Math.min(vis.length-1,i+dir));vis[i].classList.add('hi');vis[i].scrollIntoView({block:'nearest'});
+}
+function sqPick(btn){
+  const [k,id,aid]=btn.dataset.sqpick.split('|');SQF={key:k+'|'+id,q:''};
+  const inp=btn.closest('.sqpick').querySelector('[data-sqq]');inp.value='';
+  setSeq(k,id,l=>{l.push(aid);return l;});
+}
+function sqRestore(root){
+  if(!SQF)return;const ae=document.activeElement;if(ae&&ae!==document.body)return;
+  const inp=root.querySelector(`[data-sqq="${SQF.key}"]`);if(!inp)return;
+  inp.value=SQF.q;inp.focus();sqFilter(inp);
+}
+document.addEventListener('input',e=>{const t=e.target;if(t.dataset&&t.dataset.sqq!==undefined){SQF={key:t.dataset.sqq,q:t.value};sqFilter(t);}});
+document.addEventListener('focusin',e=>{const t=e.target;if(t.dataset&&t.dataset.sqq!==undefined){SQF={key:t.dataset.sqq,q:t.value};sqFilter(t);}});
+document.addEventListener('focusout',e=>{const t=e.target;if(t.dataset&&t.dataset.sqq!==undefined)setTimeout(()=>{if(t.isConnected&&document.activeElement!==t)SQF=null;},0);});
+window.addEventListener('keydown',e=>{
+  const t=e.target;if(!(t.dataset&&t.dataset.sqq!==undefined))return;
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();sqMove(t,e.key==='ArrowDown'?1:-1);}
+  else if(e.key==='Enter'){e.preventDefault();e.stopPropagation();const h=t.parentNode.querySelector('.sqopt.hi:not([hidden])');if(h)sqPick(h);}
+  else if(e.key==='Escape'){e.stopPropagation();e.preventDefault();if(t.value){t.value='';SQF={key:t.dataset.sqq,q:''};sqFilter(t);}else t.blur();}
+},true);
+document.addEventListener('mousedown',e=>{if(e.target.closest&&e.target.closest('.sqopt'))e.preventDefault();});
+document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('.sqopt');if(b){e.stopPropagation();sqPick(b);}},true);
 function setSeq(kind,id,fn){if(kind==='type')saveS(s=>{const t=s.types.find(x=>x.id===id);if(t)t.acts=fn(cleanSeq(t.acts));});else{const r=S.rooms[id];if(r)store.patchRoom(id,{acts:fn(cleanSeq(r.acts))});}}
 function seqEditor(kind,id,list){
-  list=cleanSeq(list);const avail=S.settings.acts.filter(a=>!list.includes(a.id));const r=kind==='room'?S.rooms[id]:null;
+  list=cleanSeq(list);const avail=S.settings.acts.filter(a=>!list.includes(a.id)).sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:'base',numeric:true}));const r=kind==='room'?S.rooms[id]:null;
   return `<div class="seqed">${list.length?'':'<div class="empty" style="padding:6px">No activity yet — add the first one below.</div>'}${list.map((aid,i)=>{const a=actById(aid),hpOn=a.hp&&!(r&&(r.hpOff||[]).includes(aid));
     return `<div class="sqrow" draggable="true" data-sqdrag="${kind}|${id}|${i}"><span class="sqn">${i+1}</span><span class="grip" title="Drag to re-order">⋮⋮</span><span class="dot" style="background:${a.color}"></span><span class="sqname">${esc(a.name)}</span>${a.hp?(r?`<label class="chk" style="padding:0" title="Hold point after this activity"><input type="checkbox" data-rhp="${id}|${aid}" ${hpOn?'checked':''}><span class="hptag">◆ HP</span></label>`:'<span class="hptag" title="Followed by a hold point">◆ HP</span>'):''}<button class="btn sm" data-sqmv="${kind}|${id}|${i}|-1" ${i?'':'disabled'}>↑</button><button class="btn sm" data-sqmv="${kind}|${id}|${i}|1" ${i<list.length-1?'':'disabled'}>↓</button><button class="btn sm red" data-sqrm="${kind}|${id}|${i}" title="Remove from the sequence">✕</button></div>`;}).join('')}
-    <div class="row" style="margin-top:6px"><select data-sqadd="${kind}|${id}"><option value="">+ Add an activity to the sequence…</option>${avail.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('')}</select><button class="btn sm" data-sqsort="${kind}|${id}" title="Re-order like the activity library">Sort as library</button></div></div>`;
+    <div class="row" style="margin-top:6px"><div class="sqpick"><input type="search" data-sqq="${kind}|${id}" autocomplete="off" placeholder="+ Add an activity — type to search…"><div class="sqopts">${avail.length?avail.map(a=>`<button type="button" class="sqopt" data-sqpick="${kind}|${id}|${a.id}" data-nm="${esc(normTxt(a.name))}"><span class="dot" style="background:${a.color}"></span>${esc(a.name)}</button>`).join(''):'<div class="sqnone">All activities are already in the sequence</div>'}<div class="sqnone sqnm" hidden>No matching activity</div></div></div><button class="btn sm" data-sqsort="${kind}|${id}" title="Re-order like the activity library">Sort as library</button></div></div>`;
 }
 const st=(r,a)=>(r.st&&r.st[a]&&r.st[a].s)||0;
 const openBlk=(r,a)=>Object.values(S.blockers).filter(b=>b.status==='open'&&b.roomId===r.id&&(a===undefined||b.actId===a));
@@ -489,7 +531,7 @@ function editPeople(fn){saveS(s=>{const l=peopleOf(s);fn(l);s.people=l;});}
 let pending=false,migrating=false;
 const OPEN=new Set();   // keys of <details data-dk> the user has unfolded
 document.addEventListener('toggle',e=>{const d=e.target;if(d.dataset&&d.dataset.dk){if(d.open)OPEN.add(d.dataset.dk);else OPEN.delete(d.dataset.dk);}},true);
-const reopen=root=>root.querySelectorAll('details[data-dk]').forEach(d=>{if(OPEN.has(d.dataset.dk))d.open=true;});
+const reopen=root=>{root.querySelectorAll('details[data-dk]').forEach(d=>{if(OPEN.has(d.dataset.dk))d.open=true;});sqRestore(root);};
 /* Re-renders are batched and run a few ms later, once the focus has settled: typing in a field and
    pressing Tab/Enter saves it without the next field being rebuilt under the cursor. */
 let rT=null;
@@ -997,7 +1039,6 @@ document.addEventListener('change',e=>{
   if(d.floorname){saveS(s=>s.floors.find(f=>f.id===d.floorname).name=t.value.trim()||'Floor');return;}
   if(d.actname){saveS(s=>s.acts.find(a=>a.id===d.actname).name=t.value.trim()||'Activity');return;}
   if(d.actshort){saveS(s=>s.acts.find(a=>a.id===d.actshort).short=t.value.trim());return;}
-  if(d.sqadd!==undefined){if(!t.value)return;const [k,id]=d.sqadd.split('|'),v=t.value;setSeq(k,id,l=>{l.push(v);return l;});return;}
   if(d.actsub!==undefined){saveS(s=>s.acts.find(a=>a.id===d.actsub).sub=t.value);return;}
   if(d.actresp!==undefined){saveS(s=>s.acts.find(a=>a.id===d.actresp).resp=t.value);return;}
   if(d.subname){saveS(s=>{const x=(s.subs||[]).find(y=>y.id===d.subname);if(x)x.name=t.value.trim()||x.name;});return;}
