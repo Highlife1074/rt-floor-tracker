@@ -57,6 +57,9 @@ table.mx{border-collapse:separate;border-spacing:0;font-size:12px}
 .mx thead th{position:sticky;top:0;background:#fff;z-index:2;height:150px;vertical-align:bottom;padding:6px 2px}
 .mx .vt{writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-weight:600;margin:0 auto;display:flex;align-items:center;gap:4px}
 .mx .rh{position:sticky;left:0;background:#fff;z-index:1;padding:4px 10px;min-width:190px;text-align:left;white-space:nowrap}
+.mx .mxck{margin:0 6px 0 0;vertical-align:middle;cursor:pointer}
+.mx tr.msel td.rh{background:var(--acc2)}
+.tytag{display:inline-block;color:#fff;font-size:10px;font-weight:600;padding:0 5px;border-radius:4px;vertical-align:middle;max-width:110px;overflow:hidden;text-overflow:ellipsis}
 .mx thead .rh{z-index:3;vertical-align:bottom}
 .mx a{color:var(--acc);text-decoration:none}
 .mx td.c{width:30px;min-width:30px;height:27px;cursor:pointer;text-align:center;color:#fff;font-weight:800}
@@ -626,9 +629,34 @@ function mxColumns(list){
   const cols=[];order.forEach(id=>{const a=actById(id);if(!a)return;cols.push(a);if(a.hp)cols.push(actById(id+HP));});
   return {order,cols};
 }
+/* Matrix "Room types" mode (admin): tick rooms (Shift+click = range, floor row = whole floor) and give them a type */
+const MX={tmode:false,sel:new Set(),last:null};
+const mxShown=()=>{const l=filtered();return S.settings.floors.flatMap(f=>l.filter(r=>r.floor===f.id));};
+function mxTypeBar(list,tm){
+  const s=S.settings;
+  if(!tm)return `<div class="row noprint" style="margin:0 0 8px"><button class="btn sm" data-act="mxtype" title="Select several rooms and change their room type">🏷 Room types</button></div>`;
+  if(!typeById(PLAN.ttype))PLAN.ttype=(s.types[0]||{}).id||'';const tt=typeById(PLAN.ttype);
+  const ids=new Set(list.map(r=>r.id));[...MX.sel].forEach(id=>{if(!S.rooms[id])MX.sel.delete(id);});
+  const hidden=[...MX.sel].filter(id=>!ids.has(id)).length,n=MX.sel.size;
+  return `<div class="card noprint pedit"><div class="row"><b>🏷 Room types:</b><select data-ptt>${s.types.map(t=>`<option value="${t.id}" ${t.id===PLAN.ttype?'selected':''}>${esc(t.name)}</option>`).join('')}</select>
+    <b>${n}</b> selected${hidden?` <small style="color:var(--mute)">(${hidden} hidden by the filters)</small>`:''}
+    <button class="btn sm pri" data-act="mxassign" ${n?'':'disabled'}>Assign “${esc(tt?tt.name:'')}”</button><button class="btn sm" data-act="mxall" ${list.length?'':'disabled'}>Select all shown</button><button class="btn sm" data-act="mxclear" ${n?'':'disabled'}>Clear</button><button class="btn sm" data-act="mxtype">Close</button></div>
+    <label class="chk" style="margin-top:6px"><input type="checkbox" data-ptseq ${PLAN.tseq?'checked':''}>Also replace the room’s sequence with the template of the new type (statuses already entered are kept)</label>
+    <small style="color:var(--mute)">Tick the rooms in the first column · Shift+click selects a range · the floor row ticks the whole floor · use the filters to narrow the list</small></div>`;
+}
+document.addEventListener('click',e=>{
+  const c=e.target.closest&&e.target.closest('[data-mxsel],[data-mxfl]');if(!c)return;
+  const shown=mxShown();
+  if(c.dataset.mxfl){const rs=shown.filter(r=>r.floor===c.dataset.mxfl);rs.forEach(r=>c.checked?MX.sel.add(r.id):MX.sel.delete(r.id));render();return;}
+  const id=c.dataset.mxsel,ids=shown.map(r=>r.id),i=ids.indexOf(id),j=ids.indexOf(MX.last);
+  if(e.shiftKey&&j>=0&&i>=0)ids.slice(Math.min(i,j),Math.max(i,j)+1).forEach(x=>c.checked?MX.sel.add(x):MX.sel.delete(x));
+  else c.checked?MX.sel.add(id):MX.sel.delete(id);
+  MX.last=id;render();
+});
 function vMatrix(){
-  const s=S.settings,list=filtered(),seq=F.mx==='seq';
+  const s=S.settings,list=filtered(),seq=F.mx==='seq',tm=MX.tmode&&isAdmin();
   let h=filterBar('matrix');
+  if(isAdmin())h+=mxTypeBar(list,tm);
   const lg=`<span><i class="sq" style="background:var(--done);border:0"></i>Done</span><span><i class="sq" style="background:var(--wip);border:0"></i>In progress</span><span><i class="sq"></i>To do</span><span><i class="sq" style="background:var(--blk);border:0"></i>Blocked</span><span>◆ Hold point: <i class="sq" style="background:var(--hp);border:0"></i>requested · <i class="sq" style="background:var(--done);border:0"></i>released</span>`;
   h+=`<div class="legend noprint">${lg}${seq?'<span>Each row reads left → right in the room’s own sequence (activity short codes)</span>':`<span>Number = step of the activity in the room’s sequence</span><span><i class="sq" style="background:linear-gradient(225deg,#7e57c2 6px,#fff 6px)"></i>done in a different order than the columns</span><span>Columns: ${F.type!=='all'?'sequence of the “'+esc(typeById(F.type)?.name||'')+'” template':'dominant order of the rooms shown'}</span>`}<span><b>Click a cell</b> to set To do / WIP / Done</span></div>`;
   h+=`<div class="printonly"><h2>${esc(s.project)} — Status matrix (${seq?'by sequence':'by activity'}) — ${fmtLong(today())}</h2></div>`;
@@ -641,10 +669,10 @@ function vMatrix(){
   h+=`<th><div class="${seq?'':'vt'}">Progress</div></th></tr></thead><tbody>`;
   s.floors.forEach(f=>{
     const rs=list.filter(r=>r.floor===f.id);if(!rs.length)return;
-    h+=`<tr class="fl"><td class="rh">${esc(f.name)}</td><td colspan="${nCols+2}"></td></tr>`;
+    h+=`<tr class="fl"><td class="rh">${tm?`<input type="checkbox" class="mxck" data-mxfl="${f.id}" ${rs.every(r=>MX.sel.has(r.id))?'checked':''} title="Select all the rooms of this floor shown">`:''}${esc(f.name)}</td><td colspan="${nCols+2}"></td></tr>`;
     rs.forEach(r=>{
       const bl=openBlk(r),ra=roomActs(r),q=cleanSeq(r.acts);
-      h+=`<tr><td class="rh"><a href="#" tabindex="-1" data-room="${r.id}"><b>${esc(r.code)}</b></a> <span style="color:var(--mute)">${esc(r.name)}</span>${bl.length?` <span class="badge red">⚠${bl.length}</span>`:''}</td><td class="cmt"><input data-hold data-rnote="${r.id}" value="${esc((r.note||'').replace(/\n/g,' · '))}" placeholder="${isRO()?'':'Add a comment…'}" title="${esc(r.note||'')}" ${isRO()?'readonly':''}></td>`;
+      h+=`<tr class="${tm&&MX.sel.has(r.id)?'msel':''}"><td class="rh">${tm?`<input type="checkbox" class="mxck" data-mxsel="${r.id}" ${MX.sel.has(r.id)?'checked':''}>`:''}<a href="#" tabindex="-1" data-room="${r.id}"><b>${esc(r.code)}</b></a> <span style="color:var(--mute)">${esc(r.name)}</span>${tm?` <span class="tytag" style="background:${typeCol(r.type)}">${esc((typeById(r.type)||{}).name||'No type')}</span>`:''}${bl.length?` <span class="badge red">⚠${bl.length}</span>`:''}</td><td class="cmt"><input data-hold data-rnote="${r.id}" value="${esc((r.note||'').replace(/\n/g,' · '))}" placeholder="${isRO()?'':'Add a comment…'}" title="${esc(r.note||'')}" ${isRO()?'readonly':''}></td>`;
       const cell=(a,extra,inner,tipStep)=>{const sv=st(r,a.id),b=bl.some(x=>x.actId===a.id),g=asg(r,a.id);
         return `<td class="c s${sv} ${a.isHp?'hp':''} ${b?'b':''} ${F.next===a.id?'hl':''} ${extra}" data-cell="${r.id}|${a.id}" title="${esc(r.code+' · '+tipStep+a.name+' · '+(b?'BLOCKED':lbl(a.id,sv))+(g.sub&&!a.isHp?' · '+subName(g.sub):'')+(g.resp?' · '+g.resp:''))}">${b?'!':inner}</td>`;};
       if(seq){
@@ -1471,15 +1499,19 @@ document.addEventListener('keydown',e=>{
 /* ---- room types on the plan ---- */
 const TYPE_COLS=['#1e88e5','#e53935','#43a047','#fb8c00','#8e24aa','#00897b','#6d4c41','#d81b60','#3949ab','#c0ca33','#5d4037','#00acc1','#f4511e','#7cb342'];
 const typeCol=id=>{const i=S.settings.types.findIndex(t=>t.id===id);return i<0?'#9e9e9e':TYPE_COLS[i%TYPE_COLS.length];};
-function assignType(ids){
+function assignType(ids,sel=PLAN.msel){
   const t=typeById(PLAN.ttype);if(!t||roBlock())return;
   const rs=ids.map(id=>S.rooms[id]).filter(r=>r&&r.type!==t.id);if(!rs.length)return;
   const up=r=>PLAN.tseq?{type:t.id,acts:[...t.acts]}:{type:t.id};
   if(rs.length===1)return store.patchRoom(rs[0].id,up(rs[0]));
   if(!confirm(`Give the type “${t.name}” to ${rs.length} rooms?${PLAN.tseq?'\n\nTheir sequence is replaced with the template of this type (statuses already entered are kept).':''}`))return;
-  PLAN.msel.clear();return store.addRooms(rs.map(r=>({...r,...up(r)})));
+  sel.clear();return store.addRooms(rs.map(r=>({...r,...up(r)})));
 }
 Object.assign(ACT,{
+  mxtype:()=>{MX.tmode=!MX.tmode;MX.sel.clear();MX.last=null;render();},
+  mxall:()=>{mxShown().forEach(r=>MX.sel.add(r.id));render();},
+  mxclear:()=>{MX.sel.clear();MX.last=null;render();},
+  mxassign:async()=>{await assignType([...MX.sel],MX.sel);MX.sel.clear();render();},
   pdraw:()=>{PLAN.draw=!PLAN.draw;PLAN.cur=[];PLAN.lsel=null;PLAN.place=null;render();},
   pdrawend:drawFinish,
   plinedel:()=>{if(!PLAN.lsel||!confirm('Delete this limit?'))return;store.patchPlan(PLAN.pid,{['lines.'+PLAN.lsel]:null});PLAN.lsel=null;},
