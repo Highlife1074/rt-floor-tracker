@@ -66,6 +66,8 @@ table.mx{border-collapse:separate;border-spacing:0;font-size:12px}
 .mx td.c.hp.s0::after{content:'';display:inline-block;width:12px;height:12px;border:1.5px solid #c5cad4;border-radius:3px;vertical-align:middle}
 .mx td.c.s1{background:var(--wip)}.mx td.c.s2{background:var(--done)}.mx td.c.b{background:var(--blk)}.mx td.c.b::after{display:none}
 .mx td.na{background:repeating-linear-gradient(45deg,#f6f7f9,#f6f7f9 4px,#eceef2 4px,#eceef2 8px)}
+.mx tr.tg td{background:#f7f8fa;font-size:12px;font-weight:600;color:var(--mute);padding:3px 10px 3px 22px}
+.mx tr.tg td.rh .sq{vertical-align:middle}
 .mx tr.fl td{background:var(--acc2);font-weight:700;padding:6px 10px}
 .mx .hl{box-shadow:inset 0 0 0 2px var(--acc)}
 .mx th.cmt{vertical-align:bottom;text-align:left;font-weight:600;padding:6px 8px;min-width:220px}
@@ -476,7 +478,23 @@ function setStatus(rid,aid,s){
   store.addLog({ts:Date.now(),by:user(),roomId:rid,code:r.code,actId:aid,from:prev,to:s});
   store.patchRoom(rid,{['st.'+aid]:v});
 }
-function saveS(mut){const s=JSON.parse(JSON.stringify(S.settings));mut(s);store.saveSettings(s);}
+/* Levels referenced by rooms or plans but missing from settings.floors (e.g. the settings were overwritten by a
+   stale copy): their rooms and plans still exist but are invisible. Name guessed from the room codes (P2.06 → P2). */
+function missingFloors(s=S.settings){
+  if(!s)return [];const have=new Set((s.floors||[]).map(f=>f.id)),miss={};
+  Object.values(S.rooms||{}).forEach(r=>{if(r.floor&&!have.has(r.floor))(miss[r.floor]=miss[r.floor]||{codes:[],sheets:[]}).codes.push(String(r.code||''));});
+  Object.entries(S.plans||{}).forEach(([id,m])=>{const f=m.floor||id;if(f&&!have.has(f))(miss[f]=miss[f]||{codes:[],sheets:[]}).sheets.push(m.sheet||m.name||'');});
+  return Object.entries(miss).map(([id,o])=>{const c={};o.codes.forEach(x=>{const k=x.split(/[.\s_-]/)[0];if(k)c[k]=(c[k]||0)+1;});
+    const best=Object.entries(c).sort((a,b)=>b[1]-a[1])[0];return {id,name:best?best[0]:(o.sheets[0]||'Recovered level'),rooms:o.codes.length,sheets:o.sheets.length};});
+}
+function saveS(mut){const s=JSON.parse(JSON.stringify(S.settings));mut(s);
+  // never drop a level that still has rooms or plans (protects against saving an out-of-date copy of the settings)
+  missingFloors(s).forEach(f=>s.floors.push({id:f.id,name:f.name}));
+  store.saveSettings(s);}
+function floorRepairBanner(){
+  if(!isAdmin())return '';const m=missingFloors();if(!m.length)return '';
+  return `<div class="card noprint" style="border-color:var(--blk)"><b style="color:var(--blk)">⚠ ${m.length} level(s) missing from the list of floors</b> — their rooms and plans are still in the database but hidden: ${m.map(f=>`<b>${esc(f.name)}</b> (${f.rooms} rooms, ${f.sheets} plan sheet(s))`).join(', ')}. <button class="btn sm pri" data-act="fixfloors">Restore these levels</button></div>`;
+}
 function nextBlkNo(){const m=Math.max(0,...Object.values(S.blockers).map(b=>parseInt(String(b.no||'').replace(/\D/g,''))||0));return 'B-'+String(m+1).padStart(3,'0');}
 
 /* ===================== LOGIN SCREEN ===================== */
@@ -561,7 +579,7 @@ function doRender(){
   const v={overview:vOverview,matrix:vMatrix,plans:vPlans,blockers:vBlockers,weekly:vWeekly,dash:vDash,setup:vSetup}[F.view]||vOverview;
   const fid=ae&&ae.id,pos=ae&&ae.selectionStart;
   const pw=$('#planwrap'),psc=pw&&[pw.scrollLeft,pw.scrollTop];
-  $('#view').innerHTML=v();reopen($('#view'));
+  $('#view').innerHTML=floorRepairBanner()+v();reopen($('#view'));
   const pw2=$('#planwrap');if(pw2&&psc){pw2.scrollLeft=psc[0];pw2.scrollTop=psc[1];}
   if(fid&&(fid==='q'||fid==='bq')){const el=document.getElementById(fid);if(el){el.focus();try{el.setSelectionRange(pos,pos);}catch(e){}}}
   if(drawerRoom)renderDrawer();
@@ -631,7 +649,9 @@ function mxColumns(list){
 }
 /* Matrix "Room types" mode (admin): tick rooms (Shift+click = range, floor row = whole floor) and give them a type */
 const MX={tmode:false,sel:new Set(),last:null};
-const mxShown=()=>{const l=filtered();return S.settings.floors.flatMap(f=>l.filter(r=>r.floor===f.id));};
+/* inside a floor: rooms grouped by room type (order of the templates in Setup), then by code */
+const mxSort=rs=>{const ti=id=>{const i=S.settings.types.findIndex(t=>t.id===id);return i<0?1e6:i;};return [...rs].sort((a,b)=>ti(a.type)-ti(b.type)||byCode(a,b));};
+const mxShown=()=>{const l=filtered();return S.settings.floors.flatMap(f=>mxSort(l.filter(r=>r.floor===f.id)));};
 function mxTypeBar(list,tm){
   const s=S.settings;
   if(!tm)return `<div class="row noprint" style="margin:0 0 8px"><button class="btn sm" data-act="mxtype" title="Select several rooms and change their room type">🏷 Room types</button></div>`;
@@ -647,7 +667,7 @@ function mxTypeBar(list,tm){
 document.addEventListener('click',e=>{
   const c=e.target.closest&&e.target.closest('[data-mxsel],[data-mxfl]');if(!c)return;
   const shown=mxShown();
-  if(c.dataset.mxfl){const rs=shown.filter(r=>r.floor===c.dataset.mxfl);rs.forEach(r=>c.checked?MX.sel.add(r.id):MX.sel.delete(r.id));render();return;}
+  if(c.dataset.mxfl){const [fl,ty]=c.dataset.mxfl.split('|'),rs=shown.filter(r=>r.floor===fl&&(ty===undefined||(r.type||'')===ty));rs.forEach(r=>c.checked?MX.sel.add(r.id):MX.sel.delete(r.id));render();return;}
   const id=c.dataset.mxsel,ids=shown.map(r=>r.id),i=ids.indexOf(id),j=ids.indexOf(MX.last);
   if(e.shiftKey&&j>=0&&i>=0)ids.slice(Math.min(i,j),Math.max(i,j)+1).forEach(x=>c.checked?MX.sel.add(x):MX.sel.delete(x));
   else c.checked?MX.sel.add(id):MX.sel.delete(id);
@@ -668,9 +688,11 @@ function vMatrix(){
         :cols.map(a=>`<th class="${F.next===a.id?'hl':''} ${a.isHp?'hpcol':''}" title="${esc(a.name)}"><div class="vt">${a.isHp?'◆ HP':`<span class="dot" style="background:${a.color}"></span>${esc(a.name)}`}</div></th>`).join('');
   h+=`<th><div class="${seq?'':'vt'}">Progress</div></th></tr></thead><tbody>`;
   s.floors.forEach(f=>{
-    const rs=list.filter(r=>r.floor===f.id);if(!rs.length)return;
+    const rs=mxSort(list.filter(r=>r.floor===f.id));if(!rs.length)return;
     h+=`<tr class="fl"><td class="rh">${tm?`<input type="checkbox" class="mxck" data-mxfl="${f.id}" ${rs.every(r=>MX.sel.has(r.id))?'checked':''} title="Select all the rooms of this floor shown">`:''}${esc(f.name)}</td><td colspan="${nCols+2}"></td></tr>`;
-    rs.forEach(r=>{
+    rs.forEach((r,ri)=>{
+      if(!ri||rs[ri-1].type!==r.type){const g=rs.filter(x=>x.type===r.type),tn=(typeById(r.type)||{}).name||'No type';
+        h+=`<tr class="tg"><td class="rh">${tm?`<input type="checkbox" class="mxck" data-mxfl="${f.id}|${r.type||''}" ${g.every(x=>MX.sel.has(x.id))?'checked':''} title="Select the rooms of this type on this floor">`:''}<i class="sq" style="background:${typeCol(r.type)};border:0"></i> ${esc(tn)} <small>(${g.length})</small></td><td colspan="${nCols+2}"></td></tr>`;}
       const bl=openBlk(r),ra=roomActs(r),q=cleanSeq(r.acts);
       h+=`<tr class="${tm&&MX.sel.has(r.id)?'msel':''}"><td class="rh">${tm?`<input type="checkbox" class="mxck" data-mxsel="${r.id}" ${MX.sel.has(r.id)?'checked':''}>`:''}<a href="#" tabindex="-1" data-room="${r.id}"><b>${esc(r.code)}</b></a> <span style="color:var(--mute)">${esc(r.name)}</span>${tm?` <span class="tytag" style="background:${typeCol(r.type)}">${esc((typeById(r.type)||{}).name||'No type')}</span>`:''}${bl.length?` <span class="badge red">⚠${bl.length}</span>`:''}</td><td class="cmt"><input data-hold data-rnote="${r.id}" value="${esc((r.note||'').replace(/\n/g,' · '))}" placeholder="${isRO()?'':'Add a comment…'}" title="${esc(r.note||'')}" ${isRO()?'readonly':''}></td>`;
       const cell=(a,extra,inner,tipStep)=>{const sv=st(r,a.id),b=bl.some(x=>x.actId===a.id),g=asg(r,a.id);
@@ -998,6 +1020,7 @@ const ACT={
   xlsblk:exportBlk,
   xlsall:exportAll,
   backup:()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify({settings:S.settings,rooms:S.rooms,blockers:S.blockers},null,1)],{type:'application/json'}));a.download=`RT_FloorTracker_backup_${today()}.json`;a.click();},
+  fixfloors:()=>{const m=missingFloors();if(!m.length)return;const s=JSON.parse(JSON.stringify(S.settings));m.forEach(f=>s.floors.push({id:f.id,name:f.name}));store.saveSettings(s);},
   addfloor:()=>saveS(s=>s.floors.push({id:uid('f'),name:'Level '+(s.floors.length+1)})),
   addact:()=>{const n=prompt('Activity name (e.g. Marble polishing):');if(!n)return;saveS(s=>s.acts.push({id:uid('a'),name:n.trim(),short:n.trim().split(/\s+/).map(w=>w[0]).join('').toUpperCase().slice(0,4),color:PALETTE[s.acts.length%PALETTE.length]}));},
   addtype:()=>{const n=prompt('Room type name (e.g. Spa / Pool area):');if(!n)return;saveS(s=>s.types.push({id:uid('t'),name:n.trim(),acts:[]}));},
@@ -1049,7 +1072,7 @@ document.addEventListener('click',e=>{
   if(d.actup||d.actdown){const i=+(d.actup??d.actdown),j=d.actup!==undefined?i-1:i+1;saveS(s=>{[s.acts[i],s.acts[j]]=[s.acts[j],s.acts[i]];});return;}
   if(d.actdel){const a=actById(d.actdel),n=Object.values(S.rooms).filter(r=>(r.acts||[]).includes(a.id)).length;if(!confirm(`Delete activity “${a.name}”?${n?` It is used in ${n} room(s) and will disappear from them.`:''}`))return;saveS(s=>{s.acts=s.acts.filter(x=>x.id!==d.actdel);s.types.forEach(t=>t.acts=t.acts.filter(x=>x!==d.actdel));});return;}
   if(d.typedel){if(!confirm('Delete this room type? Rooms keep their activities.'))return;saveS(s=>s.types=s.types.filter(x=>x.id!==d.typedel));return;}
-  if(d.delfloor){if(Object.values(S.rooms).some(r=>r.floor===d.delfloor))return alert('Move or delete the rooms of this floor first.');if(!confirm('Delete this floor?'))return;saveS(s=>s.floors=s.floors.filter(x=>x.id!==d.delfloor));return;}
+  if(d.delfloor){if(Object.values(S.rooms).some(r=>r.floor===d.delfloor))return alert('Move or delete the rooms of this floor first.');if(sheetsOf(d.delfloor).length)return alert('Remove the plan sheets of this floor first (Plans tab).');if(!confirm('Delete this floor?'))return;saveS(s=>s.floors=s.floors.filter(x=>x.id!==d.delfloor));return;}
   if(d.act&&ACT[d.act])ACT[d.act]();
 });
 let DRAG=null;
