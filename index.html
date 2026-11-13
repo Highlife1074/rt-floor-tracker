@@ -57,12 +57,17 @@ table.mx{border-collapse:separate;border-spacing:0;font-size:12px}
 .mx thead th{position:sticky;top:0;background:#fff;z-index:2;height:150px;vertical-align:bottom;padding:6px 2px}
 .mx .vt{writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-weight:600;margin:0 auto;display:flex;align-items:center;gap:4px}
 .mx .rh{position:sticky;left:0;background:#fff;z-index:1;padding:4px 10px;min-width:190px;text-align:left;white-space:nowrap}
+.mx .mxck{margin:0 6px 0 0;vertical-align:middle;cursor:pointer}
+.mx tr.msel td.rh{background:var(--acc2)}
+.tytag{display:inline-block;color:#fff;font-size:10px;font-weight:600;padding:0 5px;border-radius:4px;vertical-align:middle;max-width:110px;overflow:hidden;text-overflow:ellipsis}
 .mx thead .rh{z-index:3;vertical-align:bottom}
 .mx a{color:var(--acc);text-decoration:none}
 .mx td.c{width:30px;min-width:30px;height:27px;cursor:pointer;text-align:center;color:#fff;font-weight:800}
 .mx td.c.hp.s0::after{content:'';display:inline-block;width:12px;height:12px;border:1.5px solid #c5cad4;border-radius:3px;vertical-align:middle}
 .mx td.c.s1{background:var(--wip)}.mx td.c.s2{background:var(--done)}.mx td.c.b{background:var(--blk)}.mx td.c.b::after{display:none}
 .mx td.na{background:repeating-linear-gradient(45deg,#f6f7f9,#f6f7f9 4px,#eceef2 4px,#eceef2 8px)}
+.mx tr.tg td{background:#f7f8fa;font-size:12px;font-weight:600;color:var(--mute);padding:3px 10px 3px 22px}
+.mx tr.tg td.rh .sq{vertical-align:middle}
 .mx tr.fl td{background:var(--acc2);font-weight:700;padding:6px 10px}
 .mx .hl{box-shadow:inset 0 0 0 2px var(--acc)}
 .mx th.cmt{vertical-align:bottom;text-align:left;font-weight:600;padding:6px 8px;min-width:220px}
@@ -154,6 +159,12 @@ input.dt{padding:1px 4px;font-size:11px;border:1px dashed #c5cad4;border-radius:
 body.ro [data-set],body.ro [data-newblk],body.ro [data-closeblk],body.ro .rwonly{display:none!important}
 .seqed{border:1px solid var(--line);border-radius:8px;padding:6px;margin:6px 0 10px;background:#fafbfc}
 .sqrow{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;background:#fff;border:1px solid var(--line);margin-bottom:4px;font-size:13px}
+.sqpick{position:relative;flex:1;min-width:220px}.sqpick input{width:100%}
+.sqopts{display:none;position:absolute;left:0;right:0;top:100%;margin-top:2px;max-height:240px;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.12);z-index:30;padding:3px}
+.sqpick:focus-within .sqopts{display:block}
+.sqopt{display:flex;align-items:center;gap:8px;width:100%;text-align:left;border:0;background:none;font:inherit;font-size:13px;padding:6px 8px;border-radius:6px;cursor:pointer;color:var(--ink)}
+.sqopt:hover{background:#f1f4f8}.sqopt.hi{background:var(--acc2,#e3ecfb)}.sqopt[hidden],.sqnone[hidden]{display:none}
+.sqnone{padding:6px 8px;color:var(--mute);font-size:12px}
 .sqrow.over{border-color:var(--acc);box-shadow:0 0 0 2px var(--acc2)}
 .sqn{width:20px;text-align:right;font-weight:700;color:var(--mute);font-size:12px;flex:none}
 .grip{cursor:grab;color:#b6bcc8;font-size:12px;letter-spacing:-2px;flex:none}
@@ -337,12 +348,48 @@ function asgModal(rid,aid){
   $('#as_x').onclick=closeModal;
   $('#as_ok').onclick=()=>{store.patchRoom(rid,{['asg.'+aid]:{sub:$('#as_sub').value,resp:$('#as_resp').value}});closeModal();};
 }
+/* "Add an activity" picker: alphabetical list filtered as you type (accent/case-insensitive).
+   ↑ ↓ move, Enter adds, Escape clears. Focus + typed text survive the re-render that follows an add. */
+const normTxt=t=>String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+let SQF=null;
+function sqFilter(inp){
+  const box=inp.parentNode.querySelector('.sqopts'),q=normTxt(inp.value).trim().split(/\s+/).filter(Boolean);let first=null;
+  box.querySelectorAll('.sqopt').forEach(o=>{const ok=q.every(w=>o.dataset.nm.includes(w));o.hidden=!ok;o.classList.remove('hi');if(ok&&!first)first=o;});
+  if(first)first.classList.add('hi');
+  const nm=box.querySelector('.sqnm');if(nm)nm.hidden=!!first||!box.querySelector('.sqopt');
+}
+function sqMove(inp,dir){
+  const vis=[...inp.parentNode.querySelectorAll('.sqopt:not([hidden])')];if(!vis.length)return;
+  let i=vis.findIndex(o=>o.classList.contains('hi'));if(i>=0)vis[i].classList.remove('hi');
+  i=Math.max(0,Math.min(vis.length-1,i+dir));vis[i].classList.add('hi');vis[i].scrollIntoView({block:'nearest'});
+}
+function sqPick(btn){
+  const [k,id,aid]=btn.dataset.sqpick.split('|');SQF={key:k+'|'+id,q:''};
+  const inp=btn.closest('.sqpick').querySelector('[data-sqq]');inp.value='';
+  setSeq(k,id,l=>{l.push(aid);return l;});
+}
+function sqRestore(root){
+  if(!SQF)return;const ae=document.activeElement;if(ae&&ae!==document.body)return;
+  const inp=root.querySelector(`[data-sqq="${SQF.key}"]`);if(!inp)return;
+  inp.value=SQF.q;inp.focus();sqFilter(inp);
+}
+document.addEventListener('input',e=>{const t=e.target;if(t.dataset&&t.dataset.sqq!==undefined){SQF={key:t.dataset.sqq,q:t.value};sqFilter(t);}});
+document.addEventListener('focusin',e=>{const t=e.target;if(t.dataset&&t.dataset.sqq!==undefined){SQF={key:t.dataset.sqq,q:t.value};sqFilter(t);}});
+document.addEventListener('focusout',e=>{const t=e.target;if(t.dataset&&t.dataset.sqq!==undefined)setTimeout(()=>{if(t.isConnected&&document.activeElement!==t)SQF=null;},0);});
+window.addEventListener('keydown',e=>{
+  const t=e.target;if(!(t.dataset&&t.dataset.sqq!==undefined))return;
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();sqMove(t,e.key==='ArrowDown'?1:-1);}
+  else if(e.key==='Enter'){e.preventDefault();e.stopPropagation();const h=t.parentNode.querySelector('.sqopt.hi:not([hidden])');if(h)sqPick(h);}
+  else if(e.key==='Escape'){e.stopPropagation();e.preventDefault();if(t.value){t.value='';SQF={key:t.dataset.sqq,q:''};sqFilter(t);}else t.blur();}
+},true);
+document.addEventListener('mousedown',e=>{if(e.target.closest&&e.target.closest('.sqopt'))e.preventDefault();});
+document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('.sqopt');if(b){e.stopPropagation();sqPick(b);}},true);
 function setSeq(kind,id,fn){if(kind==='type')saveS(s=>{const t=s.types.find(x=>x.id===id);if(t)t.acts=fn(cleanSeq(t.acts));});else{const r=S.rooms[id];if(r)store.patchRoom(id,{acts:fn(cleanSeq(r.acts))});}}
 function seqEditor(kind,id,list){
-  list=cleanSeq(list);const avail=S.settings.acts.filter(a=>!list.includes(a.id));const r=kind==='room'?S.rooms[id]:null;
+  list=cleanSeq(list);const avail=S.settings.acts.filter(a=>!list.includes(a.id)).sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:'base',numeric:true}));const r=kind==='room'?S.rooms[id]:null;
   return `<div class="seqed">${list.length?'':'<div class="empty" style="padding:6px">No activity yet — add the first one below.</div>'}${list.map((aid,i)=>{const a=actById(aid),hpOn=a.hp&&!(r&&(r.hpOff||[]).includes(aid));
     return `<div class="sqrow" draggable="true" data-sqdrag="${kind}|${id}|${i}"><span class="sqn">${i+1}</span><span class="grip" title="Drag to re-order">⋮⋮</span><span class="dot" style="background:${a.color}"></span><span class="sqname">${esc(a.name)}</span>${a.hp?(r?`<label class="chk" style="padding:0" title="Hold point after this activity"><input type="checkbox" data-rhp="${id}|${aid}" ${hpOn?'checked':''}><span class="hptag">◆ HP</span></label>`:'<span class="hptag" title="Followed by a hold point">◆ HP</span>'):''}<button class="btn sm" data-sqmv="${kind}|${id}|${i}|-1" ${i?'':'disabled'}>↑</button><button class="btn sm" data-sqmv="${kind}|${id}|${i}|1" ${i<list.length-1?'':'disabled'}>↓</button><button class="btn sm red" data-sqrm="${kind}|${id}|${i}" title="Remove from the sequence">✕</button></div>`;}).join('')}
-    <div class="row" style="margin-top:6px"><select data-sqadd="${kind}|${id}"><option value="">+ Add an activity to the sequence…</option>${avail.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('')}</select><button class="btn sm" data-sqsort="${kind}|${id}" title="Re-order like the activity library">Sort as library</button></div></div>`;
+    <div class="row" style="margin-top:6px"><div class="sqpick"><input type="search" data-sqq="${kind}|${id}" autocomplete="off" placeholder="+ Add an activity — type to search…"><div class="sqopts">${avail.length?avail.map(a=>`<button type="button" class="sqopt" data-sqpick="${kind}|${id}|${a.id}" data-nm="${esc(normTxt(a.name))}"><span class="dot" style="background:${a.color}"></span>${esc(a.name)}</button>`).join(''):'<div class="sqnone">All activities are already in the sequence</div>'}<div class="sqnone sqnm" hidden>No matching activity</div></div></div><button class="btn sm" data-sqsort="${kind}|${id}" title="Re-order like the activity library">Sort as library</button></div></div>`;
 }
 const st=(r,a)=>(r.st&&r.st[a]&&r.st[a].s)||0;
 const openBlk=(r,a)=>Object.values(S.blockers).filter(b=>b.status==='open'&&b.roomId===r.id&&(a===undefined||b.actId===a));
@@ -431,7 +478,23 @@ function setStatus(rid,aid,s){
   store.addLog({ts:Date.now(),by:user(),roomId:rid,code:r.code,actId:aid,from:prev,to:s});
   store.patchRoom(rid,{['st.'+aid]:v});
 }
-function saveS(mut){const s=JSON.parse(JSON.stringify(S.settings));mut(s);store.saveSettings(s);}
+/* Levels referenced by rooms or plans but missing from settings.floors (e.g. the settings were overwritten by a
+   stale copy): their rooms and plans still exist but are invisible. Name guessed from the room codes (P2.06 → P2). */
+function missingFloors(s=S.settings){
+  if(!s)return [];const have=new Set((s.floors||[]).map(f=>f.id)),miss={};
+  Object.values(S.rooms||{}).forEach(r=>{if(r.floor&&!have.has(r.floor))(miss[r.floor]=miss[r.floor]||{codes:[],sheets:[]}).codes.push(String(r.code||''));});
+  Object.entries(S.plans||{}).forEach(([id,m])=>{const f=m.floor||id;if(f&&!have.has(f))(miss[f]=miss[f]||{codes:[],sheets:[]}).sheets.push(m.sheet||m.name||'');});
+  return Object.entries(miss).map(([id,o])=>{const c={};o.codes.forEach(x=>{const k=x.split(/[.\s_-]/)[0];if(k)c[k]=(c[k]||0)+1;});
+    const best=Object.entries(c).sort((a,b)=>b[1]-a[1])[0];return {id,name:best?best[0]:(o.sheets[0]||'Recovered level'),rooms:o.codes.length,sheets:o.sheets.length};});
+}
+function saveS(mut){const s=JSON.parse(JSON.stringify(S.settings));mut(s);
+  // never drop a level that still has rooms or plans (protects against saving an out-of-date copy of the settings)
+  missingFloors(s).forEach(f=>s.floors.push({id:f.id,name:f.name}));
+  store.saveSettings(s);}
+function floorRepairBanner(){
+  if(!isAdmin())return '';const m=missingFloors();if(!m.length)return '';
+  return `<div class="card noprint" style="border-color:var(--blk)"><b style="color:var(--blk)">⚠ ${m.length} level(s) missing from the list of floors</b> — their rooms and plans are still in the database but hidden: ${m.map(f=>`<b>${esc(f.name)}</b> (${f.rooms} rooms, ${f.sheets} plan sheet(s))`).join(', ')}. <button class="btn sm pri" data-act="fixfloors">Restore these levels</button></div>`;
+}
 function nextBlkNo(){const m=Math.max(0,...Object.values(S.blockers).map(b=>parseInt(String(b.no||'').replace(/\D/g,''))||0));return 'B-'+String(m+1).padStart(3,'0');}
 
 /* ===================== LOGIN SCREEN ===================== */
@@ -489,7 +552,7 @@ function editPeople(fn){saveS(s=>{const l=peopleOf(s);fn(l);s.people=l;});}
 let pending=false,migrating=false;
 const OPEN=new Set();   // keys of <details data-dk> the user has unfolded
 document.addEventListener('toggle',e=>{const d=e.target;if(d.dataset&&d.dataset.dk){if(d.open)OPEN.add(d.dataset.dk);else OPEN.delete(d.dataset.dk);}},true);
-const reopen=root=>root.querySelectorAll('details[data-dk]').forEach(d=>{if(OPEN.has(d.dataset.dk))d.open=true;});
+const reopen=root=>{root.querySelectorAll('details[data-dk]').forEach(d=>{if(OPEN.has(d.dataset.dk))d.open=true;});sqRestore(root);};
 /* Re-renders are batched and run a few ms later, once the focus has settled: typing in a field and
    pressing Tab/Enter saves it without the next field being rebuilt under the cursor. */
 let rT=null;
@@ -516,7 +579,7 @@ function doRender(){
   const v={overview:vOverview,matrix:vMatrix,plans:vPlans,blockers:vBlockers,weekly:vWeekly,dash:vDash,setup:vSetup}[F.view]||vOverview;
   const fid=ae&&ae.id,pos=ae&&ae.selectionStart;
   const pw=$('#planwrap'),psc=pw&&[pw.scrollLeft,pw.scrollTop];
-  $('#view').innerHTML=v();reopen($('#view'));
+  $('#view').innerHTML=floorRepairBanner()+v();reopen($('#view'));
   const pw2=$('#planwrap');if(pw2&&psc){pw2.scrollLeft=psc[0];pw2.scrollTop=psc[1];}
   if(fid&&(fid==='q'||fid==='bq')){const el=document.getElementById(fid);if(el){el.focus();try{el.setSelectionRange(pos,pos);}catch(e){}}}
   if(drawerRoom)renderDrawer();
@@ -584,9 +647,36 @@ function mxColumns(list){
   const cols=[];order.forEach(id=>{const a=actById(id);if(!a)return;cols.push(a);if(a.hp)cols.push(actById(id+HP));});
   return {order,cols};
 }
+/* Matrix "Room types" mode (admin): tick rooms (Shift+click = range, floor row = whole floor) and give them a type */
+const MX={tmode:false,sel:new Set(),last:null};
+/* inside a floor: rooms grouped by room type (order of the templates in Setup), then by code */
+const mxSort=rs=>{const ti=id=>{const i=S.settings.types.findIndex(t=>t.id===id);return i<0?1e6:i;};return [...rs].sort((a,b)=>ti(a.type)-ti(b.type)||byCode(a,b));};
+const mxShown=()=>{const l=filtered();return S.settings.floors.flatMap(f=>mxSort(l.filter(r=>r.floor===f.id)));};
+function mxTypeBar(list,tm){
+  const s=S.settings;
+  if(!tm)return `<div class="row noprint" style="margin:0 0 8px"><button class="btn sm" data-act="mxtype" title="Select several rooms and change their room type">🏷 Room types</button></div>`;
+  if(!typeById(PLAN.ttype))PLAN.ttype=(s.types[0]||{}).id||'';const tt=typeById(PLAN.ttype);
+  const ids=new Set(list.map(r=>r.id));[...MX.sel].forEach(id=>{if(!S.rooms[id])MX.sel.delete(id);});
+  const hidden=[...MX.sel].filter(id=>!ids.has(id)).length,n=MX.sel.size;
+  return `<div class="card noprint pedit"><div class="row"><b>🏷 Room types:</b><select data-ptt>${s.types.map(t=>`<option value="${t.id}" ${t.id===PLAN.ttype?'selected':''}>${esc(t.name)}</option>`).join('')}</select>
+    <b>${n}</b> selected${hidden?` <small style="color:var(--mute)">(${hidden} hidden by the filters)</small>`:''}
+    <button class="btn sm pri" data-act="mxassign" ${n?'':'disabled'}>Assign “${esc(tt?tt.name:'')}”</button><button class="btn sm" data-act="mxall" ${list.length?'':'disabled'}>Select all shown</button><button class="btn sm" data-act="mxclear" ${n?'':'disabled'}>Clear</button><button class="btn sm" data-act="mxtype">Close</button></div>
+    <label class="chk" style="margin-top:6px"><input type="checkbox" data-ptseq ${PLAN.tseq?'checked':''}>Also replace the room’s sequence with the template of the new type (statuses already entered are kept)</label>
+    <small style="color:var(--mute)">Tick the rooms in the first column · Shift+click selects a range · the floor row ticks the whole floor · use the filters to narrow the list</small></div>`;
+}
+document.addEventListener('click',e=>{
+  const c=e.target.closest&&e.target.closest('[data-mxsel],[data-mxfl]');if(!c)return;
+  const shown=mxShown();
+  if(c.dataset.mxfl){const [fl,ty]=c.dataset.mxfl.split('|'),rs=shown.filter(r=>r.floor===fl&&(ty===undefined||(r.type||'')===ty));rs.forEach(r=>c.checked?MX.sel.add(r.id):MX.sel.delete(r.id));render();return;}
+  const id=c.dataset.mxsel,ids=shown.map(r=>r.id),i=ids.indexOf(id),j=ids.indexOf(MX.last);
+  if(e.shiftKey&&j>=0&&i>=0)ids.slice(Math.min(i,j),Math.max(i,j)+1).forEach(x=>c.checked?MX.sel.add(x):MX.sel.delete(x));
+  else c.checked?MX.sel.add(id):MX.sel.delete(id);
+  MX.last=id;render();
+});
 function vMatrix(){
-  const s=S.settings,list=filtered(),seq=F.mx==='seq';
+  const s=S.settings,list=filtered(),seq=F.mx==='seq',tm=MX.tmode&&isAdmin();
   let h=filterBar('matrix');
+  if(isAdmin())h+=mxTypeBar(list,tm);
   const lg=`<span><i class="sq" style="background:var(--done);border:0"></i>Done</span><span><i class="sq" style="background:var(--wip);border:0"></i>In progress</span><span><i class="sq"></i>To do</span><span><i class="sq" style="background:var(--blk);border:0"></i>Blocked</span><span>◆ Hold point: <i class="sq" style="background:var(--hp);border:0"></i>requested · <i class="sq" style="background:var(--done);border:0"></i>released</span>`;
   h+=`<div class="legend noprint">${lg}${seq?'<span>Each row reads left → right in the room’s own sequence (activity short codes)</span>':`<span>Number = step of the activity in the room’s sequence</span><span><i class="sq" style="background:linear-gradient(225deg,#7e57c2 6px,#fff 6px)"></i>done in a different order than the columns</span><span>Columns: ${F.type!=='all'?'sequence of the “'+esc(typeById(F.type)?.name||'')+'” template':'dominant order of the rooms shown'}</span>`}<span><b>Click a cell</b> to set To do / WIP / Done</span></div>`;
   h+=`<div class="printonly"><h2>${esc(s.project)} — Status matrix (${seq?'by sequence':'by activity'}) — ${fmtLong(today())}</h2></div>`;
@@ -598,11 +688,13 @@ function vMatrix(){
         :cols.map(a=>`<th class="${F.next===a.id?'hl':''} ${a.isHp?'hpcol':''}" title="${esc(a.name)}"><div class="vt">${a.isHp?'◆ HP':`<span class="dot" style="background:${a.color}"></span>${esc(a.name)}`}</div></th>`).join('');
   h+=`<th><div class="${seq?'':'vt'}">Progress</div></th></tr></thead><tbody>`;
   s.floors.forEach(f=>{
-    const rs=list.filter(r=>r.floor===f.id);if(!rs.length)return;
-    h+=`<tr class="fl"><td class="rh">${esc(f.name)}</td><td colspan="${nCols+2}"></td></tr>`;
-    rs.forEach(r=>{
+    const rs=mxSort(list.filter(r=>r.floor===f.id));if(!rs.length)return;
+    h+=`<tr class="fl"><td class="rh">${tm?`<input type="checkbox" class="mxck" data-mxfl="${f.id}" ${rs.every(r=>MX.sel.has(r.id))?'checked':''} title="Select all the rooms of this floor shown">`:''}${esc(f.name)}</td><td colspan="${nCols+2}"></td></tr>`;
+    rs.forEach((r,ri)=>{
+      if(!ri||rs[ri-1].type!==r.type){const g=rs.filter(x=>x.type===r.type),tn=(typeById(r.type)||{}).name||'No type';
+        h+=`<tr class="tg"><td class="rh">${tm?`<input type="checkbox" class="mxck" data-mxfl="${f.id}|${r.type||''}" ${g.every(x=>MX.sel.has(x.id))?'checked':''} title="Select the rooms of this type on this floor">`:''}<i class="sq" style="background:${typeCol(r.type)};border:0"></i> ${esc(tn)} <small>(${g.length})</small></td><td colspan="${nCols+2}"></td></tr>`;}
       const bl=openBlk(r),ra=roomActs(r),q=cleanSeq(r.acts);
-      h+=`<tr><td class="rh"><a href="#" tabindex="-1" data-room="${r.id}"><b>${esc(r.code)}</b></a> <span style="color:var(--mute)">${esc(r.name)}</span>${bl.length?` <span class="badge red">⚠${bl.length}</span>`:''}</td><td class="cmt"><input data-hold data-rnote="${r.id}" value="${esc((r.note||'').replace(/\n/g,' · '))}" placeholder="${isRO()?'':'Add a comment…'}" title="${esc(r.note||'')}" ${isRO()?'readonly':''}></td>`;
+      h+=`<tr class="${tm&&MX.sel.has(r.id)?'msel':''}"><td class="rh">${tm?`<input type="checkbox" class="mxck" data-mxsel="${r.id}" ${MX.sel.has(r.id)?'checked':''}>`:''}<a href="#" tabindex="-1" data-room="${r.id}"><b>${esc(r.code)}</b></a> <span style="color:var(--mute)">${esc(r.name)}</span>${tm?` <span class="tytag" style="background:${typeCol(r.type)}">${esc((typeById(r.type)||{}).name||'No type')}</span>`:''}${bl.length?` <span class="badge red">⚠${bl.length}</span>`:''}</td><td class="cmt"><input data-hold data-rnote="${r.id}" value="${esc((r.note||'').replace(/\n/g,' · '))}" placeholder="${isRO()?'':'Add a comment…'}" title="${esc(r.note||'')}" ${isRO()?'readonly':''}></td>`;
       const cell=(a,extra,inner,tipStep)=>{const sv=st(r,a.id),b=bl.some(x=>x.actId===a.id),g=asg(r,a.id);
         return `<td class="c s${sv} ${a.isHp?'hp':''} ${b?'b':''} ${F.next===a.id?'hl':''} ${extra}" data-cell="${r.id}|${a.id}" title="${esc(r.code+' · '+tipStep+a.name+' · '+(b?'BLOCKED':lbl(a.id,sv))+(g.sub&&!a.isHp?' · '+subName(g.sub):'')+(g.resp?' · '+g.resp:''))}">${b?'!':inner}</td>`;};
       if(seq){
@@ -928,6 +1020,7 @@ const ACT={
   xlsblk:exportBlk,
   xlsall:exportAll,
   backup:()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify({settings:S.settings,rooms:S.rooms,blockers:S.blockers},null,1)],{type:'application/json'}));a.download=`RT_FloorTracker_backup_${today()}.json`;a.click();},
+  fixfloors:()=>{const m=missingFloors();if(!m.length)return;const s=JSON.parse(JSON.stringify(S.settings));m.forEach(f=>s.floors.push({id:f.id,name:f.name}));store.saveSettings(s);},
   addfloor:()=>saveS(s=>s.floors.push({id:uid('f'),name:'Level '+(s.floors.length+1)})),
   addact:()=>{const n=prompt('Activity name (e.g. Marble polishing):');if(!n)return;saveS(s=>s.acts.push({id:uid('a'),name:n.trim(),short:n.trim().split(/\s+/).map(w=>w[0]).join('').toUpperCase().slice(0,4),color:PALETTE[s.acts.length%PALETTE.length]}));},
   addtype:()=>{const n=prompt('Room type name (e.g. Spa / Pool area):');if(!n)return;saveS(s=>s.types.push({id:uid('t'),name:n.trim(),acts:[]}));},
@@ -979,7 +1072,7 @@ document.addEventListener('click',e=>{
   if(d.actup||d.actdown){const i=+(d.actup??d.actdown),j=d.actup!==undefined?i-1:i+1;saveS(s=>{[s.acts[i],s.acts[j]]=[s.acts[j],s.acts[i]];});return;}
   if(d.actdel){const a=actById(d.actdel),n=Object.values(S.rooms).filter(r=>(r.acts||[]).includes(a.id)).length;if(!confirm(`Delete activity “${a.name}”?${n?` It is used in ${n} room(s) and will disappear from them.`:''}`))return;saveS(s=>{s.acts=s.acts.filter(x=>x.id!==d.actdel);s.types.forEach(t=>t.acts=t.acts.filter(x=>x!==d.actdel));});return;}
   if(d.typedel){if(!confirm('Delete this room type? Rooms keep their activities.'))return;saveS(s=>s.types=s.types.filter(x=>x.id!==d.typedel));return;}
-  if(d.delfloor){if(Object.values(S.rooms).some(r=>r.floor===d.delfloor))return alert('Move or delete the rooms of this floor first.');if(!confirm('Delete this floor?'))return;saveS(s=>s.floors=s.floors.filter(x=>x.id!==d.delfloor));return;}
+  if(d.delfloor){if(Object.values(S.rooms).some(r=>r.floor===d.delfloor))return alert('Move or delete the rooms of this floor first.');if(sheetsOf(d.delfloor).length)return alert('Remove the plan sheets of this floor first (Plans tab).');if(!confirm('Delete this floor?'))return;saveS(s=>s.floors=s.floors.filter(x=>x.id!==d.delfloor));return;}
   if(d.act&&ACT[d.act])ACT[d.act]();
 });
 let DRAG=null;
@@ -997,7 +1090,6 @@ document.addEventListener('change',e=>{
   if(d.floorname){saveS(s=>s.floors.find(f=>f.id===d.floorname).name=t.value.trim()||'Floor');return;}
   if(d.actname){saveS(s=>s.acts.find(a=>a.id===d.actname).name=t.value.trim()||'Activity');return;}
   if(d.actshort){saveS(s=>s.acts.find(a=>a.id===d.actshort).short=t.value.trim());return;}
-  if(d.sqadd!==undefined){if(!t.value)return;const [k,id]=d.sqadd.split('|'),v=t.value;setSeq(k,id,l=>{l.push(v);return l;});return;}
   if(d.actsub!==undefined){saveS(s=>s.acts.find(a=>a.id===d.actsub).sub=t.value);return;}
   if(d.actresp!==undefined){saveS(s=>s.acts.find(a=>a.id===d.actresp).resp=t.value);return;}
   if(d.subname){saveS(s=>{const x=(s.subs||[]).find(y=>y.id===d.subname);if(x)x.name=t.value.trim()||x.name;});return;}
@@ -1430,15 +1522,19 @@ document.addEventListener('keydown',e=>{
 /* ---- room types on the plan ---- */
 const TYPE_COLS=['#1e88e5','#e53935','#43a047','#fb8c00','#8e24aa','#00897b','#6d4c41','#d81b60','#3949ab','#c0ca33','#5d4037','#00acc1','#f4511e','#7cb342'];
 const typeCol=id=>{const i=S.settings.types.findIndex(t=>t.id===id);return i<0?'#9e9e9e':TYPE_COLS[i%TYPE_COLS.length];};
-function assignType(ids){
+function assignType(ids,sel=PLAN.msel){
   const t=typeById(PLAN.ttype);if(!t||roBlock())return;
   const rs=ids.map(id=>S.rooms[id]).filter(r=>r&&r.type!==t.id);if(!rs.length)return;
   const up=r=>PLAN.tseq?{type:t.id,acts:[...t.acts]}:{type:t.id};
   if(rs.length===1)return store.patchRoom(rs[0].id,up(rs[0]));
   if(!confirm(`Give the type “${t.name}” to ${rs.length} rooms?${PLAN.tseq?'\n\nTheir sequence is replaced with the template of this type (statuses already entered are kept).':''}`))return;
-  PLAN.msel.clear();return store.addRooms(rs.map(r=>({...r,...up(r)})));
+  sel.clear();return store.addRooms(rs.map(r=>({...r,...up(r)})));
 }
 Object.assign(ACT,{
+  mxtype:()=>{MX.tmode=!MX.tmode;MX.sel.clear();MX.last=null;render();},
+  mxall:()=>{mxShown().forEach(r=>MX.sel.add(r.id));render();},
+  mxclear:()=>{MX.sel.clear();MX.last=null;render();},
+  mxassign:async()=>{await assignType([...MX.sel],MX.sel);MX.sel.clear();render();},
   pdraw:()=>{PLAN.draw=!PLAN.draw;PLAN.cur=[];PLAN.lsel=null;PLAN.place=null;render();},
   pdrawend:drawFinish,
   plinedel:()=>{if(!PLAN.lsel||!confirm('Delete this limit?'))return;store.patchPlan(PLAN.pid,{['lines.'+PLAN.lsel]:null});PLAN.lsel=null;},
