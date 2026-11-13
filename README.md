@@ -31,6 +31,8 @@ Stored per sheet in `ft_plans/<sheetId>.lines` (flat [x1,y1,x2,y2…], 0..1).
 **🏷 Room types** (admin): labels coloured by type with a legend; pick a type, then click labels
 to assign it, or Multi-select (click / drag a box / "select all shown") and assign at once. Option:
 replace the room's sequence with the template of the new type (statuses kept).
-The same is available in the **Matrix** tab (admin, "🏷 Room types"): tick rooms in the first column
-(Shift+click = range, floor row = whole floor, "Select all shown" respects the filters) and assign a type.
+**Matrix multi-select** ("☑ Multi-select rooms", editors and admins): tick rooms in the first column
+(Shift+click = range, floor / type rows = whole group, "Select all shown" respects the filters), then set
+the status (To do / WIP / Done, with a date) of one activity in all of them — rooms without that activity are
+skipped — or (admin) assign a room type.
 Storage: `ft_plans/<sheetId>` (floor, sheet, positions) and `ft_planchunks/*` (PDF in 900 kB parts).
