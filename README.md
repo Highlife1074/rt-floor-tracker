@@ -35,4 +35,9 @@ replace the room's sequence with the template of the new type (statuses kept).
 (Shift+click = range, floor / type rows = whole group, "Select all shown" respects the filters), then set
 the status (To do / WIP / Done, with a date) of one activity in all of them — rooms without that activity are
 skipped — or (admin) assign a room type.
+Matrix cells: the pop-up of a cell can **remove** the activity from the room's sequence; an empty (hatched) cell
+offers to **add** it (placed as in the room-type template, else the library order). With multi-select on and the
+room ticked, these apply to all ticked rooms.
+**Plans:** clicking a room label opens a pop-up with all its activities and To do / WIP / Done buttons (read-only
+accounts get the room panel).
 Storage: `ft_plans/<sheetId>` (floor, sheet, positions) and `ft_planchunks/*` (PDF in 900 kB parts).
