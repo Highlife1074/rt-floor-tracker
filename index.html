@@ -84,6 +84,14 @@ table.mx{border-collapse:separate;border-spacing:0;font-size:12px}
 .mx td.c.cq::after,.mx td.c.cq.hp.s0::after{display:none!important}.mx td.c.cq.s1,.mx td.c.cq.s2,.mx td.c.cq.b{color:#fff}
 .mx.seq thead th{height:auto;padding:8px 2px;font-size:11px;color:var(--mute)}
 .mx td.empty{background:#fafbfc}
+#pop.wide{max-width:min(380px,calc(100vw - 16px));width:380px}
+.rpop{max-height:min(55vh,420px);overflow:auto;margin:0 -4px;padding:0 4px}
+.rprow{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--line);font-size:12px}
+.rprow.blk{background:#fdeeee}
+.rpn .dot{margin-right:6px;vertical-align:middle}.rpn .hptag{margin-right:4px}
+.rpn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rprow .seg button{padding:3px 7px;font-size:11px}
+.mx td.na[data-na]{cursor:pointer}.mx td.na[data-na]:hover{box-shadow:inset 0 0 0 2px var(--acc)}
 #pop{position:fixed;z-index:40;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:10px;display:none;max-width:300px}
 #pop.open{display:block}
 .heat{text-align:center;font-weight:600;font-size:12px;padding:6px 4px}
@@ -592,6 +600,7 @@ function doRender(){
   LASTVIEW=sv;
   if(fid&&(fid==='q'||fid==='bq')){const el=document.getElementById(fid);if(el){el.focus();try{el.setSelectionRange(pos,pos);}catch(e){}}}
   if(drawerRoom)renderDrawer();
+  refreshPop();
   setTimeout(ensureSnapshots,0);
 }
 document.addEventListener('focusout',()=>{if(pending){pending=false;setTimeout(render,0);}});
@@ -738,7 +747,7 @@ function vMatrix(){
       }else{
         const ranked=[...q].sort((x,y)=>order.indexOf(x)-order.indexOf(y));
         cols.forEach(a=>{
-          if(!ra.includes(a.id)){h+=`<td class="na ${F.next===a.id?'hl':''}"></td>`;return;}
+          if(!ra.includes(a.id)){h+=`<td class="na ${F.next===a.id?'hl':''}" ${a.isHp||isRO()?'':`data-na="${r.id}|${a.id}" title="${esc(r.code)} · ${esc(a.name)}: not in this room — click to add it"`}></td>`;return;}
           if(a.isHp){h+=cell(a,'','','');return;}
           const k=q.indexOf(a.id),oo=ranked.indexOf(a.id)!==k;
           h+=cell(a,oo?'oo':'',`<span class="sn">${k+1}</span>`,`step ${k+1}${oo?' (different order)':''} · `);
@@ -753,15 +762,48 @@ function vMatrix(){
 }
 
 /* Click on a matrix cell: small chooser To do / WIP / Done right at the cell */
-function openPop(td,rid,aid){
-  const r=S.rooms[rid],a=actById(aid),sv=st(r,aid),w=a.isHp?['Pending','Requested','Released']:['To do','WIP','Done'],p=$('#pop');
-  p.innerHTML=`<div style="font-size:12px;margin-bottom:8px"><b>${esc(r.code)}</b> ${esc(r.name)}<br><span style="color:var(--mute)">${esc(a.name)}</span></div><div class="seg">${[0,1,2].map(k=>`<button class="${sv===k?'on'+k:''} ${a.isHp?'hpb':''}" data-set="${rid}|${aid}|${k}">${w[k]}</button>`).join('')}</div><div class="row" style="margin-top:8px"><button class="btn sm" data-newblk="${rid}|${aid}">⚠ Blocker</button><button class="btn sm" data-room="${rid}">Open room</button></div>`;
-  p.classList.add('open');const b=td.getBoundingClientRect(),pw=p.offsetWidth,ph=p.offsetHeight;
+function placePop(el){
+  const p=$('#pop');p.classList.add('open');const b=el.getBoundingClientRect(),pw=p.offsetWidth,ph=p.offsetHeight;
   let x=Math.min(b.left,innerWidth-pw-8),y=b.bottom+4;if(y+ph>innerHeight-8)y=b.top-ph-4;
   p.style.left=Math.max(8,x)+'px';p.style.top=Math.max(8,y)+'px';
 }
-const closePop=()=>{const p=$('#pop');if(p)p.classList.remove('open');};
-addEventListener('scroll',closePop,true);
+let POP=null;   // {kind:'room',rid} while the room pop of the plan is open (refreshed after each render)
+function openPop(td,rid,aid){
+  POP=null;$('#pop').classList.remove('wide');
+  const r=S.rooms[rid],a=actById(aid),sv=st(r,aid),w=a.isHp?['Pending','Requested','Released']:['To do','WIP','Done'],p=$('#pop');
+  const multi=MX.tmode&&MX.sel.has(rid)&&MX.sel.size>1;
+  p.innerHTML=`<div style="font-size:12px;margin-bottom:8px"><b>${esc(r.code)}</b> ${esc(r.name)}<br><span style="color:var(--mute)">${esc(a.name)}</span></div><div class="seg">${[0,1,2].map(k=>`<button class="${sv===k?'on'+k:''} ${a.isHp?'hpb':''}" data-set="${rid}|${aid}|${k}">${w[k]}</button>`).join('')}</div><div class="row" style="margin-top:8px"><button class="btn sm" data-newblk="${rid}|${aid}">⚠ Blocker</button><button class="btn sm" data-room="${rid}">Open room</button></div>${a.isHp?'':`<div class="row" style="margin-top:6px"><button class="btn sm red" data-mxrm="${rid}|${aid}" title="Take this activity out of the room's sequence">✕ Remove from ${multi?'the selected rooms':'this room'}</button></div>`}`;
+  placePop(td);
+}
+/* empty cell (activity not in the room's sequence): offer to add it */
+function openNaPop(td,rid,aid){
+  POP=null;$('#pop').classList.remove('wide');
+  const r=S.rooms[rid],a=actById(aid),multi=MX.tmode&&MX.sel.has(rid)&&MX.sel.size>1;
+  $('#pop').innerHTML=`<div style="font-size:12px;margin-bottom:8px"><b>${esc(r.code)}</b> ${esc(r.name)}<br><span style="color:var(--mute)">${esc(a.name)} is not in this room's sequence</span></div><button class="btn sm pri" data-mxadd="${rid}|${aid}">+ Add to ${multi?'the selected rooms':'this room'}</button>`;
+  placePop(td);
+}
+/* insert an activity in a room sequence at the place it has in the room-type template (else in the library order) */
+function seqWith(r,aid){
+  const l=cleanSeq(r.acts);if(l.includes(aid))return l;const t=typeById(r.type),tl=t?cleanSeq(t.acts):[];
+  const ref=tl.includes(aid)?tl:S.settings.acts.map(a=>a.id),ri=ref.indexOf(aid);
+  let pos=l.findIndex(x=>ref.indexOf(x)>ri);if(pos<0)pos=l.length;l.splice(pos,0,aid);return l;
+}
+function seqEdit(rid,aid,add){
+  if(roBlock())return;const a=actById(aid);if(!a)return;
+  const ids=MX.tmode&&MX.sel.has(rid)&&MX.sel.size>1?[...MX.sel]:[rid];
+  const rs=ids.map(id=>S.rooms[id]).filter(r=>r&&(add?!roomActs(r).includes(aid):roomActs(r).includes(aid)));
+  if(!rs.length)return alert(add?`“${a.name}” is already in all the selected rooms.`:`None of the selected rooms has “${a.name}”.`);
+  const done=rs.filter(r=>!add&&st(r,aid)>0).length;
+  if(!confirm(`${add?'Add':'Remove'} “${a.name}” ${add?'to':'from'} the sequence of ${rs.length===1?'room '+rs[0].code:rs.length+' rooms'}?${done?`\n\n${done} of them already have a status for this activity: it is no longer counted (it comes back if the activity is added again).`:''}`))return;
+  rs.forEach(r=>store.patchRoom(r.id,{acts:add?seqWith(r,aid):cleanSeq(r.acts).filter(x=>x!==aid)}));
+}
+document.addEventListener('click',e=>{
+  const n=e.target.closest&&e.target.closest('[data-na],[data-mxrm],[data-mxadd]');if(!n)return;const d=n.dataset;
+  if(d.na){const [rid,aid]=d.na.split('|');setTimeout(()=>openNaPop(n,rid,aid),0);return;}
+  closePop();const [rid,aid]=(d.mxrm||d.mxadd).split('|');seqEdit(rid,aid,!!d.mxadd);
+});
+const closePop=()=>{const p=$('#pop');if(p)p.classList.remove('open');POP=null;};
+addEventListener('scroll',e=>{const p=$('#pop');if(p&&e.target instanceof Node&&p.contains(e.target))return;closePop();},true);
 
 function blkRows(){
   const t=today();
@@ -1086,7 +1128,7 @@ document.addEventListener('click',e=>{
   const inPop=!!e.target.closest('#pop');if(!inPop)closePop();
   if(planClick(e))return;
   const t=e.target.closest('[data-view],[data-f],[data-closeblk],[data-editblk],[data-newblk],[data-set],[data-cell],[data-room],[data-act],[data-actup],[data-actdown],[data-actdel],[data-typedel],[data-delfloor],[data-gonext],[data-preset],[data-pdel],[data-sqmv],[data-sqrm],[data-sqsort],[data-typecopy],[data-typeren],[data-asg],[data-subdel]');
-  if(!t)return;const d=t.dataset;if(inPop)setTimeout(closePop,0);
+  if(!t)return;const d=t.dataset;if(inPop&&d.keep===undefined)setTimeout(closePop,0);
   if(d.preset){if(confirm(`Reset the PIN of ${d.preset}?\n\nThey will choose a new PIN at their next login.`))store.resetPin(d.preset);return;}
   if(d.pdel){if(!confirm(`Remove ${d.pdel} from the team?\n\nThey will no longer be able to log in. Their past updates stay in the history.`))return;const n=d.pdel;editPeople(l=>{const i=l.findIndex(p=>p.name===n);if(i>=0)l.splice(i,1);});if(S.pins[n])store.resetPin(n);return;}
   if(d.asg){if(roBlock())return;const [rid,aid]=d.asg.split('|');asgModal(rid,aid);return;}
@@ -1444,7 +1486,7 @@ function vPlans(){
   here.forEach(r=>{const p=pins[r.id],n=nextStep(r),a=n&&actById(n),pr=progress(r),bl=openBlk(r);
     const c=PLAN.tmode?typeCol(r.type):F.colorBy==='progress'?heat(pr):(a?(a.isHp?'var(--hp)':a.color):'var(--done)');
     const oth=r.floor!==fid,tip=`${r.code} ${r.name} — ${typeById(r.type)?.name||'no type'}${oth?` — double height, room of ${floorById(r.floor)?.name||'another level'}`:''} — ${pc(pr)}% — ${a?(a.isHp?'Awaiting '+a.name:'Next: '+a.name):'Complete'}${bl.length?` — ⚠ ${bl.length} blocking point(s)`:''}`;
-    h+=`<button class="pin ${bl.length?'blk':''} ${ok(r)?'':'dim'} ${PLAN.sel===r.id&&PLAN.edit?'sel':''} ${PLAN.flash===r.id?'flash':''} ${PLAN.tmode&&PLAN.msel.has(r.id)?'msel':''}" data-pin="${r.id}" ${PLAN.edit||PLAN.tmode?'':`data-room="${r.id}"`} style="left:${p.x*100}%;top:${p.y*100}%;--c:${c}" title="${esc(tip)}">${bl.length?`<i class="pbadge" title="${bl.length} open blocking point(s)">${bl.length}</i>`:''}<b>${oth?'⇕ ':''}${esc(r.code)}${F.colorBy==='progress'?` · ${pc(pr)}%`:''}</b>${shownm&&r.name?`<span class="pn">${esc(r.name)}</span>`:''}</button>`;});
+    h+=`<button class="pin ${bl.length?'blk':''} ${ok(r)?'':'dim'} ${PLAN.sel===r.id&&PLAN.edit?'sel':''} ${PLAN.flash===r.id?'flash':''} ${PLAN.tmode&&PLAN.msel.has(r.id)?'msel':''}" data-pin="${r.id}" ${PLAN.edit||PLAN.tmode?'':isRO()?`data-room="${r.id}"`:`data-proom="${r.id}"`} style="left:${p.x*100}%;top:${p.y*100}%;--c:${c}" title="${esc(tip)}">${bl.length?`<i class="pbadge" title="${bl.length} open blocking point(s)">${bl.length}</i>`:''}<b>${oth?'⇕ ':''}${esc(r.code)}${F.colorBy==='progress'?` · ${pc(pr)}%`:''}</b>${shownm&&r.name?`<span class="pn">${esc(r.name)}</span>`:''}</button>`;});
   PLAN.shown=here.filter(ok).map(r=>r.id);
   h+=`</div></div>`;
   if(adm)h+=allSheetsCard();
@@ -1479,7 +1521,18 @@ document.addEventListener('pointerup',()=>{
   render();
 });
 /* returns true when the click was a plan action */
+function roomPopHtml(rid){
+  const r=S.rooms[rid];if(!r)return '';const bl=openBlk(r);
+  return `<div class="row" style="flex-wrap:nowrap;margin-bottom:6px"><div style="flex:1;min-width:0;font-size:12px"><b style="font-size:14px">${esc(r.code)}</b> ${esc(r.name)}<br><span style="color:var(--mute)">${esc((typeById(r.type)||{}).name||'')} · ${pc(progress(r))}%</span>${bl.length?` <span class="badge red">⚠${bl.length}</span>`:''}</div><button class="iconbtn" data-popx title="Close">✕</button></div>
+    <div class="rpop">${roomActs(r).map(id=>{const a=actById(id),sv=st(r,id),w=a.isHp?['Pending','Req.','Released']:['To do','WIP','Done'],b=bl.some(x=>x.actId===id);
+      return `<div class="rprow ${b?'blk':''}"><span class="rpn">${a.isHp?`<span class="hptag">◆ HP</span><span style="color:var(--mute)">${esc(a.name.slice(5))}</span>`:`<span class="dot" style="background:${a.color}"></span>${esc(a.name)}`}${b?' <b style="color:var(--blk)">!</b>':''}</span><div class="seg">${[0,1,2].map(k=>`<button class="${sv===k?'on'+k:''} ${a.isHp?'hpb':''}" data-set="${rid}|${id}|${k}" data-keep>${w[k]}</button>`).join('')}</div></div>`;}).join('')||'<div class="empty" style="padding:6px">No activity in this room.</div>'}</div>
+    <div class="row" style="margin-top:8px"><button class="btn sm" data-newblk="${rid}|">⚠ Blocker</button><button class="btn sm" data-room="${rid}">Open room</button></div>`;
+}
+function openRoomPop(el,rid){const p=$('#pop');POP={kind:'room',rid};p.classList.add('wide');p.innerHTML=roomPopHtml(rid);placePop(el);}
+function refreshPop(){if(!POP||POP.kind!=='room')return;const p=$('#pop');if(!p.classList.contains('open')||!S.rooms[POP.rid]){closePop();return;}const sc=(p.querySelector('.rpop')||{}).scrollTop||0;p.innerHTML=roomPopHtml(POP.rid);const l=p.querySelector('.rpop');if(l)l.scrollTop=sc;}
+document.addEventListener('click',e=>{const x=e.target.closest&&e.target.closest('[data-popx]');if(x)closePop();});
 function planClick(e){
+  const pr=e.target.closest&&e.target.closest('[data-proom]');if(pr){const el=pr,id=pr.dataset.proom;setTimeout(()=>openRoomPop(el,id),0);return true;}
   const go=e.target.closest&&e.target.closest('[data-pgo]');if(go){e.preventDefault();const [f,pid]=go.dataset.pgo.split('|');if(f){F.pfloor=f;F.psheet=pid;render();}return true;}
   const pi=e.target.closest('#planin');
   if(PLAN.edit&&!PLAN.draw){const ln=e.target.closest('[data-line]');if(ln){PLAN.lsel=PLAN.lsel===ln.dataset.line?null:ln.dataset.line;render();return true;}}
