@@ -92,6 +92,10 @@ table.mx{border-collapse:separate;border-spacing:0;font-size:12px}
 .rpn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rprow .seg button{padding:3px 7px;font-size:11px}
 .mx td.addc{cursor:pointer;color:var(--acc);font-weight:800;font-size:15px;text-align:center;min-width:30px}.mx td.addc:hover{background:var(--acc2)}
+#pop .slot{display:block;width:100%;text-align:left;border:1px dashed #c9d3e0;background:none;border-radius:6px;padding:3px 8px;margin:3px 0;font:inherit;font-size:11px;color:var(--mute);cursor:pointer}
+#pop .slot:hover,#pop .slot:focus{border-color:var(--acc);color:var(--acc);background:var(--acc2);outline:none}
+#pop .slot.sug{border-style:solid;border-color:var(--acc);color:var(--acc)}
+#pop .posrow{display:flex;align-items:center;gap:8px;font-size:12px;padding:2px 4px}
 #pop .popadd .sqopts{display:block;position:static;box-shadow:none;margin-top:6px;max-height:min(50vh,300px)}
 .mx td.na[data-na]{cursor:pointer}.mx td.na[data-na]:hover{box-shadow:inset 0 0 0 2px var(--acc)}
 #pop{position:fixed;z-index:40;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:10px;display:none;max-width:300px}
@@ -376,7 +380,7 @@ function sqMove(inp,dir){
 }
 function sqPick(btn){
   const [k,id,aid]=btn.dataset.sqpick.split('|');
-  if(btn.closest('#pop')){SQF=null;closePop();seqEdit(id,aid,true);return;}SQF={key:k+'|'+id,q:''};
+  if(btn.closest('#pop')){SQF=null;openPosPop(id,aid);return;}SQF={key:k+'|'+id,q:''};
   const inp=btn.closest('.sqpick').querySelector('[data-sqq]');inp.value='';
   setSeq(k,id,l=>{l.push(aid);return l;});
 }
@@ -766,8 +770,9 @@ function vMatrix(){
 }
 
 /* Click on a matrix cell: small chooser To do / WIP / Done right at the cell */
+let PANCH=null;
 function placePop(el){
-  const p=$('#pop');p.classList.add('open');const b=el.getBoundingClientRect(),pw=p.offsetWidth,ph=p.offsetHeight;
+  PANCH=el;const p=$('#pop');p.classList.add('open');const b=el.getBoundingClientRect(),pw=p.offsetWidth,ph=p.offsetHeight;
   let x=Math.min(b.left,innerWidth-pw-8),y=b.bottom+4;if(y+ph>innerHeight-8)y=b.top-ph-4;
   p.style.left=Math.max(8,x)+'px';p.style.top=Math.max(8,y)+'px';
 }
@@ -797,24 +802,41 @@ function openNaPop(td,rid,aid){
   placePop(td);
 }
 /* insert an activity in a room sequence at the place it has in the room-type template (else in the library order) */
-function seqWith(r,aid){
-  const l=cleanSeq(r.acts);if(l.includes(aid))return l;const t=typeById(r.type),tl=t?cleanSeq(t.acts):[];
+function seqPos(r,aid){   // suggested insertion index
+  const l=cleanSeq(r.acts),t=typeById(r.type),tl=t?cleanSeq(t.acts):[];
   const ref=tl.includes(aid)?tl:S.settings.acts.map(a=>a.id),ri=ref.indexOf(aid);
-  let pos=l.findIndex(x=>ref.indexOf(x)>ri);if(pos<0)pos=l.length;l.splice(pos,0,aid);return l;
+  const pos=l.findIndex(x=>ref.indexOf(x)>ri);return pos<0?l.length:pos;
 }
-function seqEdit(rid,aid,add){
+/* after: '^' = first step, an activity id = right after it (if the room has it), undefined = suggested place */
+function seqWith(r,aid,after){
+  const l=cleanSeq(r.acts);if(l.includes(aid))return l;
+  const pos=after==='^'?0:after&&l.includes(after)?l.indexOf(after)+1:seqPos(r,aid);l.splice(pos,0,aid);return l;
+}
+/* step 2 of "add": show the room's sequence with an insertion slot between the steps */
+function openPosPop(rid,aid){
+  POP=null;const p=$('#pop');p.classList.add('wide');
+  const r=S.rooms[rid],a=actById(aid),l=cleanSeq(r.acts),sug=seqPos(r,aid),multi=MX.tmode&&MX.sel.has(rid)&&MX.sel.size>1;
+  const slot=(i,after)=>`<button class="slot ${i===sug?'sug':''}" data-inspos="${rid}|${aid}|${after}">＋ insert <b>${esc(a.name)}</b> here${i===sug?' <small>(as in the template)</small>':''}</button>`;
+  p.innerHTML=`<div class="row" style="flex-wrap:nowrap;margin-bottom:6px"><div style="flex:1;font-size:12px"><b>${esc(r.code)}</b> ${esc(r.name)}<br><span style="color:var(--mute)">Where should <b style="color:var(--ink)">${esc(a.name)}</b> go in the sequence?${multi?` Applied to the ${MX.sel.size} selected rooms: right after the same activity (or the template place if a room doesn't have it).`:''}</span></div><button class="iconbtn" data-popx title="Close">✕</button></div>
+    <div class="rpop">${slot(0,'^')}${l.map((id,i)=>{const x=actById(id);return `<div class="posrow"><span class="sqn">${i+1}</span><span class="dot" style="background:${x.color}"></span>${esc(x.name)}</div>${slot(i+1,id)}`;}).join('')}</div>`;
+  placePop(PANCH&&PANCH.isConnected?PANCH:document.querySelector(`[data-seqadd="${rid}"]`)||document.body);
+  const sg=p.querySelector('.slot.sug');if(sg){sg.scrollIntoView({block:'center'});sg.focus();}
+}
+function seqEdit(rid,aid,add,after){
   if(roBlock())return;const a=actById(aid);if(!a)return;
   const ids=MX.tmode&&MX.sel.has(rid)&&MX.sel.size>1?[...MX.sel]:[rid];
   const rs=ids.map(id=>S.rooms[id]).filter(r=>r&&(add?!roomActs(r).includes(aid):roomActs(r).includes(aid)));
   if(!rs.length)return alert(add?`“${a.name}” is already in all the selected rooms.`:`None of the selected rooms has “${a.name}”.`);
   const done=rs.filter(r=>!add&&st(r,aid)>0).length;
-  if(!confirm(`${add?'Add':'Remove'} “${a.name}” ${add?'to':'from'} the sequence of ${rs.length===1?'room '+rs[0].code:rs.length+' rooms'}?${done?`\n\n${done} of them already have a status for this activity: it is no longer counted (it comes back if the activity is added again).`:''}`))return;
-  rs.forEach(r=>store.patchRoom(r.id,{acts:add?seqWith(r,aid):cleanSeq(r.acts).filter(x=>x!==aid)}));
+  if((!add||rs.length>1)&&!confirm(`${add?'Add':'Remove'} “${a.name}” ${add?'to':'from'} the sequence of ${rs.length===1?'room '+rs[0].code:rs.length+' rooms'}?${done?`\n\n${done} of them already have a status for this activity: it is no longer counted (it comes back if the activity is added again).`:''}`))return;
+  rs.forEach(r=>store.patchRoom(r.id,{acts:add?seqWith(r,aid,after):cleanSeq(r.acts).filter(x=>x!==aid)}));
 }
 document.addEventListener('click',e=>{
-  const n=e.target.closest&&e.target.closest('[data-na],[data-mxrm],[data-mxadd]');if(!n)return;const d=n.dataset;
+  const n=e.target.closest&&e.target.closest('[data-na],[data-mxrm],[data-mxadd],[data-inspos]');if(!n)return;const d=n.dataset;
   if(d.na){const [rid,aid]=d.na.split('|');setTimeout(()=>openNaPop(n,rid,aid),0);return;}
-  closePop();const [rid,aid]=(d.mxrm||d.mxadd).split('|');seqEdit(rid,aid,!!d.mxadd);
+  if(d.mxadd){const [rid,aid]=d.mxadd.split('|');setTimeout(()=>openPosPop(rid,aid),0);return;}   // after the global click handler
+  if(d.inspos){const [rid,aid,after]=d.inspos.split('|');closePop();seqEdit(rid,aid,true,after);return;}
+  closePop();const [rid,aid]=d.mxrm.split('|');seqEdit(rid,aid,false);
 });
 const closePop=()=>{const p=$('#pop');if(p)p.classList.remove('open');POP=null;};
 addEventListener('scroll',e=>{const p=$('#pop');if(p&&e.target instanceof Node&&p.contains(e.target))return;closePop();},true);
