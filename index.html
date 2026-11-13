@@ -1340,6 +1340,19 @@ function showOnPlan(rid){
   const go=(n)=>{const p=document.querySelector(`.pin[data-pin="${rid}"]`),w=$('#planwrap');if(p&&w){const a=p.getBoundingClientRect(),b=w.getBoundingClientRect();w.scrollLeft+=a.left-b.left-w.clientWidth/2;w.scrollTop+=a.top-b.top-w.clientHeight/2;}else if(n)setTimeout(()=>go(n-1),300);};
   setTimeout(()=>go(15),60);setTimeout(()=>{PLAN.flash=null;},3500);
 }
+/* Admin: every plan sheet stored in the database, whatever its level, with a selector to move it to another level
+   (a sheet uploaded on the wrong level, or attached to a level that no longer exists). */
+function allSheetsCard(){
+  const s=S.settings,all=Object.entries(S.plans||{}).map(([id,m])=>({id,...m,floor:m.floor||id})).sort((a,b)=>floorIdx(a.floor)-floorIdx(b.floor)||(a.ts||0)-(b.ts||0));
+  const lost=all.filter(m=>!floorById(m.floor)).length;
+  return `<details data-dk="plan_all" class="card noprint" ${lost?'open':''}><summary><b>📚 All plan sheets in the database (${all.length})</b>${lost?` <span style="color:var(--blk);font-weight:700">· ${lost} on an unknown level</span>`:''}</summary>
+    ${all.length?`<div class="tbwrap" style="margin-top:8px"><table class="tb"><thead><tr><th>Level</th><th>Sheet</th><th>PDF file</th><th>Rooms placed</th><th>Uploaded</th></tr></thead><tbody>${all.map(m=>`<tr>
+      <td><select data-pmovefloor="${m.id}">${floorById(m.floor)?'':`<option value="" selected>⚠ unknown level</option>`}${s.floors.map(f=>`<option value="${f.id}" ${f.id===m.floor?'selected':''}>${esc(f.name)}</option>`).join('')}</select></td>
+      <td><a href="#" class="lnk" data-pgo="${floorById(m.floor)?m.floor:''}|${m.id}">${esc(m.sheet||'Sheet')}</a></td><td>${esc(m.name||'')}</td><td>${Object.keys(m.pins||{}).filter(r=>S.rooms[r]).length}</td>
+      <td><small>${m.ts?new Date(m.ts).toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):''}${m.by?' · '+esc(m.by):''}</small></td></tr>`).join('')}</tbody></table></div>`
+      :'<p style="color:var(--mute);margin:8px 0 0">No plan sheet at all is stored in the database.</p>'}
+    <small style="color:var(--mute)">Change the level of a sheet to move it (room positions are kept).</small></details>`;
+}
 function vPlans(){
   const s=S.settings;let fid=F.pfloor;if(!floorById(fid))fid=(s.floors.find(f=>sheetsOf(f.id).length)||s.floors[0]||{}).id;
   const sheets=sheetsOf(fid);let pid=F.psheet;if(!sheets.some(m=>m.id===pid))pid=sheets[0]&&sheets[0].id;
@@ -1348,7 +1361,7 @@ function vPlans(){
   let h=filterBar('plan');
   h+=`<div class="chips noprint">${s.floors.map(f=>{const n=sheetsOf(f.id).length;return `<button class="chip ${f.id===fid?'on':''}" data-f="pfloor" data-v="${f.id}">${esc(f.name)}${n?` <span class="n">📐${n>1?' '+n:''}</span>`:''}</button>`;}).join('')}</div>`;
   const fin=(multi,rep)=>`<input type="file" ${multi?'multiple':''} data-planfile="${fid}" ${rep?`data-prep="${rep}"`:''} accept="application/pdf,.pdf" hidden>`;
-  if(!m)return h+`<div class="card"><h2>No plan for ${esc(floorById(fid)?.name||'this floor')} yet</h2>${adm?`<p style="color:var(--mute);font-size:13px;margin-top:0">Upload the floor plan as a <b>PDF exported from AutoCAD / Revit</b> (vector, not a scan). If the level is cut into several sheets (e.g. North + South), select <b>all the PDFs of the level at once</b>: each becomes a sheet, and rooms in the overlap zone are not duplicated (a room = one code). Rooms are recognised by their tag: <b>code</b> (e.g. “P1.23”), name, and area “… m²” below.</p><label class="btn pri">⬆ Upload PDF plan(s)${fin(true)}</label>`:'<p style="color:var(--mute)">Ask an admin to upload the PDF plan of this floor.</p>'}</div>`;
+  if(!m)return h+`<div class="card"><h2>No plan for ${esc(floorById(fid)?.name||'this floor')} yet</h2>${adm?`<p style="color:var(--mute);font-size:13px;margin-top:0">Upload the floor plan as a <b>PDF exported from AutoCAD / Revit</b> (vector, not a scan). If the level is cut into several sheets (e.g. North + South), select <b>all the PDFs of the level at once</b>: each becomes a sheet, and rooms in the overlap zone are not duplicated (a room = one code). Rooms are recognised by their tag: <b>code</b> (e.g. “P1.23”), name, and area “… m²” below.</p><label class="btn pri">⬆ Upload PDF plan(s)${fin(true)}</label>`:'<p style="color:var(--mute)">Ask an admin to upload the PDF plan of this floor.</p>'}</div>`+(adm?allSheetsCard():'');
   const z=ZOOMS.includes(+F.pzoom)?+F.pzoom:1,zi=ZOOMS.indexOf(z),k=planKey(pid),im=PLAN.img[k];
   const onF=Object.values(S.rooms).filter(r=>r.floor===fid),pins=m.pins||{},here=Object.values(S.rooms).filter(r=>pins[r.id]),unplaced=onF.filter(r=>!onFloorPlans(r,fid)).sort(byCode);
   const ok=r=>{const f=F.floor;F.floor='all';const v=passes(r,false);F.floor=f;return v;};
@@ -1386,6 +1399,7 @@ function vPlans(){
     h+=`<button class="pin ${bl.length?'blk':''} ${ok(r)?'':'dim'} ${PLAN.sel===r.id&&PLAN.edit?'sel':''} ${PLAN.flash===r.id?'flash':''} ${PLAN.tmode&&PLAN.msel.has(r.id)?'msel':''}" data-pin="${r.id}" ${PLAN.edit||PLAN.tmode?'':`data-room="${r.id}"`} style="left:${p.x*100}%;top:${p.y*100}%;--c:${c}" title="${esc(tip)}">${bl.length?`<i class="pbadge" title="${bl.length} open blocking point(s)">${bl.length}</i>`:''}<b>${oth?'⇕ ':''}${esc(r.code)}${F.colorBy==='progress'?` · ${pc(pr)}%`:''}</b>${shownm&&r.name?`<span class="pn">${esc(r.name)}</span>`:''}</button>`;});
   PLAN.shown=here.filter(ok).map(r=>r.id);
   h+=`</div></div>`;
+  if(adm)h+=allSheetsCard();
   if(!PLAN.edit&&unplaced.length)h+=`<div class="empty noprint">${unplaced.length} room(s) of this floor on no plan${adm?' — use ✥ Move labels to place them':''}: ${unplaced.slice(0,30).map(r=>`<a href="#" data-room="${r.id}">${esc(r.code)}</a>`).join(', ')}${unplaced.length>30?'…':''}</div>`;
   return h;
 }
@@ -1418,6 +1432,7 @@ document.addEventListener('pointerup',()=>{
 });
 /* returns true when the click was a plan action */
 function planClick(e){
+  const go=e.target.closest&&e.target.closest('[data-pgo]');if(go){e.preventDefault();const [f,pid]=go.dataset.pgo.split('|');if(f){F.pfloor=f;F.psheet=pid;render();}return true;}
   const pi=e.target.closest('#planin');
   if(PLAN.edit&&!PLAN.draw){const ln=e.target.closest('[data-line]');if(ln){PLAN.lsel=PLAN.lsel===ln.dataset.line?null:ln.dataset.line;render();return true;}}
   if(PLAN.draw&&pi){const b=pi.getBoundingClientRect();let x=clamp01((e.clientX-b.left)/b.width),y=clamp01((e.clientY-b.top)/b.height);const c=PLAN.cur,n=c.length;
@@ -1448,6 +1463,9 @@ function planChange(t){
   if(d.planfile&&t.files.length){const fs=[...t.files];t.value='';uploadPlans(d.planfile,fs,d.prep||null);return true;}
   if(d.ptt!==undefined){PLAN.ttype=t.value;render();return true;}
   if(d.ptseq!==undefined){PLAN.tseq=t.checked;return true;}
+  if(d.pmovefloor){const m=S.plans[d.pmovefloor],f=floorById(t.value);if(!m||!f)return true;
+    if(!confirm(`Move the sheet “${m.sheet||m.name}” to ${f.name}?`)){render();return true;}
+    store.patchPlan(d.pmovefloor,{floor:f.id});F.pfloor=f.id;F.psheet=d.pmovefloor;render();return true;}
   if(d.paddsheet!==undefined){if(t.value){PLAN.place=t.value;render();}return true;}
   if(d.ppage){const pid=d.ppage,n=+t.value,m=S.plans[pid];if(!m)return true;
     if(Object.keys(m.pins||{}).length&&!confirm(`Use page ${n} of the PDF?\n\nThe room positions of this sheet are detected again on that page (positions placed by hand are reset).`)){t.value=m.page||1;return true;}
