@@ -563,6 +563,7 @@ const reopen=root=>{root.querySelectorAll('details[data-dk]').forEach(d=>{if(OPE
    pressing Tab/Enter saves it without the next field being rebuilt under the cursor. */
 let rT=null;
 function render(){clearTimeout(rT);rT=setTimeout(doRender,25);}
+let LASTVIEW=null;
 function doRender(){
   if(!S.settings)return;
   const m=me();
@@ -584,9 +585,11 @@ function doRender(){
   document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.view===F.view));
   const v={overview:vOverview,matrix:vMatrix,plans:vPlans,blockers:vBlockers,weekly:vWeekly,dash:vDash,setup:vSetup}[F.view]||vOverview;
   const fid=ae&&ae.id,pos=ae&&ae.selectionStart;
-  const pw=$('#planwrap'),psc=pw&&[pw.scrollLeft,pw.scrollTop];
+  // keep the scroll position of the page and of the scrolling boxes (plan, matrix, tables) across the re-render
+  const SCB='#planwrap,.mxwrap,.tbwrap',boxes=[...$('#view').querySelectorAll(SCB)].map(e=>[e.scrollLeft,e.scrollTop]),wy=scrollY,wx=scrollX,sv=F.view;
   $('#view').innerHTML=floorRepairBanner()+v();reopen($('#view'));
-  const pw2=$('#planwrap');if(pw2&&psc){pw2.scrollLeft=psc[0];pw2.scrollTop=psc[1];}
+  if(sv===LASTVIEW){[...$('#view').querySelectorAll(SCB)].forEach((e,i)=>{const b=boxes[i];if(b){e.scrollLeft=b[0];e.scrollTop=b[1];}});if(scrollY!==wy||scrollX!==wx)scrollTo(wx,wy);}
+  LASTVIEW=sv;
   if(fid&&(fid==='q'||fid==='bq')){const el=document.getElementById(fid);if(el){el.focus();try{el.setSelectionRange(pos,pos);}catch(e){}}}
   if(drawerRoom)renderDrawer();
   setTimeout(ensureSnapshots,0);
@@ -678,14 +681,19 @@ function mxTypeBar(list,tm){
     ${adm?`<div class="row" style="margin-top:8px"><b>🏷 Room type:</b><select data-ptt>${s.types.map(t=>`<option value="${t.id}" ${t.id===PLAN.ttype?'selected':''}>${esc(t.name)}</option>`).join('')}</select>
       <button class="btn sm pri" data-act="mxassign" ${n?'':'disabled'}>Assign “${esc(tt?tt.name:'')}”</button>
       <label class="chk"><input type="checkbox" data-ptseq ${PLAN.tseq?'checked':''}>Also replace the sequence with the template of the new type (statuses kept)</label></div>`:''}
-    <small style="color:var(--mute)">Tick the rooms in the first column · Shift+click selects a range · floor / type rows tick the whole group${seqMode()?'':' · click a column title to pick that activity'} · use the filters to narrow the list</small></div>`;
+    <small style="color:var(--mute)">Tick the rooms in the first column · <b>a status set in a cell of a ticked room applies to all ticked rooms</b> · Shift+click selects a range · floor / type rows tick the whole group${seqMode()?'':' · click a column title to pick that activity'} · use the filters to narrow the list</small></div>`;
 }
-function mxApply(v){
+/* status chosen from a cell of a selected room while multi-select is on → apply it to the whole selection */
+function mxGroupSet(rid,aid,v){
+  if(!(MX.tmode&&F.view==='matrix'&&MX.sel.has(rid)&&MX.sel.size>1))return false;
+  closePop();MX.act=aid;mxApply(v,true);return true;
+}
+function mxApply(v,fromCell){
   const act=actById(MX.act);if(!act||roBlock())return;
   const rs=[...MX.sel].map(id=>S.rooms[id]).filter(r=>r&&roomActs(r).includes(act.id)),w=lbls(act.id);
   const todo=rs.filter(r=>st(r,act.id)!==v);if(!todo.length)return alert(`All the selected rooms are already “${w[v]}” for ${act.name}.`);
   const day=MX.date&&MX.date<=today()?MX.date:today();
-  if(!confirm(`Set “${act.name}” to “${w[v]}” in ${todo.length} room(s)?${v?`\n\nDate: ${fmtLong(day)}`:''}${rs.length<MX.sel.size?`\n\n${MX.sel.size-rs.length} selected room(s) don't have this activity and are skipped.`:''}`))return;
+  if(!confirm(`${fromCell?'Multi-select is on: apply to all the selected rooms.\n\n':''}Set “${act.name}” to “${w[v]}” in ${todo.length} room(s)?${v?`\n\nDate: ${fmtLong(day)}`:''}${rs.length<MX.sel.size?`\n\n${MX.sel.size-rs.length} selected room(s) don't have this activity and are skipped.`:''}`))return;
   todo.forEach(r=>setStatus(r.id,act.id,v,day));render();
 }
 document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-mxset],[data-mxacth]');if(!b)return;
@@ -1096,7 +1104,7 @@ document.addEventListener('click',e=>{
   if(d.closeblk){const b=S.blockers[d.closeblk];store.setBlocker({...b,status:'closed',closed:today(),closedBy:user()});return;}
   if(d.editblk){blkModal(d.editblk);return;}
   if(d.newblk!==undefined){const [rid,aid]=d.newblk.split('|');blkModal(null,rid,aid);return;}
-  if(d.set){const [rid,aid,k]=d.set.split('|');setStatus(rid,aid,+k);return;}
+  if(d.set){const [rid,aid,k]=d.set.split('|');if(mxGroupSet(rid,aid,+k))return;setStatus(rid,aid,+k);return;}
   if(d.cell){const [rid,aid]=d.cell.split('|');if(isRO())openRoom(rid);else openPop(t,rid,aid);return;}
   if(d.room){e.preventDefault();openRoom(d.room);return;}
   if(d.gonext){Object.assign(F,{view:'overview',next:d.gonext,floor:'all',type:'all',q:'',blk:'all'});render();window.scrollTo(0,0);return;}
