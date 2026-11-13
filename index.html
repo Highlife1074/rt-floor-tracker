@@ -66,6 +66,7 @@ table.mx{border-collapse:separate;border-spacing:0;font-size:12px}
 .mx td.c.hp.s0::after{content:'';display:inline-block;width:12px;height:12px;border:1.5px solid #c5cad4;border-radius:3px;vertical-align:middle}
 .mx td.c.s1{background:var(--wip)}.mx td.c.s2{background:var(--done)}.mx td.c.b{background:var(--blk)}.mx td.c.b::after{display:none}
 .mx td.na{background:repeating-linear-gradient(45deg,#f6f7f9,#f6f7f9 4px,#eceef2 4px,#eceef2 8px)}
+.mx th.mxon{background:var(--acc2);box-shadow:inset 0 -3px 0 var(--acc)}
 .mx tr.tg td{background:#f7f8fa;font-size:12px;font-weight:600;color:var(--mute);padding:3px 10px 3px 22px}
 .mx tr.tg td.rh .sq{vertical-align:middle}
 .mx tr.fl td{background:var(--acc2);font-weight:700;padding:6px 10px}
@@ -470,11 +471,11 @@ async function initFB(){
 }
 
 /* ===================== ACTIONS ===================== */
-function setStatus(rid,aid,s){
+function setStatus(rid,aid,s,day){
   if(roBlock())return;
   const r=S.rooms[rid];if(!r)return;const prev=st(r,aid);if(prev===s)return;
-  const cur=(r.st&&r.st[aid])||{};const v={s,by:user(),d:today()};
-  if(s>=1)v.ds=cur.ds||today();if(s===2)v.dd=today();
+  const dt=day||today(),cur=(r.st&&r.st[aid])||{};const v={s,by:user(),d:dt};
+  if(s>=1)v.ds=cur.ds||dt;if(s===2)v.dd=dt;
   store.addLog({ts:Date.now(),by:user(),roomId:rid,code:r.code,actId:aid,from:prev,to:s});
   store.patchRoom(rid,{['st.'+aid]:v});
 }
@@ -652,23 +653,44 @@ function mxColumns(list){
   const cols=[];order.forEach(id=>{const a=actById(id);if(!a)return;cols.push(a);if(a.hp)cols.push(actById(id+HP));});
   return {order,cols};
 }
-/* Matrix "Room types" mode (admin): tick rooms (Shift+click = range, floor row = whole floor) and give them a type */
-const MX={tmode:false,sel:new Set(),last:null};
+/* Matrix multi-select: tick rooms (Shift+click = range, floor/type row = whole group), then set the status of one
+   activity in all of them (editors), or give them a room type (admin) */
+const MX={tmode:false,sel:new Set(),last:null,act:'',date:''};
+const seqMode=()=>F.mx==='seq';
 /* inside a floor: rooms grouped by room type (order of the templates in Setup), then by code */
 const mxSort=rs=>{const ti=id=>{const i=S.settings.types.findIndex(t=>t.id===id);return i<0?1e6:i;};return [...rs].sort((a,b)=>ti(a.type)-ti(b.type)||byCode(a,b));};
 const mxShown=()=>{const l=filtered();return S.settings.floors.flatMap(f=>mxSort(l.filter(r=>r.floor===f.id)));};
 function mxTypeBar(list,tm){
-  const s=S.settings;
-  if(!tm)return `<div class="row noprint" style="margin:0 0 8px"><button class="btn sm" data-act="mxtype" title="Select several rooms and change their room type">🏷 Room types</button></div>`;
+  const s=S.settings,adm=isAdmin();
+  if(!tm)return `<div class="row noprint" style="margin:0 0 8px"><button class="btn sm" data-act="mxtype" title="Select several rooms to update their progress${adm?' or change their room type':''} at once">☑ Multi-select rooms</button></div>`;
   if(!typeById(PLAN.ttype))PLAN.ttype=(s.types[0]||{}).id||'';const tt=typeById(PLAN.ttype);
   const ids=new Set(list.map(r=>r.id));[...MX.sel].forEach(id=>{if(!S.rooms[id])MX.sel.delete(id);});
-  const hidden=[...MX.sel].filter(id=>!ids.has(id)).length,n=MX.sel.size;
-  return `<div class="card noprint pedit"><div class="row"><b>🏷 Room types:</b><select data-ptt>${s.types.map(t=>`<option value="${t.id}" ${t.id===PLAN.ttype?'selected':''}>${esc(t.name)}</option>`).join('')}</select>
-    <b>${n}</b> selected${hidden?` <small style="color:var(--mute)">(${hidden} hidden by the filters)</small>`:''}
-    <button class="btn sm pri" data-act="mxassign" ${n?'':'disabled'}>Assign “${esc(tt?tt.name:'')}”</button><button class="btn sm" data-act="mxall" ${list.length?'':'disabled'}>Select all shown</button><button class="btn sm" data-act="mxclear" ${n?'':'disabled'}>Clear</button><button class="btn sm" data-act="mxtype">Close</button></div>
-    <label class="chk" style="margin-top:6px"><input type="checkbox" data-ptseq ${PLAN.tseq?'checked':''}>Also replace the room’s sequence with the template of the new type (statuses already entered are kept)</label>
-    <small style="color:var(--mute)">Tick the rooms in the first column · Shift+click selects a range · the floor row ticks the whole floor · use the filters to narrow the list</small></div>`;
+  const hidden=[...MX.sel].filter(id=>!ids.has(id)).length,n=MX.sel.size,sel=[...MX.sel].map(id=>S.rooms[id]);
+  const steps=allSteps();if(!steps.some(a=>a.id===MX.act))MX.act=(steps[0]||{}).id||'';
+  const has=a=>sel.filter(r=>roomActs(r).includes(a.id)).length,act=actById(MX.act),w=act&&act.isHp?['Pending','Requested','Released']:['To do','WIP','Done'];
+  const k=act?has(act):0;
+  return `<div class="card noprint pedit"><div class="row"><b>☑ Multi-select:</b> <b>${n}</b> room(s) selected${hidden?` <small style="color:var(--mute)">(${hidden} hidden by the filters)</small>`:''}
+    <button class="btn sm" data-act="mxall" ${list.length?'':'disabled'}>Select all shown</button><button class="btn sm" data-act="mxclear" ${n?'':'disabled'}>Clear</button><button class="btn sm" data-act="mxtype">Close</button></div>
+    <div class="row" style="margin-top:8px"><b>📈 Progress:</b><select data-mxact>${steps.map(a=>`<option value="${a.id}" ${a.id===MX.act?'selected':''}>${a.isHp?'◆ ':''}${esc(a.name)}${n?` (${has(a)}/${n})`:''}</option>`).join('')}</select>
+      <label style="display:flex;align-items:center;gap:4px;font-size:12px">date <input type="date" data-mxdate value="${MX.date||today()}" max="${today()}"></label>
+      <div class="seg">${[0,1,2].map(v=>`<button data-mxset="${v}" class="${act&&act.isHp?'hpb':''}" ${k?'':'disabled'}>${w[v]}</button>`).join('')}</div>
+      <small style="color:var(--mute)">${n?(k<n?`${k} of the selected rooms have this activity in their sequence — the others are skipped`:'applies to all selected rooms'):'select rooms first'}</small></div>
+    ${adm?`<div class="row" style="margin-top:8px"><b>🏷 Room type:</b><select data-ptt>${s.types.map(t=>`<option value="${t.id}" ${t.id===PLAN.ttype?'selected':''}>${esc(t.name)}</option>`).join('')}</select>
+      <button class="btn sm pri" data-act="mxassign" ${n?'':'disabled'}>Assign “${esc(tt?tt.name:'')}”</button>
+      <label class="chk"><input type="checkbox" data-ptseq ${PLAN.tseq?'checked':''}>Also replace the sequence with the template of the new type (statuses kept)</label></div>`:''}
+    <small style="color:var(--mute)">Tick the rooms in the first column · Shift+click selects a range · floor / type rows tick the whole group${seqMode()?'':' · click a column title to pick that activity'} · use the filters to narrow the list</small></div>`;
 }
+function mxApply(v){
+  const act=actById(MX.act);if(!act||roBlock())return;
+  const rs=[...MX.sel].map(id=>S.rooms[id]).filter(r=>r&&roomActs(r).includes(act.id)),w=lbls(act.id);
+  const todo=rs.filter(r=>st(r,act.id)!==v);if(!todo.length)return alert(`All the selected rooms are already “${w[v]}” for ${act.name}.`);
+  const day=MX.date&&MX.date<=today()?MX.date:today();
+  if(!confirm(`Set “${act.name}” to “${w[v]}” in ${todo.length} room(s)?${v?`\n\nDate: ${fmtLong(day)}`:''}${rs.length<MX.sel.size?`\n\n${MX.sel.size-rs.length} selected room(s) don't have this activity and are skipped.`:''}`))return;
+  todo.forEach(r=>setStatus(r.id,act.id,v,day));render();
+}
+document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-mxset],[data-mxacth]');if(!b)return;
+  if(b.dataset.mxset!==undefined){mxApply(+b.dataset.mxset);return;}
+  MX.act=b.dataset.mxacth;render();});
 document.addEventListener('click',e=>{
   const c=e.target.closest&&e.target.closest('[data-mxsel],[data-mxfl]');if(!c)return;
   const shown=mxShown();
@@ -679,9 +701,9 @@ document.addEventListener('click',e=>{
   MX.last=id;render();
 });
 function vMatrix(){
-  const s=S.settings,list=filtered(),seq=F.mx==='seq',tm=MX.tmode&&isAdmin();
+  const s=S.settings,list=filtered(),seq=F.mx==='seq',tm=MX.tmode&&!isRO();
   let h=filterBar('matrix');
-  if(isAdmin())h+=mxTypeBar(list,tm);
+  if(!isRO())h+=mxTypeBar(list,tm);
   const lg=`<span><i class="sq" style="background:var(--done);border:0"></i>Done</span><span><i class="sq" style="background:var(--wip);border:0"></i>In progress</span><span><i class="sq"></i>To do</span><span><i class="sq" style="background:var(--blk);border:0"></i>Blocked</span><span>◆ Hold point: <i class="sq" style="background:var(--hp);border:0"></i>requested · <i class="sq" style="background:var(--done);border:0"></i>released</span>`;
   h+=`<div class="legend noprint">${lg}${seq?'<span>Each row reads left → right in the room’s own sequence (activity short codes)</span>':`<span>Number = step of the activity in the room’s sequence</span><span><i class="sq" style="background:linear-gradient(225deg,#7e57c2 6px,#fff 6px)"></i>done in a different order than the columns</span><span>Columns: ${F.type!=='all'?'sequence of the “'+esc(typeById(F.type)?.name||'')+'” template':'dominant order of the rooms shown'}</span>`}<span><b>Click a cell</b> to set To do / WIP / Done</span></div>`;
   h+=`<div class="printonly"><h2>${esc(s.project)} — Status matrix (${seq?'by sequence':'by activity'}) — ${fmtLong(today())}</h2></div>`;
@@ -690,7 +712,7 @@ function vMatrix(){
   const nCols=seq?N:cols.length;
   h+=`<div class="mxwrap"><table class="mx ${seq?'seq':''}"><thead><tr><th class="rh">Room</th><th class="cmt">💬 Comment</th>`;
   h+=seq?Array.from({length:N},(_,i)=>`<th>Step<br><b style="font-size:13px;color:var(--ink)">${i+1}</b></th>`).join('')
-        :cols.map(a=>`<th class="${F.next===a.id?'hl':''} ${a.isHp?'hpcol':''}" title="${esc(a.name)}"><div class="vt">${a.isHp?'◆ HP':`<span class="dot" style="background:${a.color}"></span>${esc(a.name)}`}</div></th>`).join('');
+        :cols.map(a=>`<th class="${F.next===a.id?'hl':''} ${a.isHp?'hpcol':''} ${tm&&MX.act===a.id?'mxon':''}" title="${esc(a.name)}" ${tm?`data-mxacth="${a.id}" style="cursor:pointer"`:''}><div class="vt">${a.isHp?'◆ HP':`<span class="dot" style="background:${a.color}"></span>${esc(a.name)}`}</div></th>`).join('');
   h+=`<th><div class="${seq?'':'vt'}">Progress</div></th></tr></thead><tbody>`;
   s.floors.forEach(f=>{
     const rs=mxSort(list.filter(r=>r.floor===f.id));if(!rs.length)return;
@@ -1480,6 +1502,8 @@ function planChange(t){
   const d=t.dataset;
   if(d.planfile&&t.files.length){const fs=[...t.files];t.value='';uploadPlans(d.planfile,fs,d.prep||null);return true;}
   if(d.ptt!==undefined){PLAN.ttype=t.value;render();return true;}
+  if(d.mxact!==undefined){MX.act=t.value;render();return true;}
+  if(d.mxdate!==undefined){MX.date=t.value;return true;}
   if(d.ptseq!==undefined){PLAN.tseq=t.checked;return true;}
   if(d.pmovefloor){const m=S.plans[d.pmovefloor],f=floorById(t.value);if(!m||!f)return true;
     if(!confirm(`Move the sheet “${m.sheet||m.name}” to ${f.name}?`)){render();return true;}
