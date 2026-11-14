@@ -955,7 +955,7 @@ function vSetup(){
     <label>Project name<input data-hold data-sset="project" value="${esc(s.project)}"></label>
     <div class="row">Signed in as <b>${esc(user())}</b> (${roleName(me())})<button class="btn sm" data-act="user">Log out</button></div>
     <div style="font-size:12px;color:var(--mute)">${USE_FB?'🟢 Shared mode — data is live in Firebase for everyone using this link.':'🟡 Local mode — data is saved in this browser only. Fill the Firebase config in index.html to share it with the team.'}</div></div></div>
-    <div class="card"><h2>Floors</h2>${s.floors.map(f=>`<div class="row" style="margin-bottom:6px"><input data-hold data-floorname="${f.id}" value="${esc(f.name)}" style="flex:1"><small style="color:var(--mute);width:70px">${rooms.filter(r=>r.floor===f.id).length} rooms</small><button class="btn sm red" data-delfloor="${f.id}">✕</button></div>`).join('')}<button class="btn sm" data-act="addfloor">+ Add floor</button></div></div>`;
+    <div class="card"><h2>Floors</h2>${s.floors.map(f=>`<div class="row" style="margin-bottom:6px"><input data-hold data-floorname="${f.id}" value="${esc(f.name)}" style="flex:1"><input data-hold data-floorpre="${f.id}" value="${esc(f.pre||'')}" placeholder="Other code prefixes (e.g. LO)" title="Room codes starting with these prefixes belong to this level (plan import). LO is always with P1." style="width:200px"><small style="color:var(--mute);width:70px">${rooms.filter(r=>r.floor===f.id).length} rooms</small><button class="btn sm red" data-delfloor="${f.id}">✕</button></div>`).join('')}<button class="btn sm" data-act="addfloor">+ Add floor</button></div></div>`;
   h+=`<div class="card"><h2>🏗 Subcontractors</h2><p style="margin:0 0 10px;color:var(--mute);font-size:12px">Assign a default subcontractor and responsible to each activity in the library below; a room can override them (click the 🏗 line under the activity in the room panel).</p>${(s.subs||[]).map(x=>`<div class="row" style="margin-bottom:6px"><input data-hold data-subname="${x.id}" value="${esc(x.name)}" style="flex:1"><small style="color:var(--mute);width:90px">${s.acts.filter(a=>a.sub===x.id).length} activities</small><button class="btn sm red" data-subdel="${x.id}">✕</button></div>`).join('')}
     <div class="row"><textarea id="ns_name" rows="2" placeholder="Company name (one per line)" style="flex:1;min-width:200px"></textarea><button class="btn pri" data-act="addsub">+ Add subcontractor</button></div></div>`;
   h+=`<div class="card"><h2>Activity library (catalogue · default subcontractor &amp; responsible)</h2><p style="margin:0 0 10px;color:var(--mute);font-size:12px">This is the catalogue of activities. Its order is only the default order (matrix columns, “Sort as library”); the real order of works is the sequence of each template and room. Colour: use the colour picker, or type a <b>RAL</b> code / name (e.g. 3020, “traffic red”) in the RAL field. Tick <b>◆ Hold point</b> to insert an inspection step right after an activity: the next trade only becomes “next step” once the hold point is released. A room can switch off a hold point in its own “Customize sequence”.</p>`;
@@ -1234,6 +1234,7 @@ document.addEventListener('change',e=>{
   if(d.rnote){store.patchRoom(d.rnote,{note:t.value});return;}
   if(d.ract){const [rid,aid]=d.ract.split('|'),r=S.rooms[rid];const a=(r.acts||[]).filter(x=>x!==aid);if(t.checked)a.push(aid);store.patchRoom(rid,{acts:a});return;}
   if(d.sset){saveS(s=>s[d.sset]=t.value.trim()||'Riviera Tower');return;}
+  if(d.floorpre!==undefined){saveS(s=>{const f=s.floors.find(x=>x.id===d.floorpre);if(f)f.pre=t.value.trim();});return;}
   if(d.floorname){saveS(s=>s.floors.find(f=>f.id===d.floorname).name=t.value.trim()||'Floor');return;}
   if(d.actname){saveS(s=>s.acts.find(a=>a.id===d.actname).name=t.value.trim()||'Activity');return;}
   if(d.actshort){saveS(s=>s.acts.find(a=>a.id===d.actshort).short=t.value.trim());return;}
@@ -1295,8 +1296,13 @@ const pinSheets=r=>{const all=Object.entries(S.plans||{}).map(([id,m])=>({id,...
 const onFloorPlans=(r,fid)=>sheetsOf(fid).some(m=>m.pins&&m.pins[r.id]);
 const roomPre=c=>String(c||'').split(/[.\-_/]/)[0];                 // level part of a code: P1.23 → P1, LO.CA.034 → LO
 const codeStem=c=>String(c||'').replace(/[.\-_/][^.\-_/]*$/,'');    // all but the last part: LO.CA.034 → LO.CA
+/* Code prefixes that belong to another level's floor (LO.CA.034 is on P1). More can be set per floor in Setup. */
+const PRE_ALIAS={lo:'P1'};
+const floorPres=f=>String(f.pre||'').split(/[,;\s]+/).map(kLoose).filter(Boolean);
 /* floor of a code prefix (P2 → the floor whose rooms are P2.xx, or named “P2” / “Level 2”) */
-function floorForPrefix(pfx){
+function floorForPrefix(pfx,depth){
+  const fp=S.settings.floors.find(f=>floorPres(f).includes(kLoose(pfx)));if(fp)return fp.id;
+  const al=PRE_ALIAS[kLoose(pfx)];if(al&&!depth)return floorForPrefix(al,1);
   const c={};Object.values(S.rooms).forEach(r=>{if(kLoose(roomPre(r.code))===kLoose(pfx))c[r.floor]=(c[r.floor]||0)+1;});
   const best=Object.keys(c).sort((a,b)=>c[b]-c[a])[0];if(best&&floorById(best))return best;
   const dg=(pfx.match(/\d+/g)||[]),fl=S.settings.floors;
@@ -1388,9 +1394,10 @@ async function floorTags(fid){
   // happen to sit above an area are dropped; a code with another prefix (P2.06 on the P1 plan) is flagged.
   let list=Object.values(map);const cnt=(f)=>{const c={};list.forEach(e=>{const k=f(e.code);c[k]=(c[k]||0)+Object.keys(e.sheets).length;});return c;};
   const sig=c=>c.replace(/[a-z]/gi,'A').replace(/\d/g,'9'),sc=cnt(sig),mx=Math.max(0,...Object.values(sc));
-  list=list.filter(e=>sc[sig(e.code)]>=mx*.25);
   const pre=roomPre,pc0=cnt(pre),main=Object.keys(pc0).sort((a,b)=>pc0[b]-pc0[a])[0];
-  list.forEach(e=>{e.odd=pre(e.code)!==main?pre(e.code):'';});   // e.g. P2.06 on the P1 plan = double-height room of P2
+  const here=p=>p===main||floorForPrefix(p)===fid;   // prefix of this level (e.g. LO on P1)
+  list=list.filter(e=>sc[sig(e.code)]>=mx*.25||(pre(e.code)!==main&&here(pre(e.code))));
+  list.forEach(e=>{e.odd=here(pre(e.code))?'':pre(e.code);});   // e.g. P2.06 on the P1 plan = double-height room of P2
   return {list:list.sort(byCode),inc,sheets};
 }
 function guessType(name){
