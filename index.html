@@ -807,7 +807,7 @@ function openPop(td,rid,aid){
   POP=null;$('#pop').classList.remove('wide');
   const r=S.rooms[rid],a=actById(aid),sv=st(r,aid),w=a.isHp?['Pending','Requested','Released']:['To do','WIP','Done'],p=$('#pop');
   const multi=MX.tmode&&MX.sel.has(rid)&&MX.sel.size>1;
-  p.innerHTML=`<div style="font-size:12px;margin-bottom:8px"><b>${esc(r.code)}</b> ${esc(r.name)}<br><span style="color:var(--mute)">${esc(a.name)}</span></div><div class="seg">${[0,1,2].map(k=>`<button class="${sv===k?'on'+k:''} ${a.isHp?'hpb':''}" data-set="${rid}|${aid}|${k}">${w[k]}</button>`).join('')}</div><div class="row" style="margin-top:8px"><button class="btn sm" data-newblk="${rid}|${aid}">⚠ Blocker</button><button class="btn sm" data-room="${rid}">Open room</button></div>${a.isHp?'':`<div class="row" style="margin-top:6px"><button class="btn sm red" data-mxrm="${rid}|${aid}" title="Take this activity out of the room's sequence">✕ Remove from ${multi?'the selected rooms':'this room'}</button></div>`}`;
+  p.innerHTML=`<div style="font-size:12px;margin-bottom:8px"><b>${esc(r.code)}</b> ${esc(r.name)}<br><span style="color:var(--mute)">${esc(a.name)}</span></div><div class="seg">${[0,1,2].map(k=>`<button class="${sv===k?'on'+k:''} ${a.isHp?'hpb':''}" data-set="${rid}|${aid}|${k}">${w[k]}</button>`).join('')}</div><div class="row" style="margin-top:8px"><button class="btn sm" data-newblk="${rid}|${aid}">⚠ Blocker${multi?` (${MX.sel.size} rooms)`:''}</button><button class="btn sm" data-room="${rid}">Open room</button></div>${a.isHp?'':`<div class="row" style="margin-top:6px"><button class="btn sm red" data-mxrm="${rid}|${aid}" title="Take this activity out of the room's sequence">✕ Remove from ${multi?'the selected rooms':'this room'}</button></div>`}`;
   placePop(td);
 }
 /* "By sequence" layout: ＋ cell at the end of a row → searchable alphabetical list of the activities not in the room */
@@ -1106,18 +1106,32 @@ function closeModal(){$('#modal').classList.remove('open');$('#modal').innerHTML
 function blkModal(bid,roomId,actId){
   const s=S.settings;
   const b=bid?{...S.blockers[bid]}:{id:uid('b'),no:nextBlkNo(),roomId:roomId||'',actId:actId||'',title:'',cat:s.cats[0],owner:'',raised:today(),due:'',status:'open',closed:'',by:user()};
+  /* matrix multi-select on and the cell clicked belongs to a ticked room → raise the point in every ticked room */
+  const grp=!bid&&MX.tmode&&F.view==='matrix'&&MX.sel.has(roomId)&&MX.sel.size>1?[...MX.sel].map(id=>S.rooms[id]).filter(Boolean):null;
   const owners=[...new Set(Object.values(S.blockers).map(x=>x.owner).filter(Boolean))];
   const ro=s.floors.map(f=>`<optgroup label="${esc(f.name)}">${roomsList().filter(r=>r.floor===f.id).map(r=>`<option value="${r.id}" ${r.id===b.roomId?'selected':''}>${esc(r.code+' – '+r.name)}</option>`).join('')}</optgroup>`).join('');
-  modal(`<h2>${bid?'Edit':'New'} blocking point ${esc(b.no)}</h2><div class="form">
-    <label>Room<select id="m_room"><option value="">— select —</option>${ro}</select></label>
+  modal(`<h2>${bid?'Edit':'New'} blocking point ${grp?'':esc(b.no)}</h2><div class="form">
+    ${grp?`<div class="card pedit" style="margin:0"><b>☑ Multi-select is on:</b> one blocking point will be raised in each of the <b>${grp.length}</b> selected rooms <small style="color:var(--mute)">(${esc(grp.map(r=>r.code).sort(ABC).join(', '))})</small><br><small style="color:var(--mute)">If an activity is chosen, rooms without it in their sequence are skipped.</small></div>`
+      :`<label>Room<select id="m_room"><option value="">— select —</option>${ro}</select></label>`}
     <label>Activity concerned<select id="m_act"></select></label>
     <label>Description of the blocking point<textarea id="m_title" rows="3">${esc(b.title)}</textarea></label>
     <div class="row"><label>Category<select id="m_cat">${[...s.cats].sort(ABC).map(c=>`<option ${c===b.cat?'selected':''}>${esc(c)}</option>`).join('')}</select></label><label>Responsible<input id="m_owner" list="m_owners" value="${esc(b.owner)}" placeholder="Who must solve it"><datalist id="m_owners">${[...new Set([...owners,...(s.subs||[]).map(x=>x.name),...people().map(p=>p.name)])].sort(ABC).map(o=>`<option value="${esc(o)}">`).join('')}</datalist></label></div>
     <div class="row"><label>Raised on<input type="date" id="m_raised" value="${b.raised||''}"></label><label>Target date<input type="date" id="m_due" value="${b.due||''}"></label><label>Status<select id="m_status"><option value="open" ${b.status==='open'?'selected':''}>Open</option><option value="closed" ${b.status==='closed'?'selected':''}>Resolved</option></select></label></div>
     <div class="row"><button class="btn pri" id="m_save">Save</button><button class="btn" id="m_cancel">Cancel</button>${bid?'<span class="sp"></span><button class="btn red" id="m_del">Delete</button>':''}</div></div>`);
-  const fillActs=()=>{const r=S.rooms[$('#m_room').value];$('#m_act').innerHTML=`<option value="">General / whole room</option>`+(r?roomActs(r):[]).map(id=>`<option value="${id}" ${id===b.actId?'selected':''}>${esc(actById(id).name)}</option>`).join('');};
-  fillActs();$('#m_room').onchange=fillActs;$('#m_cancel').onclick=closeModal;
+  const fillActs=()=>{const ids=grp?[...new Set(grp.flatMap(roomActs))]:(S.rooms[$('#m_room').value]?roomActs(S.rooms[$('#m_room').value]):[]);
+    if(grp)ids.sort((x,y)=>(roomActs(S.rooms[roomId]).indexOf(x)+1||1e6)-(roomActs(S.rooms[roomId]).indexOf(y)+1||1e6));
+    $('#m_act').innerHTML=`<option value="">General / whole room</option>`+ids.map(id=>`<option value="${id}" ${id===b.actId?'selected':''}>${esc(actById(id).name)}${grp?` (${grp.filter(r=>roomActs(r).includes(id)).length}/${grp.length})`:''}</option>`).join('');};
+  fillActs();if(!grp)$('#m_room').onchange=fillActs;$('#m_cancel').onclick=closeModal;
   $('#m_save').onclick=()=>{
+    if(grp){
+      const aid=$('#m_act').value,title=$('#m_title').value.trim();if(!title)return alert('Please describe the blocking point.');
+      const rs=grp.filter(r=>!aid||roomActs(r).includes(aid));if(!rs.length)return alert('None of the selected rooms has this activity.');
+      const skip=grp.length-rs.length,stt=$('#m_status').value;
+      if(!confirm(`Raise this blocking point in ${rs.length} room(s)?${skip?`\n\n${skip} selected room(s) don't have “${actById(aid).name}” and are skipped.`:''}`))return;
+      let n=parseInt(nextBlkNo().slice(2));
+      rs.sort(byCode).forEach(r=>store.setBlocker({...b,id:uid('b'),no:'B-'+String(n++).padStart(3,'0'),roomId:r.id,actId:aid,title,cat:$('#m_cat').value,owner:$('#m_owner').value.trim(),raised:$('#m_raised').value||today(),due:$('#m_due').value||'',status:stt,closed:stt==='closed'?today():''}));
+      closeModal();return;
+    }
     const rid=$('#m_room').value,title=$('#m_title').value.trim();
     if(!rid)return alert('Please select a room.');if(!title)return alert('Please describe the blocking point.');
     const stt=$('#m_status').value;
