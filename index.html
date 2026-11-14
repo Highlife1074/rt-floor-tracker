@@ -314,11 +314,15 @@ const lsSet=(k,v)=>{try{localStorage.setItem(k,v);}catch(e){}};
    4-digit PIN (stored hashed in ft_auth/pins); afterwards name + PIN. The device stays signed in.
    Roles: admin (everything incl. Setup) · edit (statuses, blocking points, notes) · view (read only). */
 const APP_ADMIN='HORN, Philippe';
+/* Alphabetical order everywhere a list has no meaningful order of its own (accents/case ignored, 2 < 10) */
+const ABC=(a,b)=>String(a??'').localeCompare(String(b??''),undefined,{sensitivity:'base',numeric:true});
+const byNm=(a,b)=>ABC(a.name,b.name);
+function sortSettings(s){if(!s)return;(s.types||[]).sort(byNm);(s.subs||[]).sort(byNm);(s.people||[]).sort(byNm);}
 const normName=s=>(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z ]/g,' ').split(/\s+/).filter(Boolean).sort().join(' ');
 function simpleHash(str){let h=0;for(let i=0;i<str.length;i++){h=((h<<5)-h)+str.charCodeAt(i);h|=0;}return Math.abs(h).toString(36);}
 const isOwner=n=>normName(n)===normName(APP_ADMIN);
 function peopleOf(s){const l=((s&&s.people)||[]).map(p=>({...p}));if(!l.some(p=>isOwner(p.name)))l.unshift({name:APP_ADMIN,role:'admin'});return l;}
-const people=()=>peopleOf(S.settings);
+const people=()=>peopleOf(S.settings).sort(byNm);
 function me(){const n=lsGet(LSU,'');if(!n||!S.settings)return null;return people().find(p=>normName(p.name)===normName(n))||null;}
 const isAdmin=()=>{const m=me();return !!m&&(isOwner(m.name)||m.role==='admin');};
 const isRO=()=>{const m=me();return !!m&&!isOwner(m.name)&&m.role==='view';};
@@ -338,7 +342,7 @@ const HP='__hp';
 const isHP=id=>String(id).endsWith(HP);
 const mainOf=id=>isHP(id)?id.slice(0,-HP.length):id;
 function actById(id){const a=S.settings.acts.find(x=>x.id===mainOf(id));if(!a||!isHP(id))return a;return {id,main:a.id,isHp:true,name:'HP – '+a.name,short:'HP',color:a.color};}
-const allSteps=()=>{const o=[];S.settings.acts.forEach(a=>{o.push(a);if(a.hp)o.push(actById(a.id+HP));});return o;};
+const allSteps=()=>{const o=[];[...S.settings.acts].sort(byNm).forEach(a=>{o.push(a);if(a.hp)o.push(actById(a.id+HP));});return o;};
 const lbls=id=>isHP(id)?['Pending','Inspection requested','Released']:['To do','In progress','Done'];
 const lbl=(id,s)=>lbls(id)[s]||'';
 const stepLabel=(r,id)=>{const a=actById(id),s=st(r,id);if(a.isHp)return (s===1?'Inspection requested':'Awaiting HP')+': <b>'+esc(a.name.slice(5))+'</b>';return (s===1?'In progress':'Next')+': <b>'+esc(a.name)+'</b>';};
@@ -400,7 +404,27 @@ window.addEventListener('keydown',e=>{
 },true);
 document.addEventListener('mousedown',e=>{if(e.target.closest&&e.target.closest('.sqopt'))e.preventDefault();});
 document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('.sqopt');if(b){e.stopPropagation();sqPick(b);}},true);
-function setSeq(kind,id,fn){if(kind==='type')saveS(s=>{const t=s.types.find(x=>x.id===id);if(t)t.acts=fn(cleanSeq(t.acts));});else{const r=S.rooms[id];if(r)store.patchRoom(id,{acts:fn(cleanSeq(r.acts))});}}
+/* Template change → rooms of that type follow automatically.
+   - a room identical to the old template gets the new template as is;
+   - a customized room keeps its extra activities: removed ones go, added ones are inserted next to their
+     template neighbours, and if the room still followed the template order it is re-ordered like the new one. */
+function mergeSeq(cur,oldT,newT){
+  const l0=cleanSeq(cur);if(l0.join('|')===oldT.join('|'))return [...newT];
+  const followed=l0.filter(a=>oldT.includes(a)).join('|')===oldT.filter(a=>l0.includes(a)).join('|');
+  let l=l0.filter(a=>!(oldT.includes(a)&&!newT.includes(a)));
+  newT.forEach((a,i)=>{if(oldT.includes(a)||l.includes(a))return;let pos=-1;
+    for(let j=i-1;j>=0&&pos<0;j--){const k=l.indexOf(newT[j]);if(k>=0)pos=k+1;}
+    for(let j=i+1;j<newT.length&&pos<0;j++){const k=l.indexOf(newT[j]);if(k>=0)pos=k;}
+    l.splice(pos<0?l.length:pos,0,a);});
+  if(followed){const vals=newT.filter(a=>l.includes(a));let k=0;l=l.map(a=>newT.includes(a)?vals[k++]:a);}
+  return l;
+}
+function syncTypeRooms(tid,oldT,newT){
+  const ps=[];Object.values(S.rooms).forEach(r=>{if(r.type!==tid)return;const n=mergeSeq(r.acts,oldT,newT);if(n.join('|')!==cleanSeq(r.acts).join('|'))ps.push([r.id,{acts:n}]);});
+  if(ps.length)store.patchRooms(ps);
+}
+function setSeq(kind,id,fn){if(kind==='type'){const t0=typeById(id);if(!t0)return;const oldT=cleanSeq(t0.acts),newT=fn([...oldT]);
+    saveS(s=>{const t=s.types.find(x=>x.id===id);if(t)t.acts=newT;});syncTypeRooms(id,oldT,newT);}else{const r=S.rooms[id];if(r)store.patchRoom(id,{acts:fn(cleanSeq(r.acts))});}}
 function seqEditor(kind,id,list){
   list=cleanSeq(list);const avail=S.settings.acts.filter(a=>!list.includes(a.id)).sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:'base',numeric:true}));const r=kind==='room'?S.rooms[id]:null;
   return `<div class="seqed">${list.length?'':'<div class="empty" style="padding:6px">No activity yet — add the first one below.</div>'}${list.map((aid,i)=>{const a=actById(aid),hpOn=a.hp&&!(r&&(r.hpOff||[]).includes(aid));
@@ -428,12 +452,13 @@ let db,fb;
 const dref=(c,id)=>fb.doc(db,P+c,id);
 function setPath(o,path,v){const k=path.split('.');for(let i=0;i<k.length-1;i++){o[k[i]]=o[k[i]]||{};o=o[k[i]];}o[k[k.length-1]]=v;}
 function persist(){lsSet(LSK,JSON.stringify(S));render();}
-async function runOps(ops){for(let i=0;i<ops.length;i+=400){const b=fb.writeBatch(db);ops.slice(i,i+400).forEach(([k,c,id,v])=>k==='del'?b.delete(dref(c,id)):b.set(dref(c,id),v));await b.commit();}}
+async function runOps(ops){for(let i=0;i<ops.length;i+=400){const b=fb.writeBatch(db);ops.slice(i,i+400).forEach(([k,c,id,v])=>k==='del'?b.delete(dref(c,id)):k==='upd'?b.update(dref(c,id),v):b.set(dref(c,id),v));await b.commit();}}
 const fail=e=>{console.error(e);alert('Save failed: '+e.message);};
 const store={
   saveSettings(s){if(roBlock())return;if(USE_FB)return fb.setDoc(dref('settings','main'),s).catch(fail);S.settings=s;persist();},
   setRoom(r){if(roBlock())return;if(USE_FB)return fb.setDoc(dref('rooms',r.id),r).catch(fail);S.rooms[r.id]=r;persist();},
   patchRoom(id,patch){if(roBlock())return;if(USE_FB)return fb.updateDoc(dref('rooms',id),patch).catch(fail);for(const k in patch)setPath(S.rooms[id],k,patch[k]);persist();},
+  patchRooms(list){if(roBlock())return;if(USE_FB)return runOps(list.map(([id,p])=>['upd','rooms',id,p])).catch(fail);list.forEach(([id,p])=>{if(S.rooms[id])for(const k in p)setPath(S.rooms[id],k,p[k]);});persist();},
   setBlocker(b){if(roBlock())return;if(USE_FB)return fb.setDoc(dref('blockers',b.id),b).catch(fail);S.blockers[b.id]=b;persist();},
   delBlocker(id){if(roBlock())return;if(USE_FB)return fb.deleteDoc(dref('blockers',id)).catch(fail);delete S.blockers[id];persist();},
   addLog(e){if(USE_FB)return fb.addDoc(fb.collection(db,P+'log'),e).catch(()=>{});S.log.unshift(e);S.log=S.log.slice(0,1500);},
@@ -525,7 +550,7 @@ function renderLogin(){
   let h=`<div style="text-align:center;margin-bottom:22px"><div class="lg-logo">RT</div><div style="font-weight:800;color:#fff;font-size:19px;letter-spacing:2px">RIVIERA TOWER</div><div style="font-weight:700;color:#c9a84c;font-size:12px;letter-spacing:1.5px">FLOOR FINISHES TRACKER</div></div><div class="lg-card">`;
   const pinsOk=USE_FB?!!fb:true;
   if(LG.step==='pick'){
-    const list=people().map(p=>p.name).sort((a,b)=>a.localeCompare(b));
+    const list=people().map(p=>p.name);
     h+=`<div class="lg-title">Who are you?</div><div class="lg-sub">Select your name to continue</div><div class="lg-list">${list.map(n=>`<button class="lg-p" data-lgpick="${esc(n)}"><span class="lg-av">${esc(n[0]||'?')}</span><span>${esc(n)}</span><span style="margin-left:auto;font-size:10px;${S.pins[n]?'color:#aaa':'color:#c9a84c;font-weight:700'}">${S.pins[n]?'🔒 PIN set':'new'}</span></button>`).join('')}</div>${pinsOk?'':'<div class="lg-sub">Connecting…</div>'}`;
   }else if(LG.step==='pin'){
     h+=`<div class="lg-title">Hello, ${esc(LG.name.split(',').slice(-1)[0].trim()||LG.name)}</div><div class="lg-sub">Enter your 4-digit PIN</div>${LG.err?`<div class="lg-err">${esc(LG.err)}</div>`:''}
@@ -581,6 +606,7 @@ function render(){clearTimeout(rT);rT=setTimeout(doRender,25);}
 let LASTVIEW=null;
 function doRender(){
   if(!S.settings)return;
+  sortSettings(S.settings);
   const m=me();
   if(!m){closeDrawer();if(!$('#login').classList.contains('open'))showLogin();else if(LG.step==='pick')renderLogin();return;}
   const ae=document.activeElement;
@@ -859,14 +885,14 @@ function vBlockers(){
   const cl7=all.filter(b=>b.status==='closed'&&b.closed&&days(b.closed,t)<=7).length;
   const age=open.length?Math.round(avg(open.map(b=>days(b.raised||t,t)))):0;
   const roomsB=new Set(open.map(b=>b.roomId)).size;
-  const owners=[...new Set(all.map(b=>b.owner).filter(Boolean))].sort();
+  const owners=[...new Set(all.map(b=>b.owner).filter(Boolean))].sort(ABC);
   const opt=(v,l,cur)=>`<option value="${esc(v)}" ${cur===v?'selected':''}>${esc(l)}</option>`;
   const rows=blkRows();
   let h=`<div class="kpis"><div class="kpi"><b style="color:var(--blk)">${open.length}</b><span>Open blocking points</span></div><div class="kpi"><b>${roomsB}</b><span>Rooms blocked</span></div><div class="kpi"><b class="${over.length?'overdue':''}">${over.length}</b><span>Overdue (target date passed)</span></div><div class="kpi"><b>${age} d</b><span>Average age of open points</span></div><div class="kpi"><b style="color:var(--done)">${cl7}</b><span>Resolved last 7 days</span></div></div>`;
   h+=`<div class="filters noprint"><button class="btn pri" data-newblk="|">+ New blocking point</button>
     <select data-fs="bStatus">${opt('open','Open',F.bStatus)}${opt('closed','Resolved',F.bStatus)}${opt('all','All',F.bStatus)}</select>
     <select data-fs="bFloor">${opt('all','All floors',F.bFloor)}${s.floors.map(f=>opt(f.id,f.name,F.bFloor)).join('')}</select>
-    <select data-fs="bCat">${opt('all','All categories',F.bCat)}${s.cats.map(c=>opt(c,c,F.bCat)).join('')}</select>
+    <select data-fs="bCat">${opt('all','All categories',F.bCat)}${[...s.cats].sort(ABC).map(c=>opt(c,c,F.bCat)).join('')}</select>
     <select data-fs="bOwner">${opt('all','All responsibles',F.bOwner)}${owners.map(o=>opt(o,o,F.bOwner)).join('')}</select>
     <select data-fs="bGroup">${opt('none','No grouping',F.bGroup)}${opt('room','Group by room',F.bGroup)}${opt('cat','Group by category',F.bGroup)}${opt('owner','Group by responsible',F.bGroup)}${opt('act','Group by activity',F.bGroup)}</select>
     <input id="bq" data-fs="bq" placeholder="🔍 Search…" value="${esc(F.bq)}" style="width:150px">
@@ -876,7 +902,7 @@ function vBlockers(){
   if(!rows.length)return h+`<div class="card">No blocking point for these filters 👍</div>`;
   const gk={room:b=>{const r=S.rooms[b.roomId];return r?`${floorById(r.floor)?.name||''} · ${r.code} ${r.name}`:'(deleted room)';},cat:b=>b.cat||'—',owner:b=>b.owner||'(no responsible)',act:b=>b.actId?(actById(b.actId)?.name||'—'):'General / whole room'}[F.bGroup];
   const groups={};rows.forEach(b=>{const k=gk?gk(b):'';(groups[k]=groups[k]||[]).push(b);});
-  const keys=gk?Object.keys(groups).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})):[''];
+  const keys=gk?Object.keys(groups).sort(ABC):[''];
   h+=`<div class="tbwrap"><table class="tb"><thead><tr><th>No</th><th>Floor</th><th>Room</th><th>Activity</th><th>Description</th><th>Category</th><th>Responsible</th><th>Raised</th><th>Target</th><th>Age</th><th>Status</th><th class="noprint"></th></tr></thead><tbody>`;
   keys.forEach(k=>{
     if(gk)h+=`<tr class="grp"><td colspan="12">${esc(k)} (${groups[k].length})</td></tr>`;
@@ -922,7 +948,7 @@ function vSetup(){
   const cnt=id=>rooms.filter(r=>(r.acts||[]).includes(id)).length;
   if(!isAdmin())return `<div class="card">Setup is reserved for admins.</div>`;
   let h=`<div class="card"><h2>👥 Team & access</h2><p style="margin:0 0 10px;color:var(--mute);font-size:12px">Only the people in this list can open the app. On their first login they pick their name and choose a 4-digit PIN; next time, name + PIN. <b>Admin</b>: everything including Setup · <b>Editor</b>: statuses, hold points, blocking points, notes · <b>Read only</b>: view, print and export.</p>
-    <div class="tbwrap"><table class="tb"><thead><tr><th>Name</th><th>Role</th><th>PIN</th><th></th></tr></thead><tbody>${people().sort((a,b)=>a.name.localeCompare(b.name)).map(p=>{const own=isOwner(p.name);return `<tr><td><b>${esc(p.name)}</b>${own?' <span class="tag">owner</span>':''}</td><td>${own?'Admin':`<select data-prole="${esc(p.name)}">${ROLES.map(([v,l])=>`<option value="${v}" ${(p.role||'edit')===v?'selected':''}>${l}</option>`).join('')}</select>`}</td><td>${S.pins[p.name]?'🔒 set':'<span style="color:#b57800;font-weight:700">not yet</span>'}</td><td style="white-space:nowrap;text-align:right">${S.pins[p.name]?`<button class="btn sm" data-preset="${esc(p.name)}">Reset PIN</button> `:''}${own?'':`<button class="btn sm red" data-pdel="${esc(p.name)}">Remove</button>`}</td></tr>`;}).join('')}</tbody></table></div>
+    <div class="tbwrap"><table class="tb"><thead><tr><th>Name</th><th>Role</th><th>PIN</th><th></th></tr></thead><tbody>${people().map(p=>{const own=isOwner(p.name);return `<tr><td><b>${esc(p.name)}</b>${own?' <span class="tag">owner</span>':''}</td><td>${own?'Admin':`<select data-prole="${esc(p.name)}">${ROLES.map(([v,l])=>`<option value="${v}" ${(p.role||'edit')===v?'selected':''}>${l}</option>`).join('')}</select>`}</td><td>${S.pins[p.name]?'🔒 set':'<span style="color:#b57800;font-weight:700">not yet</span>'}</td><td style="white-space:nowrap;text-align:right">${S.pins[p.name]?`<button class="btn sm" data-preset="${esc(p.name)}">Reset PIN</button> `:''}${own?'':`<button class="btn sm red" data-pdel="${esc(p.name)}">Remove</button>`}</td></tr>`;}).join('')}</tbody></table></div>
     <div class="row" style="margin-top:10px"><textarea id="np_name" rows="2" placeholder="LASTNAME, Firstname (one per line)" style="flex:1;min-width:200px"></textarea><select id="np_role">${ROLES.map(([v,l])=>`<option value="${v}" ${v==='edit'?'selected':''}>${l}</option>`).join('')}</select><button class="btn pri" data-act="addperson">+ Add person</button></div>
     <p style="margin:8px 0 0;color:var(--mute);font-size:11px">Tip: paste several names at once, one per line. Use the same spelling as in MOM Tracker (e.g. “HORN, Philippe”).</p></div>`;
   h+=`<div class="grid2"><div class="card"><h2>General</h2><div class="form">
@@ -936,7 +962,7 @@ function vSetup(){
   s.acts.forEach((a,i)=>{h+=`<div class="row" style="margin-bottom:6px"><input type="color" data-actcolor="${a.id}" value="${a.color}" style="width:42px;padding:2px;height:34px" title="Pick any colour"><input data-hold data-actral="${a.id}" list="ralList" value="${a.ral&&RAL[a.ral]?`RAL ${a.ral} – ${esc(RAL[a.ral].name)}`:''}" placeholder="RAL…" title="Colour from a RAL code: type e.g. 3020 or a name, then pick" style="width:210px"><input data-hold data-actname="${a.id}" value="${esc(a.name)}" style="flex:1;min-width:150px"><input data-hold data-actshort="${a.id}" value="${esc(a.short)}" style="width:70px" title="Short code"><select data-actsub="${a.id}" title="Default subcontractor" style="width:150px"><option value="">🏗 — sub —</option>${(s.subs||[]).map(x=>`<option value="${x.id}" ${a.sub===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select><select data-actresp="${a.id}" title="Default responsible" style="width:160px"><option value="">👷 — responsible —</option>${people().map(p=>`<option value="${esc(p.name)}" ${a.resp===p.name?'selected':''}>${esc(p.name)}</option>`).join('')}</select><label class="chk" title="Adds a linked hold point (inspection) step right after this activity"><input type="checkbox" data-acthp="${a.id}" ${a.hp?'checked':''}><span class="hptag">◆ HP</span>Hold point</label><small style="color:var(--mute);width:70px">${cnt(a.id)} rooms</small><button class="btn sm" data-actup="${i}" ${i?'':'disabled'}>↑</button><button class="btn sm" data-actdown="${i}" ${i<s.acts.length-1?'':'disabled'}>↓</button><button class="btn sm red" data-actdel="${a.id}">✕</button></div>`;});
   h+=`<button class="btn sm" data-act="addact">+ Add activity</button>${ralList()}</div>`;
   h+=`<div class="card"><h2>Room types (sequence templates)</h2><p style="margin:0 0 10px;color:var(--mute);font-size:12px">Each template is an ordered <b>sequence</b> of activities: step 1, then step 2… Re-order with ↑ ↓ or drag the rows. Each type has a colour (colour picker or <b>RAL</b> code) used on the plans and in the matrix. New rooms copy the sequence of their template; each room can still be adjusted in its own “Customize sequence”.</p>`;
-  s.types.forEach(t=>{h+=`<details data-dk="type_${t.id}" style="border-bottom:1px solid var(--line)"><summary><i class="sq" style="background:${typeCol(t.id)};border:0;vertical-align:middle"></i> <b>${esc(t.name)}</b> <button class="btn sm" data-typeren="${t.id}" title="Rename this room type" style="padding:1px 7px;margin-left:4px">✏ Rename</button> <small style="color:var(--mute)">· ${t.acts.filter(x=>actById(x)).length} activities · ${rooms.filter(r=>r.type===t.id).length} rooms</small></summary><div class="row" style="margin:8px 0"><input type="color" data-typecolor="${t.id}" value="${typeCol(t.id)}" style="width:42px;padding:2px;height:34px" title="Colour of this room type (plans, matrix)"><input data-hold data-typeral="${t.id}" list="ralList" value="${t.ral&&RAL[t.ral]?`RAL ${t.ral} – ${esc(RAL[t.ral].name)}`:''}" placeholder="RAL…" title="Colour from a RAL code: type e.g. 3020 or a name, then pick" style="width:210px"><input data-hold data-typename="${t.id}" value="${esc(t.name)}" style="flex:1"><button class="btn sm" data-typecopy="${t.id}">Duplicate</button><button class="btn sm red" data-typedel="${t.id}">Delete type</button></div>${seqEditor('type',t.id,t.acts)}</details>`;});
+  s.types.forEach(t=>{h+=`<details data-dk="type_${t.id}" style="border-bottom:1px solid var(--line)"><summary><i class="sq" style="background:${typeCol(t.id)};border:0;vertical-align:middle"></i> <b>${esc(t.name)}</b> <button class="btn sm" data-typeren="${t.id}" title="Rename this room type" style="padding:1px 7px;margin-left:4px">✏ Rename</button> <small style="color:var(--mute)">· ${t.acts.filter(x=>actById(x)).length} activities · ${rooms.filter(r=>r.type===t.id).length} rooms</small></summary><div class="row" style="margin:8px 0"><input type="color" data-typecolor="${t.id}" value="${typeCol(t.id)}" style="width:42px;padding:2px;height:34px" title="Colour of this room type (plans, matrix)"><input data-hold data-typeral="${t.id}" list="ralList" value="${t.ral&&RAL[t.ral]?`RAL ${t.ral} – ${esc(RAL[t.ral].name)}`:''}" placeholder="RAL…" title="Colour from a RAL code: type e.g. 3020 or a name, then pick" style="width:210px"><input data-hold data-typename="${t.id}" value="${esc(t.name)}" style="flex:1"><button class="btn sm" data-typecopy="${t.id}">Duplicate</button><button class="btn sm red" data-typedel="${t.id}">Delete type</button></div>${seqEditor('type',t.id,t.acts)}${(()=>{const ts=cleanSeq(t.acts).join('|'),nd=rooms.filter(r=>r.type===t.id&&cleanSeq(r.acts).join('|')!==ts).length;return nd?`<div class="row" style="margin:6px 0 10px"><small style="color:var(--mute)">Changes to this sequence are applied automatically to the rooms of this type. <b>${nd}</b> room(s) of this type have a sequence different from the template (customized per room).</small><button class="btn sm" data-typesync="${t.id}">⟳ Reset them to the template</button></div>`:`<div style="margin:6px 0 10px"><small style="color:var(--mute)">✓ All rooms of this type follow this sequence — changes are applied to them automatically.</small></div>`;})()}</details>`;});
   h+=`<button class="btn sm" data-act="addtype" style="margin-top:8px">+ Add room type</button></div>`;
   const fo=s.floors.map(f=>`<option value="${f.id}">${esc(f.name)}</option>`).join(''),to=s.types.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('');
   h+=`<div class="grid2"><div class="card"><h2>Add a room</h2><div class="form"><div class="row"><label>Floor<select id="nr_floor">${fo}</select></label><label>Room code<input id="nr_code" placeholder="e.g. 2.05"></label></div><label>Room name<input id="nr_name" placeholder="e.g. Master bathroom"></label><label>Room type<select id="nr_type">${to}</select></label><button class="btn pri" data-act="addroom">Add room</button></div></div>
@@ -1086,7 +1112,7 @@ function blkModal(bid,roomId,actId){
     <label>Room<select id="m_room"><option value="">— select —</option>${ro}</select></label>
     <label>Activity concerned<select id="m_act"></select></label>
     <label>Description of the blocking point<textarea id="m_title" rows="3">${esc(b.title)}</textarea></label>
-    <div class="row"><label>Category<select id="m_cat">${s.cats.map(c=>`<option ${c===b.cat?'selected':''}>${esc(c)}</option>`).join('')}</select></label><label>Responsible<input id="m_owner" list="m_owners" value="${esc(b.owner)}" placeholder="Who must solve it"><datalist id="m_owners">${[...new Set([...owners,...(s.subs||[]).map(x=>x.name),...people().map(p=>p.name)])].map(o=>`<option value="${esc(o)}">`).join('')}</datalist></label></div>
+    <div class="row"><label>Category<select id="m_cat">${[...s.cats].sort(ABC).map(c=>`<option ${c===b.cat?'selected':''}>${esc(c)}</option>`).join('')}</select></label><label>Responsible<input id="m_owner" list="m_owners" value="${esc(b.owner)}" placeholder="Who must solve it"><datalist id="m_owners">${[...new Set([...owners,...(s.subs||[]).map(x=>x.name),...people().map(p=>p.name)])].sort(ABC).map(o=>`<option value="${esc(o)}">`).join('')}</datalist></label></div>
     <div class="row"><label>Raised on<input type="date" id="m_raised" value="${b.raised||''}"></label><label>Target date<input type="date" id="m_due" value="${b.due||''}"></label><label>Status<select id="m_status"><option value="open" ${b.status==='open'?'selected':''}>Open</option><option value="closed" ${b.status==='closed'?'selected':''}>Resolved</option></select></label></div>
     <div class="row"><button class="btn pri" id="m_save">Save</button><button class="btn" id="m_cancel">Cancel</button>${bid?'<span class="sp"></span><button class="btn red" id="m_del">Delete</button>':''}</div></div>`);
   const fillActs=()=>{const r=S.rooms[$('#m_room').value];$('#m_act').innerHTML=`<option value="">General / whole room</option>`+(r?roomActs(r):[]).map(id=>`<option value="${id}" ${id===b.actId?'selected':''}>${esc(actById(id).name)}</option>`).join('');};
@@ -1155,7 +1181,9 @@ const ACT={
   deldemo:()=>{const ids=Object.values(S.rooms).filter(r=>r.demo).map(r=>r.id);if(!confirm(`Delete ${ids.length} demo rooms and their blocking points?`))return;store.delRooms(ids,Object.values(S.blockers).filter(b=>ids.includes(b.roomId)).map(b=>b.id));},
   delall:()=>{if(prompt('This deletes ALL rooms and blocking points. Type DELETE to confirm:')!=='DELETE')return;store.delRooms(Object.keys(S.rooms),Object.keys(S.blockers));},
   applytpl:()=>{const r=S.rooms[drawerRoom],t=typeById($('#tplsel').value);if(!t||!confirm(`Replace this room's sequence with the “${t.name}” template? Statuses already entered are kept.`))return;store.patchRoom(r.id,{acts:[...t.acts],type:t.id});},
-  saveroom:()=>{const r=S.rooms[drawerRoom],code=$('#rd_code').value.trim();if(!code)return alert('Code is required.');document.activeElement.blur();store.patchRoom(r.id,{code,name:$('#rd_name').value.trim(),floor:$('#rd_floor').value,type:$('#rd_type').value});},
+  saveroom:()=>{const r=S.rooms[drawerRoom],code=$('#rd_code').value.trim();if(!code)return alert('Code is required.');document.activeElement.blur();const type=$('#rd_type').value,p={code,name:$('#rd_name').value.trim(),floor:$('#rd_floor').value,type};
+    const t=type!==r.type?typeById(type):null;if(t&&confirm(`Type changed to “${t.name}”.\n\nAlso replace this room's sequence with the template of this type? (Statuses already entered are kept.)`))p.acts=cleanSeq(t.acts);
+    store.patchRoom(r.id,p);},
   delroom:()=>{const r=S.rooms[drawerRoom];if(!confirm(`Delete room ${r.code} and its blocking points?`))return;const id=r.id;closeDrawer();store.delRooms([id],Object.values(S.blockers).filter(b=>b.roomId===id).map(b=>b.id));},
 };
 document.addEventListener('click',e=>{
@@ -1163,7 +1191,7 @@ document.addEventListener('click',e=>{
   if(e.target.id==='modal'&&!$('#modal').dataset.lock){closeModal();return;}
   const inPop=!!e.target.closest('#pop');if(!inPop)closePop();
   if(planClick(e))return;
-  const t=e.target.closest('[data-view],[data-f],[data-closeblk],[data-editblk],[data-newblk],[data-set],[data-cell],[data-room],[data-act],[data-actup],[data-actdown],[data-actdel],[data-typedel],[data-delfloor],[data-gonext],[data-preset],[data-pdel],[data-sqmv],[data-sqrm],[data-sqsort],[data-typecopy],[data-typeren],[data-asg],[data-subdel]');
+  const t=e.target.closest('[data-view],[data-f],[data-closeblk],[data-editblk],[data-newblk],[data-set],[data-cell],[data-room],[data-act],[data-actup],[data-actdown],[data-actdel],[data-typedel],[data-delfloor],[data-gonext],[data-preset],[data-pdel],[data-sqmv],[data-sqrm],[data-sqsort],[data-typecopy],[data-typeren],[data-typesync],[data-asg],[data-subdel]');
   if(!t)return;const d=t.dataset;if(inPop&&d.keep===undefined)setTimeout(closePop,0);
   if(d.preset){if(confirm(`Reset the PIN of ${d.preset}?\n\nThey will choose a new PIN at their next login.`))store.resetPin(d.preset);return;}
   if(d.pdel){if(!confirm(`Remove ${d.pdel} from the team?\n\nThey will no longer be able to log in. Their past updates stay in the history.`))return;const n=d.pdel;editPeople(l=>{const i=l.findIndex(p=>p.name===n);if(i>=0)l.splice(i,1);});if(S.pins[n])store.resetPin(n);return;}
@@ -1188,6 +1216,8 @@ document.addEventListener('click',e=>{
   if(d.gonext){Object.assign(F,{view:'overview',next:d.gonext,floor:'all',type:'all',q:'',blk:'all'});render();window.scrollTo(0,0);return;}
   if(d.actup||d.actdown){const i=+(d.actup??d.actdown),j=d.actup!==undefined?i-1:i+1;saveS(s=>{[s.acts[i],s.acts[j]]=[s.acts[j],s.acts[i]];});return;}
   if(d.actdel){const a=actById(d.actdel),n=Object.values(S.rooms).filter(r=>(r.acts||[]).includes(a.id)).length;if(!confirm(`Delete activity “${a.name}”?${n?` It is used in ${n} room(s) and will disappear from them.`:''}`))return;saveS(s=>{s.acts=s.acts.filter(x=>x.id!==d.actdel);s.types.forEach(t=>t.acts=t.acts.filter(x=>x!==d.actdel));});return;}
+  if(d.typesync){const t=typeById(d.typesync);if(!t)return;const tl=cleanSeq(t.acts),rs=Object.values(S.rooms).filter(r=>r.type===t.id&&cleanSeq(r.acts).join('|')!==tl.join('|'));
+    if(!rs.length||!confirm(`Replace the sequence of ${rs.length} room(s) of type “${t.name}” with the template?\n\nTheir per-room customizations are lost. Statuses already entered are kept.`))return;store.patchRooms(rs.map(r=>[r.id,{acts:[...tl]}]));return;}
   if(d.typedel){if(!confirm('Delete this room type? Rooms keep their activities.'))return;saveS(s=>s.types=s.types.filter(x=>x.id!==d.typedel));return;}
   if(d.delfloor){if(Object.values(S.rooms).some(r=>r.floor===d.delfloor))return alert('Move or delete the rooms of this floor first.');if(sheetsOf(d.delfloor).length)return alert('Remove the plan sheets of this floor first (Plans tab).');if(!confirm('Delete this floor?'))return;saveS(s=>s.floors=s.floors.filter(x=>x.id!==d.delfloor));return;}
   if(d.act&&ACT[d.act])ACT[d.act]();
