@@ -57,6 +57,7 @@ table.mx{border-collapse:separate;border-spacing:0;font-size:12px}
 .mx thead th{position:sticky;top:0;background:#fff;z-index:2;height:150px;vertical-align:bottom;padding:6px 2px}
 .mx .vt{writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-weight:600;margin:0 auto;display:flex;align-items:center;gap:4px}
 .mx .rh{position:sticky;left:0;background:#fff;z-index:1;padding:4px 10px;min-width:190px;text-align:left;white-space:nowrap}
+.mxblk{border:1px solid var(--line);background:#fff;color:var(--blk);border-radius:6px;font-size:11px;line-height:1;padding:2px 5px;cursor:pointer;margin-left:2px;opacity:.55}.mxblk:hover,tr:hover .mxblk{opacity:1}.mxblk:hover{background:#fde8e8;border-color:var(--blk)}
 .mx .mxck{margin:0 6px 0 0;vertical-align:middle;cursor:pointer}
 .mx tr.msel td.rh{background:var(--acc2)}
 .tytag{display:inline-block;color:#fff;font-size:10px;font-weight:600;padding:0 5px;border-radius:4px;vertical-align:middle;max-width:110px;overflow:hidden;text-overflow:ellipsis}
@@ -769,7 +770,7 @@ function vMatrix(){
   let h=filterBar('matrix');
   if(!isRO())h+=mxTypeBar(list,tm);
   const lg=`<span><i class="sq" style="background:var(--done);border:0"></i>Done</span><span><i class="sq" style="background:var(--wip);border:0"></i>In progress</span><span><i class="sq"></i>To do</span><span><i class="sq" style="background:var(--blk);border:0"></i>Blocked</span><span>◆ Hold point: <i class="sq" style="background:var(--hp);border:0"></i>requested · <i class="sq" style="background:var(--done);border:0"></i>released</span>`;
-  h+=`<div class="legend noprint">${lg}${seq?'<span>Each row reads left → right in the room’s own sequence (activity short codes)</span>':`<span>Number = step of the activity in the room’s sequence</span><span><i class="sq" style="background:linear-gradient(225deg,#7e57c2 6px,#fff 6px)"></i>done in a different order than the columns</span><span>Columns: ${F.type!=='all'?'sequence of the “'+esc(typeById(F.type)?.name||'')+'” template':'dominant order of the rooms shown'}</span>`}<span><b>Click a cell</b> to set To do / WIP / Done</span><span><b>Right-click a room</b> to see it on the plan</span></div>`;
+  h+=`<div class="legend noprint">${lg}${seq?'<span>Each row reads left → right in the room’s own sequence (activity short codes)</span>':`<span>Number = step of the activity in the room’s sequence</span><span><i class="sq" style="background:linear-gradient(225deg,#7e57c2 6px,#fff 6px)"></i>done in a different order than the columns</span><span>Columns: ${F.type!=='all'?'sequence of the “'+esc(typeById(F.type)?.name||'')+'” template':'dominant order of the rooms shown'}</span>`}<span><b>Click a cell</b> to set To do / WIP / Done</span><span><b>⚠</b> next to a room = raise a blocking point</span><span><b>Right-click a room</b> to see it on the plan</span></div>`;
   h+=`<div class="printonly"><h2>${esc(s.project)} — Status matrix (${seq?'by sequence':'by activity'}) — ${fmtLong(today())}</h2></div>`;
   let cols=[],order=[],N=0;
   if(seq)N=Math.max(1,...list.map(r=>roomActs(r).length));else({cols,order}=mxColumns(list));
@@ -785,7 +786,7 @@ function vMatrix(){
       if(!ri||rs[ri-1].type!==r.type){const g=rs.filter(x=>x.type===r.type),tn=(typeById(r.type)||{}).name||'No type';
         h+=`<tr class="tg"><td class="rh">${tm?`<input type="checkbox" class="mxck" data-mxfl="${f.id}|${r.type||''}" ${g.every(x=>MX.sel.has(x.id))?'checked':''} title="Select the rooms of this type on this floor">`:''}<i class="sq" style="background:${typeCol(r.type)};border:0"></i> ${esc(tn)} <small>(${g.length})</small></td><td colspan="${nCols+2}"></td></tr>`;}
       const bl=openBlk(r),ra=roomActs(r),q=cleanSeq(r.acts);
-      h+=`<tr class="${tm&&MX.sel.has(r.id)?'msel':''}"><td class="rh">${tm?`<input type="checkbox" class="mxck" data-mxsel="${r.id}" ${MX.sel.has(r.id)?'checked':''}>`:''}<a href="#" tabindex="-1" data-room="${r.id}"><b>${esc(r.code)}</b></a> <span style="color:var(--mute)">${esc(r.name)}</span>${tm?` <span class="tytag" style="background:${typeCol(r.type)}">${esc((typeById(r.type)||{}).name||'No type')}</span>`:''}${bl.length?` <span class="badge red">⚠${bl.length}</span>`:''}</td><td class="cmt"><input data-hold data-rnote="${r.id}" value="${esc((r.note||'').replace(/\n/g,' · '))}" placeholder="${isRO()?'':'Add a comment…'}" title="${esc(r.note||'')}" ${isRO()?'readonly':''}></td>`;
+      h+=`<tr class="${tm&&MX.sel.has(r.id)?'msel':''}"><td class="rh">${tm?`<input type="checkbox" class="mxck" data-mxsel="${r.id}" ${MX.sel.has(r.id)?'checked':''}>`:''}<a href="#" tabindex="-1" data-room="${r.id}"><b>${esc(r.code)}</b></a> <span style="color:var(--mute)">${esc(r.name)}</span>${tm?` <span class="tytag" style="background:${typeCol(r.type)}">${esc((typeById(r.type)||{}).name||'No type')}</span>`:''}${bl.length?` <span class="badge red" title="${bl.length} open blocking point(s)">⚠${bl.length}</span>`:''}${isRO()?'':` <button class="mxblk noprint" tabindex="-1" data-newblk="${r.id}|" title="Raise a blocking point on ${esc(r.code)}">⚠</button>`}</td><td class="cmt"><input data-hold data-rnote="${r.id}" value="${esc((r.note||'').replace(/\n/g,' · '))}" placeholder="${isRO()?'':'Add a comment…'}" title="${esc(r.note||'')}" ${isRO()?'readonly':''}></td>`;
       const cell=(a,extra,inner,tipStep)=>{const sv=st(r,a.id),b=bl.some(x=>x.actId===a.id),g=asg(r,a.id);
         return `<td class="c s${sv} ${a.isHp?'hp':''} ${b?'b':''} ${F.next===a.id?'hl':''} ${extra}" data-cell="${r.id}|${a.id}" title="${esc(r.code+' · '+tipStep+a.name+' · '+(b?'BLOCKED':lbl(a.id,sv))+(g.sub&&!a.isHp?' · '+subName(g.sub):'')+(g.resp?' · '+g.resp:''))}">${b?'!':inner}</td>`;};
       if(seq){
@@ -1528,7 +1529,7 @@ document.addEventListener('contextmenu',e=>{
   p.innerHTML=`<div style="font-size:12px;margin-bottom:8px"><b>${esc(r.code)}</b> ${esc(r.name)}</div><div class="ctxm">
     <button class="btn sm pri" data-peek="${rid}" ${n?'':'disabled title="This room is not placed on any plan"'}>📐 See on the plan</button>
     <button class="btn sm" data-showpin="${rid}" ${n?'':'disabled'}>↗ Go to the Plans page</button>
-    <button class="btn sm" data-room="${rid}">Open room</button></div>${n?'':'<small style="color:var(--mute);display:block;margin-top:6px">Not placed on any plan yet.</small>'}`;
+    ${isRO()?'':`<button class="btn sm" data-newblk="${rid}|">⚠ Raise a blocking point</button>`}<button class="btn sm" data-room="${rid}">Open room</button></div>${n?'':'<small style="color:var(--mute);display:block;margin-top:6px">Not placed on any plan yet.</small>'}`;
   const x=e.clientX,y=e.clientY;placePop({isConnected:false,getBoundingClientRect:()=>({left:x,top:y,bottom:y})});
 });
 function openPeek(rid){
