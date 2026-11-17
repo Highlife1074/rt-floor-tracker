@@ -18,6 +18,12 @@ phone Back button and the **← Back** button (left of the tabs) return to the p
 all), optionally an activity (rooms without it are left out), then untick exceptions. One blocking point per room is
 saved with the same number and a group id (`grp`); the Cockpit and counters show it once ("12 rooms", "Resolve all"),
 editing it can apply to all its rooms.
+**Follow-up of a blocking point:** priority (High / Medium / Low), status Open → **In progress** → Resolved (stored as
+`status:'open'` + `stage:'wip'`), dated and signed notes (`cmts`, saved at once on all rooms of the point; status,
+priority, responsible, target date and photo changes are logged automatically), photos taken on site (resized to
+1280 px JPEG, one document each in `ft_blkphotos`, ids in `photos`; not included in the JSON backup). The Blocking
+points tab shows **Who has to act** (open points per responsible: in progress, high priority, overdue, oldest; click a
+row to filter); the Cockpit list is sorted overdue first, then priority, then age.
 
 Firebase config goes at the top of index.html (FIREBASE_CONFIG).
 Empty config = local mode (data in the browser only).
