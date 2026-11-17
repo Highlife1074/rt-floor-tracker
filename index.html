@@ -202,6 +202,45 @@ body.ro [data-set],body.ro [data-newblk],body.ro [data-closeblk],body.ro .rwonly
 .pin.flash{animation:pinf .9s 4}@keyframes pinf{50%{transform:translate(-50%,-50%) scale(1.9)}}
 .planin.editing .pin{touch-action:none;cursor:move}.planin.placing,.planin.placing img{cursor:crosshair}
 .pedit{border-color:var(--hp);background:#f3f8ff}.pedit .chips{flex-wrap:wrap;max-height:120px;overflow:auto}
+/* simplified navigation */
+nav.tabs button{font-size:15px;padding:13px 16px}
+.vswitch{display:inline-flex;border:1px solid var(--acc);border-radius:9px;overflow:hidden;flex:none}
+.vswitch button{border:0;background:#fff;color:var(--acc);font:inherit;font-weight:700;padding:8px 14px;cursor:pointer}
+.vswitch button+button{border-left:1px solid var(--acc)}
+.vswitch button.on{background:var(--acc);color:#fff}
+.morefilters{background:#fff;border:1px solid var(--line);border-radius:var(--rad);padding:10px;margin:-2px 0 10px}
+.btn.on{background:var(--acc2);border-color:var(--acc);color:var(--acc);font-weight:700}
+.clr{background:none;border:0;color:var(--acc);font:inherit;font-size:13px;text-decoration:underline;cursor:pointer}
+.fab{position:fixed;right:18px;bottom:18px;z-index:30;display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+.fab button{border:0;border-radius:28px;padding:13px 20px;font:inherit;font-weight:700;font-size:14px;cursor:pointer;box-shadow:0 6px 18px rgba(10,20,40,.28)}
+.fab .f1{background:#fff;color:var(--acc);border:2px solid var(--acc)}.fab .f2{background:var(--blk);color:#fff}
+main{padding-bottom:90px}
+.logout{background:none;border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:20px;padding:5px 11px;cursor:pointer;font:inherit;font-size:13px}
+#drawer .arow .seg button{padding:9px 13px;font-size:13px}
+.blkbtn{color:var(--blk);border-color:#f0c4c4;white-space:nowrap}
+details.tools{position:relative}
+details.tools>summary{list-style:none;padding:4px 9px;font-size:12px;border:1px solid var(--line);border-radius:8px;background:#fff}
+details.tools>summary::-webkit-details-marker{display:none}
+details.tools[open]>summary{border-color:var(--acc);color:var(--acc)}
+details.tools .tmenu{position:absolute;right:0;top:calc(100% + 4px);z-index:25;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);padding:8px;display:grid;gap:6px;min-width:220px}
+details.tools .tmenu .btn{text-align:left}
+.bneck{display:grid;grid-template-columns:minmax(120px,190px) 1fr 44px;gap:6px 10px;align-items:center;font-size:13px}
+.bneck .lab{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}.bneck .lab:hover{color:var(--acc);text-decoration:underline}
+.bneck .bb{height:16px;background:#eef0f4;border-radius:4px;overflow:hidden;display:flex}.bneck .bb i{display:block;height:100%}
+.bneck b{text-align:right}
+.kpi small{display:block;margin-top:2px}
+.flrow{cursor:pointer;border-radius:8px;padding:2px 4px}.flrow:hover{background:#f6f8fb}
+.qrlist{max-height:55vh;overflow:auto;margin-top:8px;border:1px solid var(--line);border-radius:8px}
+.qrlist button{display:flex;gap:10px;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);background:#fff;padding:9px 12px;font:inherit;cursor:pointer;color:var(--ink)}
+.qrlist button:hover{background:var(--acc2)}.qrlist button[hidden]{display:none}
+.setup{display:grid;grid-template-columns:220px 1fr;gap:18px;align-items:start}
+.smenu{position:sticky;top:120px;background:#fff;border:1px solid var(--line);border-radius:var(--rad);padding:6px;display:flex;flex-direction:column;gap:2px}
+.smenu button{display:flex;align-items:center;gap:10px;border:0;background:none;text-align:left;font:inherit;font-weight:600;color:var(--ink);padding:10px 12px;border-radius:8px;cursor:pointer}
+.smenu button span{width:20px;text-align:center}.smenu button small{margin-left:auto;background:var(--acc2);color:var(--acc);border-radius:10px;padding:0 7px;font-size:11px;font-weight:700}
+.smenu button:hover{background:#f3f5f9}.smenu button.on{background:var(--acc);color:#fff}.smenu button.on small{background:rgba(255,255,255,.22);color:#fff}
+.sbody{min-width:0}.stitle{font-size:20px;margin:2px 0 12px}
+@media (max-width:800px){.setup{grid-template-columns:1fr}.smenu{position:static;flex-direction:row;overflow-x:auto}.smenu button{white-space:nowrap}}
+@media print{.fab{display:none!important}}
 @media print{.sticky,.noprint,#drawer,#scrim,#modal{display:none!important}.printonly{display:block}body{background:#fff}main{padding:0;max-width:none}.tile{break-inside:avoid}.mxwrap,.tbwrap{max-height:none;overflow:visible;border:0}.tb tr{break-inside:avoid}.planwrap{max-height:none;overflow:visible;border:0}.planin{width:100%!important}}
 @media (max-width:640px){.grid2{grid-template-columns:1fr}.tiles{grid-template-columns:repeat(auto-fill,minmax(145px,1fr))}main{padding:10px}.seg button{padding:7px 7px}}
 </style>
@@ -211,15 +250,13 @@ body.ro [data-set],body.ro [data-newblk],body.ro [data-closeblk],body.ro .rwonly
   <header class="top">
     <div><div class="brand" id="pname">Riviera Tower</div><div class="sub">Floor finishes tracker</div></div>
     <span class="sp"></span><span class="sync" id="sync"></span>
-    <button class="userchip" id="userchip" data-act="user">👤</button>
+    <span class="userchip" id="userchip">👤</span>
+    <button class="logout" data-act="user" title="Log out of this device">Log out</button>
   </header>
   <nav class="tabs">
-    <button data-view="overview">🗺 Overview</button>
-    <button data-view="matrix">▦ Matrix</button>
-    <button data-view="plans">📐 Plans</button>
+    <button data-view="cockpit">📊 Cockpit</button>
+    <button data-view="rooms">🏠 Rooms</button>
     <button data-view="blockers">⚠ Blocking points<span class="nb" id="nbk"></span></button>
-    <button data-view="weekly">📈 Weekly progress</button>
-    <button data-view="dash">📊 Dashboard</button>
     <button data-view="setup" id="navsetup">⚙ Setup</button>
   </nav>
 </div>
@@ -229,6 +266,7 @@ body.ro [data-set],body.ro [data-newblk],body.ro [data-closeblk],body.ro .rwonly
 <div id="modal"></div>
 <div id="login"></div>
 <div id="pop"></div>
+<div class="fab noprint" id="fab"></div>
 
 <script type="module">
 /* =====================================================================
@@ -333,7 +371,7 @@ function roBlock(){if(isRO()){alert('Your account is read only.\n\nYou can view,
 
 /* ===================== STATE ===================== */
 let S={settings:null,rooms:{},blockers:{},log:[],snaps:[],pins:{},plans:{}};
-let F={view:'overview',mx:'act',sub:'all',resp:'all',floor:'all',next:'all',type:'all',q:'',blk:'all',colorBy:'next',quick:false,bStatus:'open',bFloor:'all',bCat:'all',bOwner:'all',bGroup:'none',bq:''};
+let F={view:'cockpit',ss:'team',rv:'overview',ck:'live',more:false,mx:'act',sub:'all',resp:'all',floor:'all',next:'all',type:'all',q:'',blk:'all',colorBy:'next',quick:false,bStatus:'open',bFloor:'all',bCat:'all',bOwner:'all',bGroup:'none',bq:''};
 try{Object.assign(F,JSON.parse(lsGet(LSF,'{}')));}catch(e){}
 let drawerRoom=null;
 
@@ -626,21 +664,28 @@ function doRender(){
     const rs=Object.values(S.rooms).map(r=>({...r,acts:srt(r.acts)}));saveS(s=>{s.types.forEach(t=>t.acts=srt(t.acts));s.seqV=2;});if(rs.length)store.addRooms(rs);}
   document.body.classList.toggle('ro',isRO());
   $('#navsetup').style.display=isAdmin()?'':'none';
-  if(F.view==='setup'&&!isAdmin())F.view='overview';
+  if(F.view==='setup'&&!isAdmin())F.view='cockpit';
+  // older saved views (separate Dashboard / Weekly tabs) now live in the Cockpit
+  if(F.view==='dash'){F.view='cockpit';F.ck='live';}
+  if(F.view==='weekly'){F.view='cockpit';F.ck='weekly';}
+  if(ROOMV.includes(F.view))F.rv=F.view;
   lsSet(LSF,JSON.stringify(F));
   $('#pname').textContent=S.settings.project||'Riviera Tower';
-  $('#userchip').textContent=`👤 ${m.name.split(',')[0]} · ${roleName(m)} ⎋`;
-  $('#userchip').title='Signed in as '+m.name+' — click to log out';
+  $('#userchip').textContent=`👤 ${m.name.split(',')[0]} · ${roleName(m)}`;
+  $('#userchip').title='Signed in as '+m.name;
   const nOpen=Object.values(S.blockers).filter(b=>b.status==='open').length;
   $('#nbk').textContent=nOpen||'';$('#nbk').style.display=nOpen?'':'none';
-  document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.view===F.view));
-  const v={overview:vOverview,matrix:vMatrix,plans:vPlans,blockers:vBlockers,weekly:vWeekly,dash:vDash,setup:vSetup}[F.view]||vOverview;
+  const tab=ROOMV.includes(F.view)?'rooms':F.view;
+  document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.view===tab));
+  $('#fab').innerHTML=isRO()||F.view==='setup'?'':`<button class="f1" data-act="quickroom" title="Find a room and update its activities">✓ Update a room</button><button class="f2" data-newblk="|" title="Raise a new blocking point">＋ Blocking point</button>`;
+  const v={cockpit:vCockpit,overview:vOverview,matrix:vMatrix,plans:vPlans,blockers:vBlockers,setup:vSetup}[F.view]||vCockpit;
   const fid=ae&&ae.id,pos=ae&&ae.selectionStart;
   // keep the scroll position of the page and of the scrolling boxes (plan, matrix, tables) across the re-render
   const SCB='#planwrap,.mxwrap,.tbwrap',boxes=[...$('#view').querySelectorAll(SCB)].map(e=>[e.scrollLeft,e.scrollTop]),wy=scrollY,wx=scrollX,sv=F.view;
   $('#view').innerHTML=floorRepairBanner()+misplacedBanner()+v();reopen($('#view'));
   if(sv===LASTVIEW){[...$('#view').querySelectorAll(SCB)].forEach((e,i)=>{const b=boxes[i];if(b){e.scrollLeft=b[0];e.scrollTop=b[1];}});if(scrollY!==wy||scrollX!==wx)scrollTo(wx,wy);}
   LASTVIEW=sv;
+  {const so=$('#view .smenu .on');if(so&&so.parentNode.scrollWidth>so.parentNode.clientWidth)so.parentNode.scrollLeft=so.offsetLeft-12;}
   if(fid&&(fid==='q'||fid==='bq')){const el=document.getElementById(fid);if(el){el.focus();try{el.setSelectionRange(pos,pos);}catch(e){}}}
   if(drawerRoom)renderDrawer();
   refreshPop();
@@ -655,17 +700,23 @@ function filterBar(mode){
   allSteps().forEach(a=>{if(!cnt[a.id]&&F.next!==a.id)return;chips+=`<button class="chip ${F.next===a.id?'on':''}" data-f="next" data-v="${a.id}"><span class="dot" style="background:${a.isHp?'var(--hp)':a.color}"></span>${a.isHp?'◆ Awaiting HP: '+esc(a.name.slice(5)):'Pending: '+esc(a.name)} <span class="n">${cnt[a.id]||0}</span></button>`;});
   if(done||F.next==='__done')chips+=`<button class="chip ${F.next==='__done'?'on':''}" data-f="next" data-v="__done">✓ Complete <span class="n">${done}</span></button>`;
   const opt=(v,l,cur)=>`<option value="${v}" ${cur===v?'selected':''}>${esc(l)}</option>`;
+  const nf=['type','sub','resp','blk'].filter(k=>F[k]!=='all').length;
+  const vs=[['overview','▦ Tiles'],['matrix','▤ Matrix'],['plans','📐 Plans']];
   return `<div class="filters noprint">
+    <div class="vswitch" title="How to show the rooms">${vs.map(([v,l])=>`<button class="${F.view===v?'on':''}" data-view="${v}">${l}</button>`).join('')}</div>
+    <input id="q" data-fs="q" placeholder="🔍 Search room…" value="${esc(F.q)}" style="width:170px">
     ${mode==='plan'?'':`<select data-fs="floor">${opt('all','All floors',F.floor)}${s.floors.map(f=>opt(f.id,f.name,F.floor)).join('')}</select>`}
+    <button class="btn ${F.more||nf?'on':''}" data-act="morefilters">⚙ Filters${nf?` (${nf})`:''} ${F.more?'▴':'▾'}</button>
+    ${nf||F.q||(mode!=='plan'&&F.floor!=='all')||F.next!=='all'?`<button class="clr" data-act="clearfilters">Clear filters</button>`:''}
+    ${mode==='matrix'?`<div class="seg" title="Matrix layout"><button class="${F.mx!=='seq'?'on0':''}" data-f="mx" data-v="act">▦ By activity</button><button class="${F.mx==='seq'?'on0':''}" data-f="mx" data-v="seq">➜ By sequence</button></div>`:''}
+    <span class="sp"></span><button class="btn sm" data-act="print">🖨 Print</button>
+  </div>${F.more?`<div class="morefilters noprint filters">
     <select data-fs="type">${opt('all','All room types',F.type)}${s.types.map(t=>opt(t.id,t.name,F.type)).join('')}</select>
     <select data-fs="sub" title="Subcontractor of the next step">${opt('all','All subcontractors',F.sub)}${(s.subs||[]).map(x=>opt(x.id,'🏗 '+x.name,F.sub)).join('')}</select>
     <select data-fs="resp" title="Responsible of the next step">${opt('all','All responsibles',F.resp)}${people().map(p=>opt(p.name,'👷 '+p.name,F.resp)).join('')}</select>
     <select data-fs="blk">${opt('all','Blocked + not blocked',F.blk)}${opt('yes','⚠ Blocked rooms only',F.blk)}${opt('no','Not blocked only',F.blk)}</select>
-    <input id="q" data-fs="q" placeholder="🔍 Search room…" value="${esc(F.q)}" style="width:170px">
-    ${mode!=='matrix'?`<select data-fs="colorBy">${opt('next','Colour = next activity',F.colorBy)}${opt('progress','Colour = % progress',F.colorBy)}</select>`
-      :`<div class="seg" title="Matrix layout"><button class="${F.mx!=='seq'?'on0':''}" data-f="mx" data-v="act">▦ By activity</button><button class="${F.mx==='seq'?'on0':''}" data-f="mx" data-v="seq">➜ By sequence</button></div>`}
-    <span class="sp"></span><button class="btn sm" data-act="print">🖨 Print</button>
-  </div><div class="chips noprint">${chips}</div>`;
+    ${mode!=='matrix'?`<select data-fs="colorBy">${opt('next','Colour = next activity',F.colorBy)}${opt('progress','Colour = % progress',F.colorBy)}</select>`:''}
+  </div>`:''}<div class="chips noprint">${chips}</div>`;
 }
 
 function vOverview(){
@@ -717,7 +768,7 @@ const mxSort=rs=>{const ti=id=>{const i=S.settings.types.findIndex(t=>t.id===id)
 const mxShown=()=>{const l=filtered();return S.settings.floors.flatMap(f=>mxSort(l.filter(r=>r.floor===f.id)));};
 function mxTypeBar(list,tm){
   const s=S.settings,adm=isAdmin();
-  if(!tm)return `<div class="row noprint" style="margin:0 0 8px"><button class="btn sm" data-act="mxtype" title="Select several rooms to update their progress${adm?' or change their room type':''} at once">☑ Multi-select rooms</button></div>`;
+  if(!tm)return `<div class="row noprint" style="margin:0 0 8px"><button class="btn on" data-act="mxtype" title="Select several rooms to update their progress${adm?' or change their room type':''} at once">☑ Update several rooms at once</button></div>`;
   if(!typeById(PLAN.ttype))PLAN.ttype=(s.types[0]||{}).id||'';const tt=typeById(PLAN.ttype);
   const ids=new Set(list.map(r=>r.id));[...MX.sel].forEach(id=>{if(!S.rooms[id])MX.sel.delete(id);});
   const hidden=[...MX.sel].filter(id=>!ids.has(id)).length,n=MX.sel.size,sel=[...MX.sel].map(id=>S.rooms[id]);
@@ -924,19 +975,47 @@ function vBlockers(){
   return h+'</tbody></table></div>';
 }
 
-function vDash(){
+const ROOMV=['overview','matrix','plans'];
+function cockpitSwitch(){
+  return `<div class="filters noprint"><div class="vswitch"><button class="${F.ck!=='weekly'?'on':''}" data-f="ck" data-v="live">📊 Live cockpit</button><button class="${F.ck==='weekly'?'on':''}" data-f="ck" data-v="weekly">📈 Weekly report</button></div><span class="sp"></span><button class="btn sm" data-act="print">🖨 Print</button></div>`;
+}
+function vCockpit(){
+  if(F.ck==='weekly')return cockpitSwitch()+vWeekly();
   const s=S.settings,rooms=Object.values(S.rooms),t=today();
-  const open=Object.values(S.blockers).filter(b=>b.status==='open');
-  const over=open.filter(b=>b.due&&b.due<t).length;
-  const wk=Date.now()-7*864e5;
-  const doneWk=S.log.filter(l=>l.to===2&&l.ts>=wk).length;
-  const complete=rooms.filter(r=>!nextStep(r)).length;
-  let h=`<div class="printonly"><h2>${esc(s.project)} — Progress dashboard — ${fmtLong(t)}</h2></div>`;
-  h+=`<div class="kpis"><div class="kpi"><b>${rooms.length}</b><span>Rooms tracked</span></div><div class="kpi"><b>${pc(avg(rooms.map(progress)))}%</b><span>Overall progress</span></div><div class="kpi"><b style="color:var(--done)">${complete}</b><span>Rooms complete</span></div><div class="kpi"><b style="color:var(--blk)">${open.length}</b><span>Open blocking points${over?` · <span class="overdue">${over} overdue</span>`:''}</span></div><div class="kpi"><b>${doneWk}</b><span>Activities completed (7 days)</span></div></div>`;
+  let h=cockpitSwitch()+`<div class="printonly"><h2>${esc(s.project)} — Cockpit — ${fmtLong(t)}</h2></div>`;
+  if(!rooms.length)return h+`<div class="card">No rooms yet. ${isAdmin()?'Go to <span class="lnk" data-view="setup">Setup</span> to add rooms, or upload the floor plans in Rooms → Plans.':'Ask an admin to add the rooms.'}</div>`;
+  const open=Object.values(S.blockers).filter(b=>b.status==='open'),over=open.filter(b=>b.due&&b.due<t);
+  const overall=avg(rooms.map(progress)),snaps=[...S.snaps].sort((a,b)=>a.date.localeCompare(b.date)),last=snaps[snaps.length-1];
+  const d=last?overall-last.overall:null;
+  const complete=rooms.filter(r=>!nextStep(r)).length,roomsB=new Set(open.map(b=>b.roomId).filter(id=>S.rooms[id])).size;
+  const wk=dMinus(7);let doneWk=0;rooms.forEach(r=>roomActs(r).forEach(id=>{const o=(r.st||{})[id];if(!isHP(id)&&o&&o.s===2&&(o.dd||o.d||'')>=wk)doneWk++;}));
+  const hpWait=rooms.filter(r=>{const n=nextStep(r);return n&&isHP(n);}),hpReq=hpWait.filter(r=>st(r,nextStep(r))===1).length;
+  const dl=d==null?'':`<small class="delta ${d>0.0001?'up':d<-0.0001?'down':'flat'}">${d>0.0001?'▲ +':d<-0.0001?'▼ ':'= '}${Math.round(d*1000)/10} pts since Sat ${fmtD(last.date)}</small>`;
+  h+=`<div class="kpis">
+    <div class="kpi"><b>${pc(overall)}%</b><span>Overall progress</span>${dl}</div>
+    <div class="kpi"><b style="color:var(--done)">${complete}<span style="font-size:15px;color:var(--mute)"> / ${rooms.length}</span></b><span>Rooms complete</span></div>
+    <div class="kpi lnk" style="text-decoration:none;color:inherit" data-view="blockers"><b style="color:var(--blk)">${open.length}</b><span>Open blocking points${over.length?` · <span class="overdue">${over.length} overdue</span>`:''}</span><small style="color:var(--mute)">${roomsB} room(s) blocked</small></div>
+    <div class="kpi"><b style="color:var(--hp)">${hpWait.length}</b><span>◆ Rooms waiting for a hold point</span><small style="color:var(--mute)">${hpReq} inspection(s) requested</small></div>
+    <div class="kpi"><b>${doneWk}</b><span>Activities completed (last 7 days)</span></div></div>`;
+  // progress by floor (click = see the rooms of that floor)
   h+=`<div class="grid2"><div class="card"><h2>Progress by floor</h2>`;
-  s.floors.forEach(f=>{const rs=rooms.filter(r=>r.floor===f.id),p=avg(rs.map(progress)),bk=new Set(open.filter(b=>S.rooms[b.roomId]?.floor===f.id).map(b=>b.roomId)).size;
-    h+=`<div class="row" style="margin:10px 0"><b style="width:90px">${esc(f.name)}</b><div class="bar" style="max-width:none"><i style="width:${pc(p)}%"></i></div><b style="width:42px;text-align:right">${pc(p)}%</b><small style="color:var(--mute);width:140px">${rs.length} rooms · ${rs.filter(r=>!nextStep(r)).length} done${bk?` · <span style="color:var(--blk)">${bk} blocked</span>`:''}</small></div>`;});
-  h+=`</div><div class="card"><h2>Latest updates</h2><div class="feed">`;
+  s.floors.forEach(f=>{const rs=rooms.filter(r=>r.floor===f.id);if(!rs.length)return;const p=avg(rs.map(progress)),bk=new Set(open.filter(b=>S.rooms[b.roomId]?.floor===f.id).map(b=>b.roomId)).size;
+    h+=`<div class="row flrow" data-gofloor="${f.id}" title="Show the rooms of ${esc(f.name)}" style="margin:8px 0"><b style="width:90px">${esc(f.name)}</b><div class="bar" style="max-width:none;height:14px"><i style="width:${pc(p)}%"></i></div><b style="width:42px;text-align:right">${pc(p)}%</b><small style="color:var(--mute);width:150px">${rs.filter(r=>!nextStep(r)).length}/${rs.length} rooms done${bk?` · <span style="color:var(--blk);font-weight:700">${bk} blocked</span>`:''}</small></div>`;});
+  // bottlenecks: where the rooms are waiting (next step), and how many of them are blocked
+  const bn=allSteps().map(a=>{const w=rooms.filter(r=>nextStep(r)===a.id);return {a,n:w.length,b:w.filter(r=>openBlk(r,a.id).length).length};}).filter(x=>x.n).sort((x,y)=>y.n-x.n);
+  const mx=Math.max(1,...bn.map(x=>x.n));
+  h+=`</div><div class="card"><h2>Where are the rooms waiting?</h2><p style="margin:-4px 0 10px;color:var(--mute);font-size:12px">Number of rooms whose <b>next step</b> is this activity — the longest bars are the bottlenecks. <span style="color:var(--blk)">■</span> = blocked. Click an activity to see its rooms.</p>`;
+  h+=bn.length?`<div class="bneck">${bn.map(x=>`<span class="lab" data-gonext="${x.a.id}" title="${esc(x.a.name)}">${x.a.isHp?'◆ HP – '+esc(x.a.name.slice(5)):esc(x.a.name)}</span><div class="bb"><i style="width:${(x.n-x.b)/mx*100}%;background:${x.a.isHp?'var(--hp)':x.a.color}"></i><i style="width:${x.b/mx*100}%;background:var(--blk)"></i></div><b>${x.n}</b>`).join('')}</div>`:'<div class="empty">All rooms are complete 🎉</div>';
+  h+=`</div></div>`;
+  // ALL open blocking points
+  const rows=[...open].sort((a,b)=>{const oa=a.due&&a.due<t,ob=b.due&&b.due<t;if(oa!==ob)return oa?-1:1;if(oa)return a.due.localeCompare(b.due);return (a.raised||t).localeCompare(b.raised||t);});
+  h+=`<div class="card"><div class="row" style="margin-bottom:10px"><h2 style="margin:0">⚠ Open blocking points (${open.length})</h2>${over.length?`<span class="tag red">${over.length} overdue</span>`:''}<span class="sp"></span>${isRO()?'':'<button class="btn pri noprint" data-newblk="|">+ New blocking point</button>'}<button class="btn noprint" data-view="blockers">Full list & filters →</button></div>`;
+  h+=rows.length?`<div class="tbwrap"><table class="tb"><thead><tr><th>No</th><th>Room</th><th>Activity</th><th>Description</th><th>Category</th><th>Responsible</th><th>Target</th><th>Age</th><th class="noprint"></th></tr></thead><tbody>${rows.map(b=>{const r=S.rooms[b.roomId],a=b.actId&&actById(b.actId),od=b.due&&b.due<t;
+    return `<tr class="click" data-editblk="${b.id}"><td><b>${esc(b.no)}</b></td><td><b>${esc(r?r.code:'?')}</b> ${esc(r?r.name:'')}<br><small style="color:var(--mute)">${esc(r?floorById(r.floor)?.name||'':'')}</small></td><td>${a?`<span class="dot" style="background:${a.color}"></span> ${esc(a.name)}`:'General'}</td><td>${esc(b.title)}</td><td>${esc(b.cat)}</td><td>${esc(b.owner||'—')}</td><td class="${od?'overdue':''}">${fmtD(b.due)||'—'}${od?' ⏰':''}</td><td>${days(b.raised||t,t)} d</td><td class="noprint">${isRO()?'':`<button class="btn sm" data-closeblk="${b.id}">✓ Resolve</button>`}</td></tr>`;}).join('')}</tbody></table></div>`:'<div class="empty">No open blocking point 👍</div>';
+  h+=`</div>`;
+  // trend + latest updates
+  const live={...makeSnapshot('9999-12-31'),id:'live',date:t};
+  h+=`<div class="grid2"><div class="card trend"><h2>Progress curve</h2>${trendSVG([...snaps.slice(-12),live])}</div><div class="card"><h2>Latest updates</h2><div class="feed" style="max-height:300px;overflow:auto">`;
   const lg=S.log.slice(0,25);
   h+=lg.length?lg.map(l=>`<div><small>${ago(l.ts)} · ${esc(l.by)}</small><br><b>${esc(l.code)}</b> ${esc(actById(l.actId)?.name||'')} → <b style="color:${l.to===2?'var(--done)':l.to===1?'#b57800':'var(--mute)'}">${lbl(l.actId,l.to)}</b></div>`).join(''):'<div class="empty">No update yet.</div>';
   h+=`</div></div></div>`;
@@ -952,35 +1031,44 @@ function vDash(){
   });
   return h+'</tbody></table></div></div>';
 }
-
 function vSetup(){
   const s=S.settings,rooms=Object.values(S.rooms);
   const cnt=id=>rooms.filter(r=>(r.acts||[]).includes(id)).length;
   if(!isAdmin())return `<div class="card">Setup is reserved for admins.</div>`;
-  let h=`<div class="card"><h2>👥 Team & access</h2><p style="margin:0 0 10px;color:var(--mute);font-size:12px">Only the people in this list can open the app. On their first login they pick their name and choose a 4-digit PIN; next time, name + PIN. <b>Admin</b>: everything including Setup · <b>Editor</b>: statuses, hold points, blocking points, notes · <b>Read only</b>: view, print and export.</p>
+  const MK=[];let h='';MK.push(['team',0]);
+  h+=`<div class="card"><h2>👥 Team & access</h2><p style="margin:0 0 10px;color:var(--mute);font-size:12px">Only the people in this list can open the app. On their first login they pick their name and choose a 4-digit PIN; next time, name + PIN. <b>Admin</b>: everything including Setup · <b>Editor</b>: statuses, hold points, blocking points, notes · <b>Read only</b>: view, print and export.</p>
     <div class="tbwrap"><table class="tb"><thead><tr><th>Name</th><th>Role</th><th>PIN</th><th></th></tr></thead><tbody>${people().map(p=>{const own=isOwner(p.name);return `<tr><td><b>${esc(p.name)}</b>${own?' <span class="tag">owner</span>':''}</td><td>${own?'Admin':`<select data-prole="${esc(p.name)}">${ROLES.map(([v,l])=>`<option value="${v}" ${(p.role||'edit')===v?'selected':''}>${l}</option>`).join('')}</select>`}</td><td>${S.pins[p.name]?'🔒 set':'<span style="color:#b57800;font-weight:700">not yet</span>'}</td><td style="white-space:nowrap;text-align:right">${S.pins[p.name]?`<button class="btn sm" data-preset="${esc(p.name)}">Reset PIN</button> `:''}${own?'':`<button class="btn sm red" data-pdel="${esc(p.name)}">Remove</button>`}</td></tr>`;}).join('')}</tbody></table></div>
     <div class="row" style="margin-top:10px"><textarea id="np_name" rows="2" placeholder="LASTNAME, Firstname (one per line)" style="flex:1;min-width:200px"></textarea><select id="np_role">${ROLES.map(([v,l])=>`<option value="${v}" ${v==='edit'?'selected':''}>${l}</option>`).join('')}</select><button class="btn pri" data-act="addperson">+ Add person</button></div>
     <p style="margin:8px 0 0;color:var(--mute);font-size:11px">Tip: paste several names at once, one per line. Use the same spelling as in MOM Tracker (e.g. “HORN, Philippe”).</p></div>`;
+  MK.push(['general',h.length]);
   h+=`<div class="grid2"><div class="card"><h2>General</h2><div class="form">
     <label>Project name<input data-hold data-sset="project" value="${esc(s.project)}"></label>
     <div class="row">Signed in as <b>${esc(user())}</b> (${roleName(me())})<button class="btn sm" data-act="user">Log out</button></div>
     <div style="font-size:12px;color:var(--mute)">${USE_FB?'🟢 Shared mode — data is live in Firebase for everyone using this link.':'🟡 Local mode — data is saved in this browser only. Fill the Firebase config in index.html to share it with the team.'}</div></div></div>
     <div class="card"><h2>Floors</h2>${s.floors.map(f=>`<div class="row" style="margin-bottom:6px"><input data-hold data-floorname="${f.id}" value="${esc(f.name)}" style="flex:1"><input data-hold data-floorpre="${f.id}" value="${esc(f.pre||'')}" placeholder="Other code prefixes" title="Room codes starting with these prefixes belong to this level (plan import). Codes starting with the level's name (LO.xx → level LO) already do." style="width:200px"><small style="color:var(--mute);width:70px">${rooms.filter(r=>r.floor===f.id).length} rooms</small><button class="btn sm red" data-delfloor="${f.id}">✕</button></div>`).join('')}<button class="btn sm" data-act="addfloor">+ Add floor</button></div></div>`;
+  MK.push(['subs',h.length]);
   h+=`<div class="card"><h2>🏗 Subcontractors</h2><p style="margin:0 0 10px;color:var(--mute);font-size:12px">Assign a default subcontractor and responsible to each activity in the library below; a room can override them (click the 🏗 line under the activity in the room panel).</p>${(s.subs||[]).map(x=>`<div class="row" style="margin-bottom:6px"><input data-hold data-subname="${x.id}" value="${esc(x.name)}" style="flex:1"><small style="color:var(--mute);width:90px">${s.acts.filter(a=>a.sub===x.id).length} activities</small><button class="btn sm red" data-subdel="${x.id}">✕</button></div>`).join('')}
     <div class="row"><textarea id="ns_name" rows="2" placeholder="Company name (one per line)" style="flex:1;min-width:200px"></textarea><button class="btn pri" data-act="addsub">+ Add subcontractor</button></div></div>`;
+  MK.push(['acts',h.length]);
   h+=`<div class="card"><h2>Activity library (catalogue · default subcontractor &amp; responsible)</h2><p style="margin:0 0 10px;color:var(--mute);font-size:12px">This is the catalogue of activities. Its order is only the default order (matrix columns, “Sort as library”); the real order of works is the sequence of each template and room. Colour: use the colour picker, or type a <b>RAL</b> code / name (e.g. 3020, “traffic red”) in the RAL field. Tick <b>◆ Hold point</b> to insert an inspection step right after an activity: the next trade only becomes “next step” once the hold point is released. A room can switch off a hold point in its own “Customize sequence”.</p>`;
   s.acts.forEach((a,i)=>{h+=`<div class="row" style="margin-bottom:6px"><input type="color" data-actcolor="${a.id}" value="${a.color}" style="width:42px;padding:2px;height:34px" title="Pick any colour"><input data-hold data-actral="${a.id}" list="ralList" value="${a.ral&&RAL[a.ral]?`RAL ${a.ral} – ${esc(RAL[a.ral].name)}`:''}" placeholder="RAL…" title="Colour from a RAL code: type e.g. 3020 or a name, then pick" style="width:210px"><input data-hold data-actname="${a.id}" value="${esc(a.name)}" style="flex:1;min-width:150px"><input data-hold data-actshort="${a.id}" value="${esc(a.short)}" style="width:70px" title="Short code"><select data-actsub="${a.id}" title="Default subcontractor" style="width:150px"><option value="">🏗 — sub —</option>${(s.subs||[]).map(x=>`<option value="${x.id}" ${a.sub===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select><select data-actresp="${a.id}" title="Default responsible" style="width:160px"><option value="">👷 — responsible —</option>${people().map(p=>`<option value="${esc(p.name)}" ${a.resp===p.name?'selected':''}>${esc(p.name)}</option>`).join('')}</select><label class="chk" title="Adds a linked hold point (inspection) step right after this activity"><input type="checkbox" data-acthp="${a.id}" ${a.hp?'checked':''}><span class="hptag">◆ HP</span>Hold point</label><small style="color:var(--mute);width:70px">${cnt(a.id)} rooms</small><button class="btn sm" data-actup="${i}" ${i?'':'disabled'}>↑</button><button class="btn sm" data-actdown="${i}" ${i<s.acts.length-1?'':'disabled'}>↓</button><button class="btn sm red" data-actdel="${a.id}">✕</button></div>`;});
   h+=`<button class="btn sm" data-act="addact">+ Add activity</button>${ralList()}</div>`;
+  MK.push(['types',h.length]);
   h+=`<div class="card"><h2>Room types (sequence templates)</h2><p style="margin:0 0 10px;color:var(--mute);font-size:12px">Each template is an ordered <b>sequence</b> of activities: step 1, then step 2… Re-order with ↑ ↓ or drag the rows. Each type has a colour (colour picker or <b>RAL</b> code) used on the plans and in the matrix. New rooms copy the sequence of their template; each room can still be adjusted in its own “Customize sequence”.</p>`;
   s.types.forEach(t=>{h+=`<details data-dk="type_${t.id}" style="border-bottom:1px solid var(--line)"><summary><i class="sq" style="background:${typeCol(t.id)};border:0;vertical-align:middle"></i> <b>${esc(t.name)}</b> <button class="btn sm" data-typeren="${t.id}" title="Rename this room type" style="padding:1px 7px;margin-left:4px">✏ Rename</button> <small style="color:var(--mute)">· ${t.acts.filter(x=>actById(x)).length} activities · ${rooms.filter(r=>r.type===t.id).length} rooms</small></summary><div class="row" style="margin:8px 0"><input type="color" data-typecolor="${t.id}" value="${typeCol(t.id)}" style="width:42px;padding:2px;height:34px" title="Colour of this room type (plans, matrix)"><input data-hold data-typeral="${t.id}" list="ralList" value="${t.ral&&RAL[t.ral]?`RAL ${t.ral} – ${esc(RAL[t.ral].name)}`:''}" placeholder="RAL…" title="Colour from a RAL code: type e.g. 3020 or a name, then pick" style="width:210px"><input data-hold data-typename="${t.id}" value="${esc(t.name)}" style="flex:1"><button class="btn sm" data-typecopy="${t.id}">Duplicate</button><button class="btn sm red" data-typedel="${t.id}">Delete type</button></div>${seqEditor('type',t.id,t.acts)}${(()=>{const ts=cleanSeq(t.acts).join('|'),nd=rooms.filter(r=>r.type===t.id&&cleanSeq(r.acts).join('|')!==ts).length;return nd?`<div class="row" style="margin:6px 0 10px"><small style="color:var(--mute)">Changes to this sequence are applied automatically to the rooms of this type. <b>${nd}</b> room(s) of this type have a sequence different from the template (customized per room).</small><button class="btn sm" data-typesync="${t.id}">⟳ Reset them to the template</button></div>`:`<div style="margin:6px 0 10px"><small style="color:var(--mute)">✓ All rooms of this type follow this sequence — changes are applied to them automatically.</small></div>`;})()}</details>`;});
   h+=`<button class="btn sm" data-act="addtype" style="margin-top:8px">+ Add room type</button></div>`;
+  MK.push(['rooms',h.length]);
   const fo=s.floors.map(f=>`<option value="${f.id}">${esc(f.name)}</option>`).join(''),to=s.types.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('');
   h+=`<div class="grid2"><div class="card"><h2>Add a room</h2><div class="form"><div class="row"><label>Floor<select id="nr_floor">${fo}</select></label><label>Room code<input id="nr_code" placeholder="e.g. 2.05"></label></div><label>Room name<input id="nr_name" placeholder="e.g. Master bathroom"></label><label>Room type<select id="nr_type">${to}</select></label><button class="btn pri" data-act="addroom">Add room</button></div></div>
     <div class="card"><h2>Bulk import rooms (paste from Excel)</h2><p style="margin:0 0 8px;color:var(--mute);font-size:12px">4 columns: <b>Floor | Code | Name | Type</b>. Floor and type are matched by name (unknown floors are created, unknown types use the first type). Existing codes on the same floor are skipped.</p><textarea id="bulk" rows="6" style="width:100%" placeholder="Level 1	1.01	Living room	Apartment – dry room&#10;Level 1	1.02	Bathroom	Bathroom / WC"></textarea><button class="btn pri" data-act="bulk" style="margin-top:8px">Import</button></div></div>`;
+  MK.push(['data',h.length]);
   h+=`<div class="card"><h2>Data</h2><div class="row"><button class="btn" data-act="xlsall">⬇ Export everything to Excel</button><button class="btn" data-act="backup">⬇ Backup (JSON)</button><label class="btn">⬆ Restore backup<input type="file" id="restore" accept=".json" hidden></label>${rooms.some(r=>r.demo)?'<button class="btn red" data-act="deldemo">Delete demo rooms</button>':''}<button class="btn red" data-act="delall">Delete all rooms</button></div></div>`;
-  return h;
+  // one section at a time, picked from the Setup menu
+  const sec={};MK.forEach(([k,a],n)=>sec[k]=h.slice(a,n<MK.length-1?MK[n+1][1]:h.length));
+  const nr=rooms.length,menu=[['team','👥','Team & access',people().length],['general','🏢','Project & floors',s.floors.length],['subs','🏗','Subcontractors',(s.subs||[]).length],['acts','🧱','Activity library',s.acts.length],['types','🏷','Room types',s.types.length],['rooms','➕','Add rooms',nr],['data','💾','Data & backup','']];
+  const cur=sec[F.ss]?F.ss:'team';
+  return `<div class="setup"><nav class="smenu noprint">${menu.map(([k,i,l,n])=>`<button class="${k===cur?'on':''}" data-f="ss" data-v="${k}"><span>${i}</span>${l}${n!==''?`<small>${n}</small>`:''}</button>`).join('')}</nav><div class="sbody">${sec[cur]}</div></div>`;
 }
-
 /* ===================== WEEKLY SNAPSHOTS =====================
    Every Saturday (end of day) the status of every room is frozen in ft_snapshots/<YYYY-MM-DD>.
    No server needed: the first person who opens the app after Saturday creates it. The status
@@ -1038,7 +1126,7 @@ function vWeekly(){
   const prev=idx>0?snaps[idx-1]:null;
   const title=sel.id==='live'?`This week so far (live, since Saturday ${fmtD(snaps[snaps.length-1].date)})`:`Week ending Saturday ${fmtLong(sel.date)}`;
   const opts=`<option value="live" ${sel.id==='live'?'selected':''}>This week so far (live)</option>`+[...snaps].reverse().map(x=>`<option value="${x.id}" ${x.id===sel.id?'selected':''}>Week ending Sat ${fmtD(x.date)} ${x.date.slice(0,4)}</option>`).join('');
-  h+=`<div class="banner"><div style="flex:1;min-width:220px"><div style="font-size:12px;opacity:.8">${new Date().getDay()===1&&sel.id!=='live'?'Monday report':'Weekly progress'}</div><div style="font-size:18px;font-weight:800">${title}</div>${prev?`<div style="font-size:12px;opacity:.8">compared with Saturday ${fmtD(prev.date)}</div>`:''}</div><select data-fs="wk" class="noprint">${opts}</select><button class="btn sm noprint" data-act="print">🖨 Print</button></div>`;
+  h+=`<div class="banner"><div style="flex:1;min-width:220px"><div style="font-size:12px;opacity:.8">${new Date().getDay()===1&&sel.id!=='live'?'Monday report':'Weekly progress'}</div><div style="font-size:18px;font-weight:800">${title}</div>${prev?`<div style="font-size:12px;opacity:.8">compared with Saturday ${fmtD(prev.date)}</div>`:''}</div><select data-fs="wk" class="noprint">${opts}</select></div>`;
   // compute changes between prev and sel
   const P0=prev?prev.rooms:{},done={},movers=[],bySub={};let nAct=0,hpRel=0,hpReq=0,started=0;const roomsDone=[],still=[];
   Object.entries(sel.rooms).forEach(([rid,x])=>{
@@ -1086,7 +1174,7 @@ function renderDrawer(){
   if(ae&&D.contains(ae)&&ae.matches('[data-hold]')){pending=true;return;}
   const sc=D.scrollTop;
   const s=S.settings,f=floorById(r.floor),t=typeById(r.type),n=nextStep(r),p=progress(r),bl=openBlk(r),acts=roomActs(r);
-  let h=`<div class="dh"><div class="row" style="flex-wrap:nowrap"><div style="flex:1;min-width:0"><div style="font-size:20px;font-weight:800">${esc(r.code)} <span style="font-weight:500">${esc(r.name)}</span></div><div style="color:var(--mute);font-size:12px">${esc(f?f.name:'')} · ${esc(t?t.name:'—')}${r.area?' · '+esc(r.area):''}${(()=>{const o=[...new Set(pinSheets(r).filter(m=>m.floor!==r.floor).map(m=>floorById(m.floor)?.name).filter(Boolean))];return o.length?` · <span class="tag" style="background:#e8f0fe;color:var(--hp)">⇕ double height, also on ${esc(o.join(', '))}</span>`:'';})()}${pinSheets(r).length?` · <a href="#" class="lnk" data-showpin="${r.id}">📐 Show on plan</a>`:''}</div></div><button class="iconbtn" data-act="close">✕</button></div>
+  let h=`<div class="dh"><div class="row" style="flex-wrap:nowrap"><div style="flex:1;min-width:0"><div style="font-size:20px;font-weight:800">${esc(r.code)} <span style="font-weight:500">${esc(r.name)}</span></div><div style="color:var(--mute);font-size:12px">${esc(f?f.name:'')} · ${esc(t?t.name:'—')}${r.area?' · '+esc(r.area):''}${(()=>{const o=[...new Set(pinSheets(r).filter(m=>m.floor!==r.floor).map(m=>floorById(m.floor)?.name).filter(Boolean))];return o.length?` · <span class="tag" style="background:#e8f0fe;color:var(--hp)">⇕ double height, also on ${esc(o.join(', '))}</span>`:'';})()}${pinSheets(r).length?` · <a href="#" class="lnk" data-showpin="${r.id}">📐 Show on plan</a>`:''}</div></div><button class="btn" data-act="close">✕ Close</button></div>
     <div class="row" style="margin-top:8px"><div class="bar" style="max-width:none"><i style="width:${pc(p)}%"></i></div><b>${pc(p)}%</b></div>
     <div style="margin-top:6px;font-size:13px">${n?`Next step: <b>${esc(actById(n).name)}</b>`:'<b style="color:var(--done)">✓ All activities complete</b>'}${bl.length?` · <span style="color:var(--blk);font-weight:700">⚠ ${bl.length} open blocking point(s)</span>`:''}</div></div><div class="db"><h3>Activities</h3>`;
   if(!acts.length)h+=`<div class="empty">No activity assigned. Open “Customize activities” below.</div>`;
@@ -1097,7 +1185,7 @@ function renderDrawer(){
     const words=hp?['Pending','Req.','Released']:['To do','WIP','Done'];
     h+=`<div class="arow ${hp?'hp':''} ${b.length?'blk':''}">${hp?'':`<span class="dot" style="background:${a.color}"></span>`}<div class="an">${hp?`<b><span class="hptag">◆ HP</span>Hold point – inspection</b>`:`<b>${esc(a.name)}</b>`}<small>${meta}${b.length?` <span style="color:var(--blk)">⚠ ${esc(b[0].title)}</span>`:''}</small>${(()=>{const g=asg(r,id);return hp?`<small>👷 Inspection by ${esc(g.resp||'—')}</small>`:`<small class="asgl" data-asg="${r.id}|${id}" title="Click to change for this room" style="cursor:pointer">🏗 ${esc(subName(g.sub)||'—')} · 👷 ${esc(g.resp||'—')}${g.ov?' <b style="color:var(--acc)">✎ room-specific</b>':''}</small>`;})()}</div>
       <div class="seg">${[0,1,2].map(k=>`<button class="${sv===k?'on'+k:''} ${hp?'hpb':''}" data-set="${r.id}|${id}|${k}">${words[k]}</button>`).join('')}</div>
-      <button class="iconbtn" title="Raise a blocking point on this activity" data-newblk="${r.id}|${id}">⚠</button></div>`;
+      <button class="btn sm blkbtn" title="Raise a blocking point on this activity" data-newblk="${r.id}|${id}">⚠ Block</button></div>`;
   });
   const allb=Object.values(S.blockers).filter(b=>b.roomId===r.id).sort((a,b)=>(a.status==='open'?0:1)-(b.status==='open'?0:1));
   h+=`<h3>Blocking points</h3>`;
@@ -1138,6 +1226,21 @@ function blkModal(bid,roomId,actId){
 }
 
 
+/* "✓ Update a room": search box → open the room panel */
+function quickRoom(){
+  const list=roomsList();
+  modal(`<h2>✓ Update a room</h2><input id="qr_q" type="search" placeholder="🔍 Type a room code or name…" autocomplete="off" style="width:100%">
+    <div class="qrlist">${list.map(r=>{const n=nextStep(r);return `<button data-qr="${r.id}" data-nm="${esc(normTxt(r.code+' '+r.name))}"><b style="width:80px;flex:none">${esc(r.code)}</b><span style="flex:1">${esc(r.name)}<br><small style="color:var(--mute)">${esc(floorById(r.floor)?.name||'')} · ${pc(progress(r))}% · ${n?esc(actById(n).name):'complete'}</small></span>${openBlk(r).length?'<span class="badge red">⚠</span>':''}</button>`;}).join('')||'<div class="empty" style="padding:10px">No rooms yet.</div>'}</div>
+    <div class="row" style="justify-content:flex-end;margin-top:10px"><button class="btn" data-act="mclose">Cancel</button></div>`);
+  const q=$('#qr_q');q.focus();
+  q.oninput=()=>{const w=normTxt(q.value).trim().split(/\s+/).filter(Boolean);$('#modal').querySelectorAll('[data-qr]').forEach(b=>b.hidden=!w.every(x=>b.dataset.nm.includes(x)));};
+  q.onkeydown=e=>{if(e.key==='Enter'){const b=$('#modal').querySelector('[data-qr]:not([hidden])');if(b)b.click();}};
+  $('#modal').querySelectorAll('[data-qr]').forEach(b=>b.onclick=()=>{closeModal();openRoom(b.dataset.qr);});
+}
+/* tool menus (<details class="tools">): close on a click outside or after picking an action */
+document.addEventListener('click',e=>{document.querySelectorAll('details.tools[open]').forEach(d=>{const inMenu=e.target.closest&&e.target.closest('.tmenu .btn');
+  if(!d.contains(e.target)||(inMenu&&d.contains(inMenu)))setTimeout(()=>{d.open=false;OPEN.delete(d.dataset.dk);},0);});});
+
 /* ===================== EXCEL ===================== */
 function xls(){if(!window.XLSX){alert('Excel library not loaded (check internet connection).');return null;}return XLSX;}
 const blkRow=b=>{const r=S.rooms[b.roomId];return {No:b.no,Floor:r?floorById(r.floor)?.name:'',Room:r?r.code:'','Room name':r?r.name:'',Activity:b.actId?actById(b.actId)?.name||'':'General',Description:b.title,Category:b.cat,Responsible:b.owner,Raised:b.raised,Target:b.due,Status:b.status==='open'?'Open':'Resolved',Resolved:b.closed||'','Age (days)':b.status==='open'?days(b.raised||today(),today()):''};};
@@ -1160,6 +1263,9 @@ function exportAll(){
 /* ===================== EVENTS ===================== */
 const ACT={
   print:()=>window.print(),
+  morefilters:()=>{F.more=!F.more;render();},
+  clearfilters:()=>{Object.assign(F,{type:'all',sub:'all',resp:'all',blk:'all',q:'',next:'all'});if(F.view!=='plans')F.floor='all';render();},
+  quickroom:quickRoom,
   close:closeDrawer,
   user:()=>{if(!confirm('Log out of the Floor Tracker on this device?'))return;lsSet(LSU,'');closeDrawer();showLogin();},
   addsub:()=>{const lines=$('#ns_name').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);if(!lines.length)return;saveS(s=>{s.subs=s.subs||[];lines.forEach(n=>{if(!s.subs.some(y=>y.name.toLowerCase()===n.toLowerCase()))s.subs.push({id:uid('s'),name:n});});});},
@@ -1202,7 +1308,7 @@ document.addEventListener('click',e=>{
   if(e.target.id==='modal'&&!$('#modal').dataset.lock){closeModal();return;}
   const inPop=!!e.target.closest('#pop');if(!inPop)closePop();
   if(planClick(e))return;
-  const t=e.target.closest('[data-view],[data-f],[data-closeblk],[data-editblk],[data-newblk],[data-set],[data-cell],[data-room],[data-act],[data-actup],[data-actdown],[data-actdel],[data-typedel],[data-delfloor],[data-gonext],[data-preset],[data-pdel],[data-sqmv],[data-sqrm],[data-sqsort],[data-typecopy],[data-typeren],[data-typesync],[data-asg],[data-subdel]');
+  const t=e.target.closest('[data-view],[data-f],[data-closeblk],[data-editblk],[data-newblk],[data-set],[data-cell],[data-room],[data-act],[data-gofloor],[data-actup],[data-actdown],[data-actdel],[data-typedel],[data-delfloor],[data-gonext],[data-preset],[data-pdel],[data-sqmv],[data-sqrm],[data-sqsort],[data-typecopy],[data-typeren],[data-typesync],[data-asg],[data-subdel]');
   if(!t)return;const d=t.dataset;if(inPop&&d.keep===undefined)setTimeout(closePop,0);
   if(d.preset){if(confirm(`Reset the PIN of ${d.preset}?\n\nThey will choose a new PIN at their next login.`))store.resetPin(d.preset);return;}
   if(d.pdel){if(!confirm(`Remove ${d.pdel} from the team?\n\nThey will no longer be able to log in. Their past updates stay in the history.`))return;const n=d.pdel;editPeople(l=>{const i=l.findIndex(p=>p.name===n);if(i>=0)l.splice(i,1);});if(S.pins[n])store.resetPin(n);return;}
@@ -1216,7 +1322,7 @@ document.addEventListener('click',e=>{
     if(S.settings.types.some(y=>y.id!==x.id&&y.name.trim().toLowerCase()===n.trim().toLowerCase()))return alert(`A room type is already called “${n.trim()}”.`);
     saveS(s=>s.types.find(y=>y.id===x.id).name=n.trim());return;}
   if(d.typecopy){const t=typeById(d.typecopy);const n=prompt('Name of the new template:',t.name+' (copy)');if(!n)return;saveS(s=>s.types.push({id:uid('t'),name:n.trim(),acts:[...cleanSeq(t.acts)]}));return;}
-  if(d.view){F.view=d.view;closeDrawer();render();window.scrollTo(0,0);return;}
+  if(d.view){const tabClick=d.view==='rooms';F.view=tabClick?(ROOMV.includes(F.rv)?F.rv:'overview'):d.view;closeDrawer();render();if(!ROOMV.includes(F.view)||tabClick)window.scrollTo(0,0);return;}
   if(d.f){F[d.f]=d.v;render();return;}
   if(d.closeblk){const b=S.blockers[d.closeblk];store.setBlocker({...b,status:'closed',closed:today(),closedBy:user()});return;}
   if(d.editblk){blkModal(d.editblk);return;}
@@ -1224,6 +1330,7 @@ document.addEventListener('click',e=>{
   if(d.set){const [rid,aid,k]=d.set.split('|');if(mxGroupSet(rid,aid,+k))return;setStatus(rid,aid,+k);return;}
   if(d.cell){const [rid,aid]=d.cell.split('|');if(isRO())openRoom(rid);else openPop(t,rid,aid);return;}
   if(d.room){e.preventDefault();openRoom(d.room);return;}
+  if(d.gofloor){Object.assign(F,{view:'overview',floor:d.gofloor,next:'all'});render();window.scrollTo(0,0);return;}
   if(d.gonext){Object.assign(F,{view:'overview',next:d.gonext,floor:'all',type:'all',q:'',blk:'all'});render();window.scrollTo(0,0);return;}
   if(d.actup||d.actdown){const i=+(d.actup??d.actdown),j=d.actup!==undefined?i-1:i+1;saveS(s=>{[s.acts[i],s.acts[j]]=[s.acts[j],s.acts[i]];});return;}
   if(d.actdel){const a=actById(d.actdel),n=Object.values(S.rooms).filter(r=>(r.acts||[]).includes(a.id)).length;if(!confirm(`Delete activity “${a.name}”?${n?` It is used in ${n} room(s) and will disappear from them.`:''}`))return;saveS(s=>{s.acts=s.acts.filter(x=>x.id!==d.actdel);s.types.forEach(t=>t.acts=t.acts.filter(x=>x!==d.actdel));});return;}
@@ -1543,7 +1650,7 @@ function vPlans(){
   h+=`<div class="filters noprint"><div class="seg"><button data-pzoom="${ZOOMS[Math.max(0,zi-1)]}" ${zi?'':'disabled'}>−</button><button data-pzoom="1" class="${z===1?'on0':''}">Fit</button><button data-pzoom="${ZOOMS[Math.min(ZOOMS.length-1,zi+1)]}" ${zi<ZOOMS.length-1?'':'disabled'}>+</button></div>
     <div class="seg" title="Room name on the labels"><button data-act="pname" class="${shownm?'on0':''}">🏷 Name: show</button><button data-act="pname" class="${shownm?'':'on0'}">hide</button></div>
     ${mv?`<button class="btn sm ${PLAN.edit?'pri':''}" data-act="pedit" title="Drag the labels to move them">✥ ${PLAN.edit?'Done moving':'Move labels'}</button>`:''}${adm?`<button class="btn sm ${PLAN.tmode?'pri':''}" data-act="ptype" title="Change the room type directly on the plan">🏷 ${PLAN.tmode?'Done with types':'Room types'}</button>`:''}<small style="color:var(--mute)">${Math.round(z*100)}% · ${here.length} rooms on this sheet${here.some(r=>r.floor!==fid)?` (incl. ${here.filter(r=>r.floor!==fid).length} double-height)`:''} · ${onF.length-unplaced.length}/${onF.length} of the floor on the plans · ${esc(m.name)}${here.some(r=>openBlk(r).length)?` · <span style="color:var(--blk);font-weight:700">🔴 ${here.filter(r=>openBlk(r).length).length} blocked</span>`:''}</small><span class="sp"></span>
-    ${adm?`${m.pages>1?`<select data-ppage="${pid}" title="Page of the PDF">${Array.from({length:m.pages},(_,i)=>`<option value="${i+1}" ${(m.page||1)===i+1?'selected':''}>Page ${i+1}</option>`).join('')}</select>`:''}<button class="btn sm" data-act="pimpmodal" title="Create the rooms written on the plans that are not yet in the tracker">🏷 Rooms from plans</button><button class="btn sm" data-act="pdetect">🔎 Detect rooms</button><button class="btn sm" data-act="prename" title="Rename this sheet">✎</button><label class="btn sm" title="Replace the PDF of this sheet">⬆ Replace${fin(false,pid)}</label><button class="btn sm red" data-act="pdel" title="Remove this sheet">✕</button>`:''}</div>`;
+    ${adm?`${m.pages>1?`<select data-ppage="${pid}" title="Page of the PDF">${Array.from({length:m.pages},(_,i)=>`<option value="${i+1}" ${(m.page||1)===i+1?'selected':''}>Page ${i+1}</option>`).join('')}</select>`:''}<details class="tools" data-dk="ptools"><summary>⚙ Sheet tools ▾</summary><div class="tmenu"><button class="btn sm" data-act="pimpmodal" title="Create the rooms written on the plans that are not yet in the tracker">🏷 Rooms from plans</button><button class="btn sm" data-act="pdetect">🔎 Detect rooms again</button><button class="btn sm" data-act="prename">✎ Rename this sheet</button><label class="btn sm">⬆ Replace the PDF${fin(false,pid)}</label><button class="btn sm red" data-act="pdel">✕ Remove this sheet</button></div></details>`:''}</div>`;
   if(PLAN.edit){
     const sel=PLAN.sel&&S.rooms[PLAN.sel];
     const dr=!adm?'':PLAN.draw?`<div class="row pdraw"><b>✏ Draw a limit:</b> click on the plan to add points · <b>double-click</b> (or Enter) to finish · Shift = horizontal / vertical · Backspace = undo point · Esc = cancel
@@ -1776,7 +1883,7 @@ Object.assign(ACT,{
     $('#sync').textContent='🟡 Local mode';
   }
   // Monday: first opening of the day shows the weekly progress of last week
-  if(new Date().getDay()===1&&lsGet('rtft_monday','')!==today()){lsSet('rtft_monday',today());F.view='weekly';F.wk='';}
+  if(new Date().getDay()===1&&lsGet('rtft_monday','')!==today()){lsSet('rtft_monday',today());F.view='cockpit';F.ck='weekly';F.wk='';}
   // no demo: the very first opening creates an empty project (3 floors, default activities)
   if(!S.settings)store.saveSettings(defaultSettings());else render();
   setInterval(ensureSnapshots,15*60*1000);

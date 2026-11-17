@@ -2,6 +2,14 @@
 Room-by-room finishes tracker for Riviera Tower (3 floors).
 Single file: index.html. Data: Firebase Firestore. Hosting: GitHub Pages.
 
+## Navigation
+4 tabs: **📊 Cockpit** (live KPIs, progress by floor, "Where are the rooms waiting?" bottleneck chart, ALL open
+blocking points, progress curve, latest updates, activity × floor table; switch to **📈 Weekly report**) ·
+**🏠 Rooms** (switch **Tiles / Matrix / Plans**; search + floor always visible, other filters under **⚙ Filters**) ·
+**⚠ Blocking points** · **⚙ Setup** (admins, one section at a time from its menu: Team & access, Project & floors, Subcontractors,
+Activity library, Room types, Add rooms, Data & backup). Two floating buttons, bottom right, for editors: **✓ Update a room**
+(type a code → room panel) and **＋ Blocking point**. Plan sheet admin actions are under **⚙ Sheet tools**.
+
 Firebase config goes at the top of index.html (FIREBASE_CONFIG).
 Empty config = local mode (data in the browser only).
 
