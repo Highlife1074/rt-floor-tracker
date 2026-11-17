@@ -28,6 +28,11 @@ select,input,textarea{font:inherit;border:1px solid var(--line);border-radius:8p
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--rad);padding:14px;margin-bottom:14px}
 .card h2{margin:0 0 10px;font-size:16px}
 .filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.fpick{position:relative}.fpick summary{list-style:none;cursor:pointer;border:1px solid var(--line);border-radius:8px;padding:7px 28px 7px 9px;background:#fff;white-space:nowrap;position:relative}
+.fpick summary::-webkit-details-marker{display:none}.fpick summary::after{content:'▾';position:absolute;right:10px;color:var(--mute)}
+.fpick summary.on{border-color:var(--ink);font-weight:700}
+.fpm{position:absolute;top:calc(100% + 4px);left:0;z-index:30;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);padding:8px 10px;display:flex;flex-direction:column;gap:2px;min-width:190px;max-height:60vh;overflow:auto}
+.fpm .chk{white-space:nowrap;padding:3px 0}
 .chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px}
 .chip{border:1px solid var(--line);background:#fff;border-radius:20px;padding:5px 11px;white-space:nowrap;cursor:pointer;font:inherit;font-size:13px;display:inline-flex;gap:6px;align-items:center;color:var(--ink)}
 .chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
@@ -340,6 +345,9 @@ function roBlock(){if(isRO()){alert('Your account is read only.\n\nYou can view,
 let S={settings:null,rooms:{},blockers:{},log:[],snaps:[],pins:{},plans:{}};
 let F={view:'overview',mx:'act',sub:'all',resp:'all',floor:'all',next:'all',type:'all',q:'',blk:'all',colorBy:'next',quick:false,bStatus:'open',bFloor:'all',bCat:'all',bOwner:'all',bGroup:'none',bq:''};
 try{Object.assign(F,JSON.parse(lsGet(LSF,'{}')));}catch(e){}
+/* floor filter: 'all', one floor id, or several (array) */
+const floorSel=()=>F.floor==='all'?null:Array.isArray(F.floor)?F.floor:[F.floor];
+const floorOk=id=>{const l=floorSel();return !l||l.includes(id);};
 let drawerRoom=null;
 
 /* Hold points: a library activity with hp:true gets a linked step "<id>__hp" right after it in the sequence */
@@ -442,7 +450,7 @@ function progress(r){const ids=roomActs(r);if(!ids.length)return 0;return avg(id
 const nextStep=r=>roomActs(r).find(a=>st(r,a)!==2)||null;
 const roomsList=()=>Object.values(S.rooms).sort((a,b)=>floorIdx(a.floor)-floorIdx(b.floor)||String(a.code).localeCompare(String(b.code),undefined,{numeric:true}));
 function passes(r,skipNext){
-  if(F.floor!=='all'&&r.floor!==F.floor)return false;
+  if(!floorOk(r.floor))return false;
   if(F.type!=='all'&&r.type!==F.type)return false;
   if(F.q){const q=F.q.toLowerCase();if(!(`${r.code} ${r.name}`.toLowerCase().includes(q)))return false;}
   const bk=openBlk(r).length>0;if(F.blk==='yes'&&!bk)return false;if(F.blk==='no'&&bk)return false;
@@ -653,6 +661,23 @@ function doRender(){
 }
 document.addEventListener('focusout',()=>{if(pending){pending=false;setTimeout(render,0);}});
 
+/* multi-select of the floors: tick one or several levels (none ticked = all floors) */
+function floorPicker(){
+  const fl=S.settings.floors,l=(floorSel()||[]).filter(id=>fl.some(f=>f.id===id));
+  const lab=!l.length?'All floors':l.length<=2?l.map(id=>floorById(id).name).join(', '):`${l.length} floors`;
+  return `<details class="fpick" data-dk="fpick"><summary class="${l.length?'on':''}" title="Floors shown — tick one or several">🏢 ${esc(lab)}</summary><div class="fpm">
+    <label class="chk"><input type="checkbox" data-ffl="all" ${l.length?'':'checked'}><b>All floors</b></label>
+    ${fl.map(f=>`<label class="chk"><input type="checkbox" data-ffl="${f.id}" ${l.includes(f.id)?'checked':''}>${esc(f.name)}</label>`).join('')}
+    ${l.length?`<button class="btn sm" data-ffl-only style="margin-top:4px">Clear</button>`:''}</div></details>`;
+}
+document.addEventListener('change',e=>{const c=e.target.closest&&e.target.closest('[data-ffl]');if(!c)return;e.stopPropagation();
+  const id=c.dataset.ffl;let l=[...(floorSel()||[])];
+  if(id==='all')l=[];else{l=l.filter(x=>x!==id);if(c.checked)l.push(id);}
+  l=S.settings.floors.map(f=>f.id).filter(x=>l.includes(x));   // keep the order of the floors
+  F.floor=!l.length||l.length===S.settings.floors.length?'all':l.length===1?l[0]:l;render();},true);
+document.addEventListener('click',e=>{
+  if(e.target.closest&&e.target.closest('[data-ffl-only]')){F.floor='all';render();return;}
+  document.querySelectorAll('details.fpick[open]').forEach(d=>{if(!d.contains(e.target)){d.open=false;OPEN.delete('fpick');}});});
 function filterBar(mode){
   const s=S.settings,base=roomsList().filter(r=>passes(r,true));
   const cnt={};let done=0;base.forEach(r=>{const n=nextStep(r);if(n)cnt[n]=(cnt[n]||0)+1;else done++;});
@@ -661,7 +686,7 @@ function filterBar(mode){
   if(done||F.next==='__done')chips+=`<button class="chip ${F.next==='__done'?'on':''}" data-f="next" data-v="__done">✓ Complete <span class="n">${done}</span></button>`;
   const opt=(v,l,cur)=>`<option value="${v}" ${cur===v?'selected':''}>${esc(l)}</option>`;
   return `<div class="filters noprint">
-    ${mode==='plan'?'':`<select data-fs="floor">${opt('all','All floors',F.floor)}${s.floors.map(f=>opt(f.id,f.name,F.floor)).join('')}</select>`}
+    ${mode==='plan'?'':floorPicker()}
     <select data-fs="type">${opt('all','All room types',F.type)}${s.types.map(t=>opt(t.id,t.name,F.type)).join('')}</select>
     <select data-fs="sub" title="Subcontractor of the next step">${opt('all','All subcontractors',F.sub)}${(s.subs||[]).map(x=>opt(x.id,'🏗 '+x.name,F.sub)).join('')}</select>
     <select data-fs="resp" title="Responsible of the next step">${opt('all','All responsibles',F.resp)}${people().map(p=>opt(p.name,'👷 '+p.name,F.resp)).join('')}</select>
@@ -680,7 +705,7 @@ function vOverview(){
     <span><i class="sq" style="background:var(--done);border:0"></i>Done</span><span><i class="sq" style="background:var(--wip);border:0"></i>In progress</span><span><i class="sq" style="background:#e3e6ec;border:0"></i>To do</span><span><i class="sq" style="background:var(--blk);border:0"></i>Blocked</span><span>Red outline = open blocking point</span></div>`;
   h+=`<div class="printonly"><h2>${esc(s.project)} — Floor overview — ${fmtLong(today())}</h2></div>`;
   if(!Object.keys(S.rooms).length)return h+`<div class="card">No rooms yet. Go to <span class="lnk" data-view="setup">Setup</span> to add rooms (one by one or paste a list from Excel).</div>`;
-  s.floors.filter(f=>F.floor==='all'||F.floor===f.id).forEach(f=>{
+  s.floors.filter(f=>floorOk(f.id)).forEach(f=>{
     const all=Object.values(S.rooms).filter(r=>r.floor===f.id),rs=list.filter(r=>r.floor===f.id),p=avg(all.map(progress));
     if(!rs.length&&F.next!=='all')return;
     h+=`<section class="floor"><div class="floor-h"><h2>${esc(f.name)}</h2><div class="bar"><i style="width:${pc(p)}%"></i></div><span class="pct">${pc(p)}% · showing ${rs.length}/${all.length} rooms</span></div>`;
