@@ -541,6 +541,16 @@ function floorRepairBanner(){
   if(!isAdmin())return '';const m=missingFloors();if(!m.length)return '';
   return `<div class="card noprint" style="border-color:var(--blk)"><b style="color:var(--blk)">⚠ ${m.length} level(s) missing from the list of floors</b> — their rooms and plans are still in the database but hidden: ${m.map(f=>`<b>${esc(f.name)}</b> (${f.rooms} rooms, ${f.sheets} plan sheet(s))`).join(', ')}. <button class="btn sm pri" data-act="fixfloors">Restore these levels</button></div>`;
 }
+/* rooms sitting on a level other than the one their code names (LO.CA.034 on P1 while a level “LO” exists) */
+function misplacedRooms(){
+  const fl=new Set(S.settings.floors.map(f=>f.id));
+  return Object.values(S.rooms).map(r=>({r,to:ownFloor(roomPre(r.code))})).filter(x=>x.to&&x.to!==x.r.floor&&fl.has(x.r.floor));
+}
+function misplacedBanner(){
+  if(!isAdmin())return '';const m=misplacedRooms();if(!m.length)return '';const g={};
+  m.forEach(x=>{const k=x.r.floor+'>'+x.to;(g[k]=g[k]||[]).push(x.r.code);});
+  return `<div class="card noprint" style="border-color:var(--hp)"><b style="color:var(--hp)">⇄ ${m.length} room(s) on the wrong level</b> — ${Object.entries(g).map(([k,c])=>{const [a,b]=k.split('>');return `<b>${c.length}</b> on ${esc(floorById(a)?.name||'')} with codes of <b>${esc(floorById(b)?.name||'')}</b> (${esc(c.sort((x,y)=>x.localeCompare(y,undefined,{numeric:true})).slice(0,6).join(', '))}${c.length>6?'…':''})`;}).join(' · ')}. Statuses, blockers and plan pins are kept. <button class="btn sm pri" data-act="fixlevels">Move them to their level</button></div>`;
+}
 function nextBlkNo(){const m=Math.max(0,...Object.values(S.blockers).map(b=>parseInt(String(b.no||'').replace(/\D/g,''))||0));return 'B-'+String(m+1).padStart(3,'0');}
 
 /* ===================== LOGIN SCREEN ===================== */
@@ -628,7 +638,7 @@ function doRender(){
   const fid=ae&&ae.id,pos=ae&&ae.selectionStart;
   // keep the scroll position of the page and of the scrolling boxes (plan, matrix, tables) across the re-render
   const SCB='#planwrap,.mxwrap,.tbwrap',boxes=[...$('#view').querySelectorAll(SCB)].map(e=>[e.scrollLeft,e.scrollTop]),wy=scrollY,wx=scrollX,sv=F.view;
-  $('#view').innerHTML=floorRepairBanner()+v();reopen($('#view'));
+  $('#view').innerHTML=floorRepairBanner()+misplacedBanner()+v();reopen($('#view'));
   if(sv===LASTVIEW){[...$('#view').querySelectorAll(SCB)].forEach((e,i)=>{const b=boxes[i];if(b){e.scrollLeft=b[0];e.scrollTop=b[1];}});if(scrollY!==wy||scrollX!==wx)scrollTo(wx,wy);}
   LASTVIEW=sv;
   if(fid&&(fid==='q'||fid==='bq')){const el=document.getElementById(fid);if(el){el.focus();try{el.setSelectionRange(pos,pos);}catch(e){}}}
@@ -955,7 +965,7 @@ function vSetup(){
     <label>Project name<input data-hold data-sset="project" value="${esc(s.project)}"></label>
     <div class="row">Signed in as <b>${esc(user())}</b> (${roleName(me())})<button class="btn sm" data-act="user">Log out</button></div>
     <div style="font-size:12px;color:var(--mute)">${USE_FB?'🟢 Shared mode — data is live in Firebase for everyone using this link.':'🟡 Local mode — data is saved in this browser only. Fill the Firebase config in index.html to share it with the team.'}</div></div></div>
-    <div class="card"><h2>Floors</h2>${s.floors.map(f=>`<div class="row" style="margin-bottom:6px"><input data-hold data-floorname="${f.id}" value="${esc(f.name)}" style="flex:1"><input data-hold data-floorpre="${f.id}" value="${esc(f.pre||'')}" placeholder="Other code prefixes (e.g. LO)" title="Room codes starting with these prefixes belong to this level (plan import). LO is always with P1." style="width:200px"><small style="color:var(--mute);width:70px">${rooms.filter(r=>r.floor===f.id).length} rooms</small><button class="btn sm red" data-delfloor="${f.id}">✕</button></div>`).join('')}<button class="btn sm" data-act="addfloor">+ Add floor</button></div></div>`;
+    <div class="card"><h2>Floors</h2>${s.floors.map(f=>`<div class="row" style="margin-bottom:6px"><input data-hold data-floorname="${f.id}" value="${esc(f.name)}" style="flex:1"><input data-hold data-floorpre="${f.id}" value="${esc(f.pre||'')}" placeholder="Other code prefixes" title="Room codes starting with these prefixes belong to this level (plan import). Codes starting with the level's name (LO.xx → level LO) already do." style="width:200px"><small style="color:var(--mute);width:70px">${rooms.filter(r=>r.floor===f.id).length} rooms</small><button class="btn sm red" data-delfloor="${f.id}">✕</button></div>`).join('')}<button class="btn sm" data-act="addfloor">+ Add floor</button></div></div>`;
   h+=`<div class="card"><h2>🏗 Subcontractors</h2><p style="margin:0 0 10px;color:var(--mute);font-size:12px">Assign a default subcontractor and responsible to each activity in the library below; a room can override them (click the 🏗 line under the activity in the room panel).</p>${(s.subs||[]).map(x=>`<div class="row" style="margin-bottom:6px"><input data-hold data-subname="${x.id}" value="${esc(x.name)}" style="flex:1"><small style="color:var(--mute);width:90px">${s.acts.filter(a=>a.sub===x.id).length} activities</small><button class="btn sm red" data-subdel="${x.id}">✕</button></div>`).join('')}
     <div class="row"><textarea id="ns_name" rows="2" placeholder="Company name (one per line)" style="flex:1;min-width:200px"></textarea><button class="btn pri" data-act="addsub">+ Add subcontractor</button></div></div>`;
   h+=`<div class="card"><h2>Activity library (catalogue · default subcontractor &amp; responsible)</h2><p style="margin:0 0 10px;color:var(--mute);font-size:12px">This is the catalogue of activities. Its order is only the default order (matrix columns, “Sort as library”); the real order of works is the sequence of each template and room. Colour: use the colour picker, or type a <b>RAL</b> code / name (e.g. 3020, “traffic red”) in the RAL field. Tick <b>◆ Hold point</b> to insert an inspection step right after an activity: the next trade only becomes “next step” once the hold point is released. A room can switch off a hold point in its own “Customize sequence”.</p>`;
@@ -1160,6 +1170,7 @@ const ACT={
   xlsall:exportAll,
   backup:()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify({settings:S.settings,rooms:S.rooms,blockers:S.blockers},null,1)],{type:'application/json'}));a.download=`RT_FloorTracker_backup_${today()}.json`;a.click();},
   fixfloors:()=>{const m=missingFloors();if(!m.length)return;const s=JSON.parse(JSON.stringify(S.settings));m.forEach(f=>s.floors.push({id:f.id,name:f.name}));store.saveSettings(s);},
+  fixlevels:()=>{const m=misplacedRooms();if(!m.length||roBlock())return;store.patchRooms(m.map(x=>[x.r.id,{floor:x.to}]));},
   addfloor:()=>saveS(s=>s.floors.push({id:uid('f'),name:'Level '+(s.floors.length+1)})),
   addact:()=>{const n=prompt('Activity name (e.g. Marble polishing):');if(!n)return;saveS(s=>s.acts.push({id:uid('a'),name:n.trim(),short:n.trim().split(/\s+/).map(w=>w[0]).join('').toUpperCase().slice(0,4),color:PALETTE[s.acts.length%PALETTE.length]}));},
   addtype:()=>{const n=prompt('Room type name (e.g. Spa / Pool area):');if(!n)return;saveS(s=>s.types.push({id:uid('t'),name:n.trim(),acts:[]}));},
@@ -1296,17 +1307,17 @@ const pinSheets=r=>{const all=Object.entries(S.plans||{}).map(([id,m])=>({id,...
 const onFloorPlans=(r,fid)=>sheetsOf(fid).some(m=>m.pins&&m.pins[r.id]);
 const roomPre=c=>String(c||'').split(/[.\-_/]/)[0];                 // level part of a code: P1.23 → P1, LO.CA.034 → LO
 const codeStem=c=>String(c||'').replace(/[.\-_/][^.\-_/]*$/,'');    // all but the last part: LO.CA.034 → LO.CA
-/* Code prefixes that belong to another level's floor (LO.CA.034 is on P1). More can be set per floor in Setup. */
-const PRE_ALIAS={lo:'P1'};
+/* Extra code prefixes of a level (Setup > Floors), e.g. a level whose rooms are coded LO.xx and B.xx */
 const floorPres=f=>String(f.pre||'').split(/[,;\s]+/).map(kLoose).filter(Boolean);
-/* floor of a code prefix (P2 → the floor whose rooms are P2.xx, or named “P2” / “Level 2”) */
-function floorForPrefix(pfx,depth){
-  const fp=S.settings.floors.find(f=>floorPres(f).includes(kLoose(pfx)));if(fp)return fp.id;
-  const al=PRE_ALIAS[kLoose(pfx)];if(al&&!depth)return floorForPrefix(al,1);
+/* level that owns a code prefix by name or by its Setup prefixes (LO.CA.034 → level “LO”), '' if none */
+const ownFloor=pfx=>{const k=kLoose(pfx);if(!k)return '';const fl=S.settings.floors,f=fl.find(f=>floorPres(f).includes(k))||fl.find(f=>kLoose(f.name)===k);return f?f.id:'';};
+/* floor of a code prefix (P2 → the level named “P2”, else the floor whose rooms are P2.xx, else “Level 2”) */
+function floorForPrefix(pfx){
+  const own=ownFloor(pfx);if(own)return own;
   const c={};Object.values(S.rooms).forEach(r=>{if(kLoose(roomPre(r.code))===kLoose(pfx))c[r.floor]=(c[r.floor]||0)+1;});
   const best=Object.keys(c).sort((a,b)=>c[b]-c[a])[0];if(best&&floorById(best))return best;
   const dg=(pfx.match(/\d+/g)||[]),fl=S.settings.floors;
-  const f=fl.find(f=>kLoose(f.name)===kLoose(pfx))||(dg.length===1&&fl.find(f=>{const d=f.name.match(/\d+/g)||[];return d.length===1&&+d[0]===+dg[0];}));
+  const f=(dg.length===1&&fl.find(f=>{const d=f.name.match(/\d+/g)||[];return d.length===1&&+d[0]===+dg[0];}));
   return f?f.id:'';
 }
 const planKey=pid=>{const m=S.plans[pid];return m?pid+'|'+m.ver+'|'+(m.page||1):'';};
@@ -1395,8 +1406,8 @@ async function floorTags(fid){
   let list=Object.values(map);const cnt=(f)=>{const c={};list.forEach(e=>{const k=f(e.code);c[k]=(c[k]||0)+Object.keys(e.sheets).length;});return c;};
   const sig=c=>c.replace(/[a-z]/gi,'A').replace(/\d/g,'9'),sc=cnt(sig),mx=Math.max(0,...Object.values(sc));
   const pre=roomPre,pc0=cnt(pre),main=Object.keys(pc0).sort((a,b)=>pc0[b]-pc0[a])[0];
-  const here=p=>p===main||floorForPrefix(p)===fid;   // prefix of this level (e.g. LO on P1)
-  list=list.filter(e=>sc[sig(e.code)]>=mx*.25||(pre(e.code)!==main&&here(pre(e.code))));
+  const here=p=>p===main&&(!ownFloor(p)||ownFloor(p)===fid)||floorForPrefix(p)===fid;   // prefix of this level
+  list=list.filter(e=>sc[sig(e.code)]>=mx*.25||(pre(e.code)!==main&&ownFloor(pre(e.code))));   // LO.CA.034 kept: level “LO” exists
   list.forEach(e=>{e.odd=here(pre(e.code))?'':pre(e.code);});   // e.g. P2.06 on the P1 plan = double-height room of P2
   return {list:list.sort(byCode),inc,sheets};
 }
@@ -1424,11 +1435,11 @@ async function importModal(fid){
     const fo=e=>{const d=floorForPrefix(e.odd);return S.settings.floors.map(f=>`<option value="${f.id}" ${f.id===d?'selected':''}>${esc(f.name)}</option>`).join('')+(d?'':`<option value="__new" selected>+ new floor “${esc(e.odd)}”</option>`);};
     const to=(sel)=>`<option value="">— default type —</option>`+S.settings.types.map(t=>`<option value="${t.id}" ${t.id===sel?'selected':''}>${esc(t.name)}</option>`).join('');
     let h=`<h2>🏷 Rooms on the plans — ${esc(floorById(fid)?.name||'')}</h2>
-      <p style="font-size:13px;margin-top:0"><b>${list.length}</b> different room codes on ${sheets.length} sheet(s)${over.length?` · <b>${over.length}</b> in the overlap zone (${over.map(e=>esc(e.code)).join(', ')}) counted once`:''}${dh.length?` · <b>${dh.length}</b> double-height room(s) of another level (${dh.map(e=>esc(e.code)).join(', ')}): one room, on its own level, also shown on this plan`:''} · <b>${list.length-fresh.length}</b> already in the tracker · <b>${fresh.length}</b> new.</p>`;
+      <p style="font-size:13px;margin-top:0"><b>${list.length}</b> different room codes on ${sheets.length} sheet(s)${over.length?` · <b>${over.length}</b> in the overlap zone (${over.map(e=>esc(e.code)).join(', ')}) counted once`:''}${dh.length?` · <b>${dh.length}</b> room(s) of another level (${dh.map(e=>esc(e.code)).join(', ')}): one room, on its own level, also shown on this plan`:''} · <b>${list.length-fresh.length}</b> already in the tracker · <b>${fresh.length}</b> new.</p>`;
     if(inc.length)h+=`<p style="font-size:12px;color:#b57800">⚠ ${inc.length} tag(s) without a complete number on the plan, not imported: ${inc.map(t=>`“${esc(t.code)}” ${esc(t.name)} ${esc(t.area)} (${esc(t.sheet)})`).join(' · ')}. Add these rooms by hand if needed.</p>`;
     if(fresh.length){
       h+=`<div class="row" style="margin:6px 0"><label style="font-size:12px">Default type (names not recognised) <select id="imp_def">${S.settings.types.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select></label></div>
-      <div class="tbwrap" style="max-height:48vh"><table class="tb"><thead><tr><th><input type="checkbox" id="imp_all" checked></th><th>Code</th><th>Name</th><th>Area</th><th>Sheet(s)</th>${anyOdd?'<th>Level</th>':''}<th>Room type</th></tr></thead><tbody>${fresh.map((e,i)=>`<tr><td><input type="checkbox" data-imp="${i}" checked></td><td><b>${esc(e.code)}</b>${e.odd?` <span class="tag" style="background:#e8f0fe;color:var(--hp)" title="Code of another level: double-height room. Created once, on its own level, and also shown on this plan">⇕ double height</span>`:''}</td><td>${esc(e.name)}${e.names.size>1?` <span class="tag red" title="${esc([...e.names].join(' / '))}">names differ</span>`:''}</td><td style="white-space:nowrap">${esc(e.area)}</td><td style="white-space:nowrap">${Object.keys(e.sheets).map(sn).map(esc).join(' + ')}${e.n>Object.keys(e.sheets).length?` <small style="color:var(--mute)">(tag ×${e.n})</small>`:''}</td>${anyOdd?`<td>${e.odd?`<select data-impfloor="${i}">${fo(e)}</select>`:esc(floorById(fid)?.name||'')}</td>`:''}<td><select data-imptype="${i}">${to(guessType(e.name))}</select></td></tr>`).join('')}</tbody></table></div>`;
+      <div class="tbwrap" style="max-height:48vh"><table class="tb"><thead><tr><th><input type="checkbox" id="imp_all" checked></th><th>Code</th><th>Name</th><th>Area</th><th>Sheet(s)</th>${anyOdd?'<th>Level</th>':''}<th>Room type</th></tr></thead><tbody>${fresh.map((e,i)=>`<tr><td><input type="checkbox" data-imp="${i}" checked></td><td><b>${esc(e.code)}</b>${e.odd?` <span class="tag" style="background:#e8f0fe;color:var(--hp)" title="Code of another level (e.g. a double-height room, or LO.xx on the P1 plan): created once, on its own level, and also shown on this plan">⇕ level ${esc(floorById(floorForPrefix(e.odd))?.name||e.odd)}</span>`:''}</td><td>${esc(e.name)}${e.names.size>1?` <span class="tag red" title="${esc([...e.names].join(' / '))}">names differ</span>`:''}</td><td style="white-space:nowrap">${esc(e.area)}</td><td style="white-space:nowrap">${Object.keys(e.sheets).map(sn).map(esc).join(' + ')}${e.n>Object.keys(e.sheets).length?` <small style="color:var(--mute)">(tag ×${e.n})</small>`:''}</td>${anyOdd?`<td>${e.odd?`<select data-impfloor="${i}">${fo(e)}</select>`:esc(floorById(fid)?.name||'')}</td>`:''}<td><select data-imptype="${i}">${to(guessType(e.name))}</select></td></tr>`).join('')}</tbody></table></div>`;
     }else h+=`<p style="color:var(--done)">✓ Every room tag of the plans is already in the tracker.</p>`;
     h+=`<div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn" data-act="mclose">${fresh.length?'Cancel':'OK'}</button>${fresh.length?`<button class="btn pri" data-act="pimport">Create selected rooms</button>`:''}</div>`;
     modal(h);
