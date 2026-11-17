@@ -127,6 +127,10 @@ details summary{cursor:pointer;padding:6px 0}
 #modal.open{display:flex}
 #modal .box{background:#fff;border-radius:14px;padding:18px;width:min(540px,100%);max-height:92vh;overflow:auto}
 #modal h2{margin:0 0 12px;font-size:18px}
+#modal .box.wide{width:min(1200px,100%);display:flex;flex-direction:column}
+.peekwrap{max-height:calc(92vh - 170px);min-height:260px}
+.peekwrap .pin{font-size:10px;padding:2px 5px;opacity:.55}.peekwrap .pin.peekme{opacity:1;z-index:4;font-size:13px;padding:5px 9px;outline:3px solid #111;outline-offset:2px}
+.ctxm{display:flex;flex-direction:column;gap:4px}.ctxm .btn{text-align:left}
 .form{display:grid;gap:10px}.form label{display:grid;gap:4px;font-size:12px;color:var(--mute);font-weight:600;flex:1}
 table.tb{width:100%;border-collapse:collapse;background:#fff;font-size:13px}
 .tb th{text-align:left;font-size:11px;text-transform:uppercase;color:var(--mute);border-bottom:2px solid var(--line);padding:8px;white-space:nowrap}
@@ -765,7 +769,7 @@ function vMatrix(){
   let h=filterBar('matrix');
   if(!isRO())h+=mxTypeBar(list,tm);
   const lg=`<span><i class="sq" style="background:var(--done);border:0"></i>Done</span><span><i class="sq" style="background:var(--wip);border:0"></i>In progress</span><span><i class="sq"></i>To do</span><span><i class="sq" style="background:var(--blk);border:0"></i>Blocked</span><span>◆ Hold point: <i class="sq" style="background:var(--hp);border:0"></i>requested · <i class="sq" style="background:var(--done);border:0"></i>released</span>`;
-  h+=`<div class="legend noprint">${lg}${seq?'<span>Each row reads left → right in the room’s own sequence (activity short codes)</span>':`<span>Number = step of the activity in the room’s sequence</span><span><i class="sq" style="background:linear-gradient(225deg,#7e57c2 6px,#fff 6px)"></i>done in a different order than the columns</span><span>Columns: ${F.type!=='all'?'sequence of the “'+esc(typeById(F.type)?.name||'')+'” template':'dominant order of the rooms shown'}</span>`}<span><b>Click a cell</b> to set To do / WIP / Done</span></div>`;
+  h+=`<div class="legend noprint">${lg}${seq?'<span>Each row reads left → right in the room’s own sequence (activity short codes)</span>':`<span>Number = step of the activity in the room’s sequence</span><span><i class="sq" style="background:linear-gradient(225deg,#7e57c2 6px,#fff 6px)"></i>done in a different order than the columns</span><span>Columns: ${F.type!=='all'?'sequence of the “'+esc(typeById(F.type)?.name||'')+'” template':'dominant order of the rooms shown'}</span>`}<span><b>Click a cell</b> to set To do / WIP / Done</span><span><b>Right-click a room</b> to see it on the plan</span></div>`;
   h+=`<div class="printonly"><h2>${esc(s.project)} — Status matrix (${seq?'by sequence':'by activity'}) — ${fmtLong(today())}</h2></div>`;
   let cols=[],order=[],N=0;
   if(seq)N=Math.max(1,...list.map(r=>roomActs(r).length));else({cols,order}=mxColumns(list));
@@ -1514,6 +1518,53 @@ function showOnPlan(rid){
   const go=(n)=>{const p=document.querySelector(`.pin[data-pin="${rid}"]`),w=$('#planwrap');if(p&&w){const a=p.getBoundingClientRect(),b=w.getBoundingClientRect();w.scrollLeft+=a.left-b.left-w.clientWidth/2;w.scrollTop+=a.top-b.top-w.clientHeight/2;}else if(n)setTimeout(()=>go(n-1),300);};
   setTimeout(()=>go(15),60);setTimeout(()=>{PLAN.flash=null;},3500);
 }
+/* Matrix: right-click a room (any cell of its row) → small menu → the plan in a pop-up window, room highlighted */
+const PEEK={rid:null,pid:null,z:1};
+document.addEventListener('contextmenu',e=>{
+  if(F.view!=='matrix'||(e.target.closest&&e.target.closest('input,textarea')))return;
+  const tr=e.target.closest&&e.target.closest('table.mx tbody tr'),a=tr&&tr.querySelector('td.rh [data-room]');if(!a)return;
+  e.preventDefault();const rid=a.dataset.room,r=S.rooms[rid];if(!r)return;
+  const n=pinSheets(r).length,p=$('#pop');POP=null;p.classList.remove('wide');
+  p.innerHTML=`<div style="font-size:12px;margin-bottom:8px"><b>${esc(r.code)}</b> ${esc(r.name)}</div><div class="ctxm">
+    <button class="btn sm pri" data-peek="${rid}" ${n?'':'disabled title="This room is not placed on any plan"'}>📐 See on the plan</button>
+    <button class="btn sm" data-showpin="${rid}" ${n?'':'disabled'}>↗ Go to the Plans page</button>
+    <button class="btn sm" data-room="${rid}">Open room</button></div>${n?'':'<small style="color:var(--mute);display:block;margin-top:6px">Not placed on any plan yet.</small>'}`;
+  const x=e.clientX,y=e.clientY;placePop({isConnected:false,getBoundingClientRect:()=>({left:x,top:y,bottom:y})});
+});
+function openPeek(rid){
+  const r=S.rooms[rid];if(!r)return;const ps=pinSheets(r);if(!ps.length)return alert(`${r.code} is not placed on any plan.`);
+  closePop();PEEK.rid=rid;PEEK.pid=(ps.find(m=>m.id===F.psheet)||ps[0]).id;PEEK.z=1;peekRender(true);
+}
+function peekRender(center){
+  const r=S.rooms[PEEK.rid];if(!r){closeModal();return;}
+  const ps=pinSheets(r),pid=PEEK.pid,m=S.plans[pid],k=planKey(pid),im=PLAN.img[k];if(!m)return closeModal();
+  const fl=floorById(m.floor||pid),n=nextStep(r),na=n&&actById(n);
+  let h=`<div class="row" style="flex-wrap:nowrap;margin-bottom:8px"><h2 style="flex:1;margin:0">📐 <b>${esc(r.code)}</b> ${esc(r.name)} <small style="color:var(--mute);font-weight:400">· ${esc(fl?fl.name:'')}${m.sheet?' · '+esc(m.sheet):''} · ${pc(progress(r))}% · ${na?(na.isHp?'Awaiting '+esc(na.name):'Next: '+esc(na.name)):'Complete'}</small></h2><button class="iconbtn" data-act="mclose" title="Close (Esc)">✕</button></div>`;
+  h+=`<div class="row" style="margin-bottom:8px">${ps.length>1?ps.map(x=>`<button class="chip ${x.id===pid?'on':''}" data-peeksh="${x.id}">📄 ${esc(x.sheet||'Sheet')}</button>`).join(''):''}<div class="seg">${[['−',Math.max(1,PEEK.z/1.5)],['Fit',1],['+',Math.min(8,PEEK.z*1.5)]].map(([l,v])=>`<button data-peekz="${v}" class="${l==='Fit'&&PEEK.z===1?'on0':''}">${l}</button>`).join('')}</div><span class="sp"></span><button class="btn sm" data-showpin="${r.id}">↗ Plans page</button><button class="btn sm" data-peekroom="${r.id}">Open room</button></div>`;
+  if(!im||im.err){h+=`<div class="planwrap peekwrap"><div class="empty" style="padding:30px;text-align:center">${im?'The plan could not be displayed: '+esc(im.err):'Loading the plan…'}</div></div>`;
+    if(!im){planImage(pid);setTimeout(()=>{if($('#modal').classList.contains('open')&&$('#peekwrap,.peekwrap')&&PEEK.pid===pid)peekRender(true);},300);}}
+  else{
+    const pins=m.pins||{};h+=`<div class="planwrap peekwrap" id="peekwrap"><div class="planin" style="width:${PEEK.z*100}%"><img src="${im.url}" alt="" draggable="false">`;
+    Object.keys(pins).forEach(id=>{const x=S.rooms[id];if(!x)return;const p=pins[id],me=id===r.id,s=nextStep(x),a=s&&actById(s);
+      const c=F.colorBy==='progress'?heat(progress(x)):(a?(a.isHp?'var(--hp)':a.color):'var(--done)');
+      h+=`<button class="pin ${me?'peekme flash':''} ${openBlk(x).length?'blk':''}" ${me?'':`data-peek="${id}"`} style="left:${p.x*100}%;top:${p.y*100}%;--c:${c}" title="${esc(x.code+' '+x.name+' — '+pc(progress(x))+'%'+(me?'':' — click to look at this room'))}"><b>${esc(x.code)}</b></button>`;});
+    h+=`</div></div>`;
+  }
+  const w0=$('#peekwrap'),keep=!center&&w0?[(w0.scrollLeft+w0.clientWidth/2)/w0.scrollWidth,(w0.scrollTop+w0.clientHeight/2)/w0.scrollHeight]:null;
+  modal(h);$('#modal .box').classList.add('wide');
+  const w=$('#peekwrap'),img=w&&w.querySelector('img');if(!img)return;
+  const go=()=>{if(keep){w.scrollLeft=keep[0]*w.scrollWidth-w.clientWidth/2;w.scrollTop=keep[1]*w.scrollHeight-w.clientHeight/2;return;}
+    const p=w.querySelector('.peekme');if(!p)return;const a=p.getBoundingClientRect(),b=w.getBoundingClientRect();w.scrollLeft+=a.left-b.left-w.clientWidth/2;w.scrollTop+=a.top-b.top-w.clientHeight/2;};
+  img.complete?go():img.addEventListener('load',go,{once:true});
+}
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-peek],[data-peeksh],[data-peekz],[data-peekroom]');if(!t)return;const d=t.dataset;
+  if(d.peek){openPeek(d.peek);return;}
+  if(d.peeksh){PEEK.pid=d.peeksh;PEEK.z=1;peekRender(true);return;}
+  if(d.peekz){const z=+d.peekz;PEEK.z=Math.abs(z-1)<1e-6?1:z;peekRender(true);return;}
+  if(d.peekroom){closeModal();openRoom(d.peekroom);}
+});
+/* closing the pop-up when leaving it for the Plans page */
+document.addEventListener('click',e=>{if(!e.target.closest||!e.target.closest('[data-showpin]'))return;if(e.target.closest('#modal'))closeModal();if(e.target.closest('#pop'))setTimeout(closePop,0);},true);
 /* Admin: every plan sheet stored in the database, whatever its level, with a selector to move it to another level
    (a sheet uploaded on the wrong level, or attached to a level that no longer exists). */
 function allSheetsCard(){
