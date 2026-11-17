@@ -195,6 +195,11 @@ body.ro [data-set],body.ro [data-newblk],body.ro [data-closeblk],body.ro .rwonly
 .plines .pl.cur{stroke:var(--hp);stroke-dasharray:none}.plines .pl.rub{stroke:var(--hp);stroke-dasharray:calc(4px*var(--k)) calc(4px*var(--k));stroke-width:calc(2px*var(--k))}.plines .pl.lsel{stroke:var(--hp);stroke-width:calc(5px*var(--k))}
 .plines .plhit{fill:none;stroke:transparent;stroke-width:calc(16px*var(--k));pointer-events:stroke;cursor:pointer}
 .pdraw{background:#e8f0fe;border-radius:8px;padding:6px 8px;margin-bottom:8px;font-size:13px}
+/* tag sizes (Plans toolbar: Tags S / M / L) */
+.tg-s .pin{font-size:9px;padding:1px 4px;border-width:1px;border-radius:6px}.tg-s .pin .pn{font-size:8px;max-width:70px;margin-top:1px;line-height:1.1}
+.tg-s .pbadge{top:-8px;right:-8px;min-width:14px;height:14px;font-size:9px;line-height:11px;padding:0 3px;border-width:1px}
+.tg-m .pin{font-size:10px;padding:2px 5px;border-radius:7px}.tg-m .pin .pn{font-size:9px;max-width:95px}
+.tg-m .pbadge{min-width:16px;height:16px;font-size:10px;line-height:13px;top:-9px;right:-9px}
 .pin:hover{z-index:4;transform:translate(-50%,-50%) scale(1.15)}
 .pin.blk{box-shadow:0 0 0 3px var(--blk),0 1px 4px rgba(0,0,0,.35);z-index:3}
 .pbadge{position:absolute;top:-10px;right:-10px;min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:var(--blk);color:#fff;border:2px solid #fff;font:800 11px/16px system-ui,sans-serif;font-style:normal;text-align:center;text-shadow:none;box-shadow:0 1px 4px rgba(0,0,0,.4)}
@@ -1648,6 +1653,8 @@ function vPlans(){
   const ok=r=>{const f=F.floor;F.floor='all';const v=passes(r,false);F.floor=f;return v;};
   if(sheets.length>1||adm)h+=`<div class="chips noprint" style="align-items:center"><small style="color:var(--mute)">Sheets:</small>${sheets.map(x=>`<button class="chip ${x.id===pid?'on':''}" data-f="psheet" data-v="${x.id}">📄 ${esc(x.sheet||'Sheet')} <span class="n">${Object.keys(x.pins||{}).filter(id=>S.rooms[id]).length}</span></button>`).join('')}${adm?`<label class="chip">+ Add sheet(s)${fin(true)}</label>`:''}</div>`;
   h+=`<div class="filters noprint"><div class="seg"><button data-pzoom="${ZOOMS[Math.max(0,zi-1)]}" ${zi?'':'disabled'}>−</button><button data-pzoom="1" class="${z===1?'on0':''}">Fit</button><button data-pzoom="${ZOOMS[Math.min(ZOOMS.length-1,zi+1)]}" ${zi<ZOOMS.length-1?'':'disabled'}>+</button></div>
+    ${adm?`<button class="btn ${PLAN.addMode?'pri':'on'}" data-act="paddroom" title="Create a room that is missing: click where it is on the plan">${PLAN.addMode?'✓ Done adding rooms':'＋ New room'}</button>`:''}
+    <div class="seg" title="Size of the room tags"><button disabled style="cursor:default">Tags</button>${[['s','S'],['m','M'],['l','L']].map(([v,l])=>`<button data-f="psz" data-v="${v}" class="${(F.psz||'s')===v?'on0':''}">${l}</button>`).join('')}</div>
     <div class="seg" title="Room name on the labels"><button data-act="pname" class="${shownm?'on0':''}">🏷 Name: show</button><button data-act="pname" class="${shownm?'':'on0'}">hide</button></div>
     ${mv?`<button class="btn sm ${PLAN.edit?'pri':''}" data-act="pedit" title="Drag the labels to move them">✥ ${PLAN.edit?'Done moving':'Move labels'}</button>`:''}${adm?`<button class="btn sm ${PLAN.tmode?'pri':''}" data-act="ptype" title="Change the room type directly on the plan">🏷 ${PLAN.tmode?'Done with types':'Room types'}</button>`:''}<small style="color:var(--mute)">${Math.round(z*100)}% · ${here.length} rooms on this sheet${here.some(r=>r.floor!==fid)?` (incl. ${here.filter(r=>r.floor!==fid).length} double-height)`:''} · ${onF.length-unplaced.length}/${onF.length} of the floor on the plans · ${esc(m.name)}${here.some(r=>openBlk(r).length)?` · <span style="color:var(--blk);font-weight:700">🔴 ${here.filter(r=>openBlk(r).length).length} blocked</span>`:''}</small><span class="sp"></span>
     ${adm?`${m.pages>1?`<select data-ppage="${pid}" title="Page of the PDF">${Array.from({length:m.pages},(_,i)=>`<option value="${i+1}" ${(m.page||1)===i+1?'selected':''}>Page ${i+1}</option>`).join('')}</select>`:''}<details class="tools" data-dk="ptools"><summary>⚙ Sheet tools ▾</summary><div class="tmenu"><button class="btn sm" data-act="pimpmodal" title="Create the rooms written on the plans that are not yet in the tracker">🏷 Rooms from plans</button><button class="btn sm" data-act="pdetect">🔎 Detect rooms again</button><button class="btn sm" data-act="prename">✎ Rename this sheet</button><label class="btn sm">⬆ Replace the PDF${fin(false,pid)}</label><button class="btn sm red" data-act="pdel">✕ Remove this sheet</button></div></details>`:''}</div>`;
@@ -1659,6 +1666,7 @@ function vPlans(){
     h+=`<div class="card noprint pedit">${dr}<b>✥ Move labels:</b> drag a label to move it (saved for everyone) · ${PLAN.place?`<span class="tag" style="background:var(--hp);color:#fff">Click on the plan ${PLAN.place==='__new'?'where the new room is':'to place '+esc(S.rooms[PLAN.place]?.code||'')}</span> <button class="btn sm" data-pplace="">Cancel</button>`:'pick a room below, then click on the plan to place it'}${sel?` · selected <b>${esc(sel.code)}</b> ${adm?` <button class="btn sm" data-act="psplit" title="Cut this room into several rooms (e.g. a parking zone)">✂ Split</button>`:''} <button class="btn sm red" data-punpin="${sel.id}">Remove from this sheet</button>`:''}${adm&&!PLAN.place?` · <button class="btn sm pri" data-pplace="__new">+ New room</button> <small style="color:var(--mute)">then click on the plan</small>`:''}
       <div class="chips" style="margin:8px 0 0">${unplaced.length?unplaced.map(r=>`<button class="chip ${PLAN.place===r.id?'on':''}" data-pplace="${r.id}"><b>${esc(r.code)}</b> ${esc(r.name)}</button>`).join(''):'<span style="color:var(--done);font-size:13px">✓ All rooms of this floor are on the plans.</span>'}</div>${(()=>{const o=onF.filter(r=>!pins[r.id]&&onFloorPlans(r,fid)).sort(byCode);return o.length?`<div style="margin-top:8px;font-size:12px">Also show on this sheet (room drawn on both sheets): <select data-paddsheet><option value="">— room —</option>${o.map(r=>`<option value="${r.id}">${esc(r.code)} ${esc(r.name)}</option>`).join('')}</select></div>`:'';})()}</div>`;
   }
+  if(PLAN.addMode)h+=`<div class="card noprint pedit"><div class="row"><b>＋ New room:</b> click on the plan <b>where the missing room is</b>, then give its code, name and type. You can add several rooms one after the other.<span class="sp"></span><button class="btn sm pri" data-act="paddroom">✓ Done</button></div></div>`;
   if(PLAN.tmode){
     if(!typeById(PLAN.ttype))PLAN.ttype=(s.types[0]||{}).id||'';const tt=typeById(PLAN.ttype),cnt={};here.forEach(r=>cnt[r.type]=(cnt[r.type]||0)+1);
     h+=`<div class="card noprint pedit"><div class="row"><b>🏷 Room types:</b><select data-ptt>${s.types.map(t=>`<option value="${t.id}" ${t.id===PLAN.ttype?'selected':''}>${esc(t.name)}</option>`).join('')}</select>
@@ -1670,14 +1678,14 @@ function vPlans(){
   h+=`<div class="printonly"><h2>${esc(s.project)} — ${esc(floorById(fid)?.name||'')}${sheets.length>1?' — '+esc(m.sheet||''):''} — ${fmtLong(today())}</h2></div>`;
   if(!im){planImage(pid);return h+`<div class="planwrap" id="planwrap"><div class="empty" style="padding:30px;text-align:center">Loading the plan…</div></div>`;}
   if(im.err)return h+`<div class="card"><b>The plan could not be displayed:</b> ${esc(im.err)} <button class="btn sm" data-act="pretry">Retry</button></div>`;
-  h+=`<div class="planwrap" id="planwrap"><div class="planin ${PLAN.edit?'editing':''} ${PLAN.place||PLAN.draw||(PLAN.tmode&&PLAN.multi)?'placing':''}" id="planin" style="width:${z*100}%"><img src="${im.url}" alt="" draggable="false">`;
+  h+=`<div class="planwrap" id="planwrap"><div class="planin tg-${F.psz||'s'} ${PLAN.edit?'editing':''} ${PLAN.place||PLAN.addMode||PLAN.draw||(PLAN.tmode&&PLAN.multi)?'placing':''}" id="planin" style="width:${z*100}%"><img src="${im.url}" alt="" draggable="false">`;
   {const L=m.lines||{},pts=a=>{let o=[];for(let i=0;i+1<a.length;i+=2)o.push((a[i]*im.w).toFixed(1)+','+(a[i+1]*im.h).toFixed(1));return o.join(' ');};
    const sel=PLAN.edit&&!PLAN.draw,k=im.w/Math.max(300,((document.getElementById('planwrap')||{}).clientWidth||1200)*z);   // screen px → image px
    h+=`<svg class="plines ${sel?'selectable':''}" style="--k:${k.toFixed(3)}" viewBox="0 0 ${im.w} ${im.h}" preserveAspectRatio="none">${Object.entries(L).map(([id,l])=>`<polyline points="${pts(l.p||[])}" class="pl ${PLAN.lsel===id&&sel?'lsel':''}"/>${sel?`<polyline points="${pts(l.p||[])}" class="plhit" data-line="${id}"/>`:''}`).join('')}${PLAN.draw?`<polyline id="pcur" points="${pts(PLAN.cur)}" class="pl cur"/><line id="prub" class="pl rub" x1="0" y1="0" x2="0" y2="0" style="display:none"/>`:''}</svg>`;}
   here.forEach(r=>{const p=pins[r.id],n=nextStep(r),a=n&&actById(n),pr=progress(r),bl=openBlk(r);
     const c=PLAN.tmode?typeCol(r.type):F.colorBy==='progress'?heat(pr):(a?(a.isHp?'var(--hp)':a.color):'var(--done)');
     const oth=r.floor!==fid,tip=`${r.code} ${r.name} — ${typeById(r.type)?.name||'no type'}${oth?` — double height, room of ${floorById(r.floor)?.name||'another level'}`:''} — ${pc(pr)}% — ${a?(a.isHp?'Awaiting '+a.name:'Next: '+a.name):'Complete'}${bl.length?` — ⚠ ${bl.length} blocking point(s)`:''}`;
-    h+=`<button class="pin ${bl.length?'blk':''} ${ok(r)?'':'dim'} ${PLAN.sel===r.id&&PLAN.edit?'sel':''} ${PLAN.flash===r.id?'flash':''} ${PLAN.tmode&&PLAN.msel.has(r.id)?'msel':''}" data-pin="${r.id}" ${PLAN.edit||PLAN.tmode?'':isRO()?`data-room="${r.id}"`:`data-proom="${r.id}"`} style="left:${p.x*100}%;top:${p.y*100}%;--c:${c}" title="${esc(tip)}">${bl.length?`<i class="pbadge" title="${bl.length} open blocking point(s)">${bl.length}</i>`:''}<b>${oth?'⇕ ':''}${esc(r.code)}${F.colorBy==='progress'?` · ${pc(pr)}%`:''}</b>${shownm&&r.name?`<span class="pn">${esc(r.name)}</span>`:''}</button>`;});
+    h+=`<button class="pin ${bl.length?'blk':''} ${ok(r)?'':'dim'} ${PLAN.sel===r.id&&PLAN.edit?'sel':''} ${PLAN.flash===r.id?'flash':''} ${PLAN.tmode&&PLAN.msel.has(r.id)?'msel':''}" data-pin="${r.id}" ${PLAN.edit||PLAN.tmode||PLAN.addMode?'':isRO()?`data-room="${r.id}"`:`data-proom="${r.id}"`} style="left:${p.x*100}%;top:${p.y*100}%;--c:${c}" title="${esc(tip)}">${bl.length?`<i class="pbadge" title="${bl.length} open blocking point(s)">${bl.length}</i>`:''}<b>${oth?'⇕ ':''}${esc(r.code)}${F.colorBy==='progress'?` · ${pc(pr)}%`:''}</b>${shownm&&r.name?`<span class="pn">${esc(r.name)}</span>`:''}</button>`;});
   PLAN.shown=here.filter(ok).map(r=>r.id);
   h+=`</div></div>`;
   if(adm)h+=allSheetsCard();
@@ -1737,6 +1745,8 @@ function planClick(e){
     const pn=e.target.closest('.pin[data-pin]');if(pn){const id=pn.dataset.pin;if(PLAN.multi){PLAN.msel.has(id)?PLAN.msel.delete(id):PLAN.msel.add(id);render();}else assignType([id]);return true;}
     const lg=e.target.closest('[data-ptlegend]');if(lg){PLAN.ttype=lg.dataset.ptlegend;render();return true;}
   }
+  if(pi&&PLAN.addMode&&!PLAN.edit&&!e.target.closest('.pin')){const b=pi.getBoundingClientRect();
+    newRoomModal(PLAN.pid,clamp01((e.clientX-b.left)/b.width),clamp01((e.clientY-b.top)/b.height));return true;}
   if(pi&&PLAN.edit&&PLAN.place==='__new'&&!e.target.closest('.pin')){const b=pi.getBoundingClientRect();PLAN.place=null;
     newRoomModal(PLAN.pid,clamp01((e.clientX-b.left)/b.width),clamp01((e.clientY-b.top)/b.height));render();return true;}
   if(pi&&PLAN.edit&&PLAN.place&&!e.target.closest('.pin')){const b=pi.getBoundingClientRect(),rid=PLAN.place;PLAN.place=null;PLAN.sel=rid;
@@ -1782,6 +1792,7 @@ function newRoomModal(pid,x,y){
   modal(`<h2>+ New room on ${esc(floorById(fid)?.name||'')}</h2><div class="form"><div class="row"><label>Code<input id="pn_code" value="${esc(nextFreeCode(fid))}"></label><label style="flex:1">Name<input id="pn_name" placeholder="e.g. Parking zone A"></label></div><label>Room type<select id="pn_type">${typeOpts(S.settings.types[0]&&S.settings.types[0].id)}</select></label></div>
     <div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn" data-act="mclose">Cancel</button><button class="btn pri" data-act="pnewok">Create room here</button></div>`);
   setTimeout(()=>{const e=$('#pn_name');if(e)e.focus();},50);
+  $('#modal').querySelectorAll('input').forEach(i=>i.onkeydown=ev=>{if(ev.key==='Enter'){ev.preventDefault();newRoomOk();}});
 }
 async function newRoomOk(){
   const A=PLAN.newAt;if(!A)return;const code=$('#pn_code').value.trim(),name=$('#pn_name').value.trim(),type=$('#pn_type').value,t=typeById(type);
@@ -1850,7 +1861,7 @@ Object.assign(ACT,{
   pdraw:()=>{PLAN.draw=!PLAN.draw;PLAN.cur=[];PLAN.lsel=null;PLAN.place=null;render();},
   pdrawend:drawFinish,
   plinedel:()=>{if(!PLAN.lsel||!confirm('Delete this limit?'))return;store.patchPlan(PLAN.pid,{['lines.'+PLAN.lsel]:null});PLAN.lsel=null;},
-  ptype:()=>{PLAN.tmode=!PLAN.tmode;PLAN.edit=false;PLAN.place=null;PLAN.sel=null;PLAN.msel.clear();render();},
+  ptype:()=>{PLAN.addMode=false;PLAN.tmode=!PLAN.tmode;PLAN.edit=false;PLAN.place=null;PLAN.sel=null;PLAN.msel.clear();render();},
   ptone:()=>{PLAN.multi=false;PLAN.msel.clear();render();},
   ptmulti:()=>{PLAN.multi=true;render();},
   ptassign:()=>assignType([...PLAN.msel]),
@@ -1861,7 +1872,8 @@ Object.assign(ACT,{
   psplitok:splitOk,
   mclose:()=>{PLAN.imp=null;closeModal();},
   pname:()=>{F.pname=F.pname===false;render();},
-  pedit:()=>{PLAN.edit=!PLAN.edit;PLAN.tmode=false;PLAN.draw=false;PLAN.cur=[];PLAN.lsel=null;PLAN.place=null;PLAN.sel=null;render();},
+  paddroom:()=>{PLAN.addMode=!PLAN.addMode;PLAN.edit=false;PLAN.tmode=false;PLAN.draw=false;PLAN.place=null;render();},
+  pedit:()=>{PLAN.edit=!PLAN.edit;PLAN.addMode=false;PLAN.tmode=false;PLAN.draw=false;PLAN.cur=[];PLAN.lsel=null;PLAN.place=null;PLAN.sel=null;render();},
   pimpmodal:()=>importModal(PLAN.fid),
   pimport:doImport,
   pdetect:()=>{const m=S.plans[PLAN.pid];if(!m)return;const man=Object.values(m.pins||{}).some(p=>p.m);

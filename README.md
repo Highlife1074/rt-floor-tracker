@@ -9,6 +9,8 @@ blocking points, progress curve, latest updates, activity × floor table; switch
 **⚠ Blocking points** · **⚙ Setup** (admins, one section at a time from its menu: Team & access, Project & floors, Subcontractors,
 Activity library, Room types, Add rooms, Data & backup). Two floating buttons, bottom right, for editors: **✓ Update a room**
 (type a code → room panel) and **＋ Blocking point**. Plan sheet admin actions are under **⚙ Sheet tools**.
+On a plan, **＋ New room** (admin) creates a room missed by the detection: click where it is, give code / name /
+type (Enter = create); several rooms can be added in a row. **Tags S / M / L** sets the size of the room labels (S default).
 
 Firebase config goes at the top of index.html (FIREBASE_CONFIG).
 Empty config = local mode (data in the browser only).
