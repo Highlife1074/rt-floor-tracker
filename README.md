@@ -9,6 +9,15 @@ blocking points, progress curve, latest updates, activity × floor table; switch
 **⚠ Blocking points** · **⚙ Setup** (admins, one section at a time from its menu: Team & access, Project & floors, Subcontractors,
 Activity library, Room types, Add rooms, Data & backup). Two floating buttons, bottom right, for editors: **✓ Update a room**
 (type a code → room panel) and **＋ Blocking point**. Plan sheet admin actions are under **⚙ Sheet tools**.
+On a plan, **＋ New room** (admin) creates a room missed by the detection: click where it is, give code / name /
+type (Enter = create); several rooms can be added in a row. **Tags S / M / L** sets the size of the room labels (S default). Tags of rooms that don't match the active filters
+are greyed out, with a "Show all rooms normally" button.
+**Back:** each screen (tab, Tiles/Matrix/Plans, room panel, setup section…) is a browser history entry — the browser /
+phone Back button and the **← Back** button (left of the tabs) return to the previous screen.
+**Blocking point on several rooms:** in the form, "Applies to: Several rooms" → tick floor(s) and/or room type(s) (none =
+all), optionally an activity (rooms without it are left out), then untick exceptions. One blocking point per room is
+saved with the same number and a group id (`grp`); the Cockpit and counters show it once ("12 rooms", "Resolve all"),
+editing it can apply to all its rooms.
 
 Firebase config goes at the top of index.html (FIREBASE_CONFIG).
 Empty config = local mode (data in the browser only).

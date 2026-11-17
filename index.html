@@ -17,6 +17,7 @@ header.top{background:var(--acc);color:#fff;padding:10px 16px;display:flex;align
 .userchip{background:rgba(255,255,255,.15);border:0;color:#fff;border-radius:20px;padding:5px 11px;cursor:pointer;font:inherit;font-size:13px}
 nav.tabs{display:flex;gap:2px;padding:0 10px;background:#fff;border-bottom:1px solid var(--line);overflow-x:auto}
 nav.tabs button{border:0;background:none;padding:12px 13px;font:inherit;font-weight:600;color:var(--mute);border-bottom:3px solid transparent;cursor:pointer;white-space:nowrap}
+nav.tabs button.navback{color:var(--acc);border:1px solid var(--line);border-radius:20px;padding:6px 14px;margin:6px 8px 6px 0;align-self:center}nav.tabs button.navback[hidden]{display:none}
 nav.tabs button.on{color:var(--acc);border-bottom-color:var(--acc)}
 .nb{background:var(--blk);color:#fff;border-radius:10px;font-size:11px;padding:0 6px;margin-left:4px}
 main{padding:16px;max-width:1500px;margin:0 auto}
@@ -195,10 +196,15 @@ body.ro [data-set],body.ro [data-newblk],body.ro [data-closeblk],body.ro .rwonly
 .plines .pl.cur{stroke:var(--hp);stroke-dasharray:none}.plines .pl.rub{stroke:var(--hp);stroke-dasharray:calc(4px*var(--k)) calc(4px*var(--k));stroke-width:calc(2px*var(--k))}.plines .pl.lsel{stroke:var(--hp);stroke-width:calc(5px*var(--k))}
 .plines .plhit{fill:none;stroke:transparent;stroke-width:calc(16px*var(--k));pointer-events:stroke;cursor:pointer}
 .pdraw{background:#e8f0fe;border-radius:8px;padding:6px 8px;margin-bottom:8px;font-size:13px}
+/* tag sizes (Plans toolbar: Tags S / M / L) */
+.tg-s .pin{font-size:9px;padding:1px 4px;border-width:1px;border-radius:6px}.tg-s .pin .pn{font-size:8px;max-width:70px;margin-top:1px;line-height:1.1}
+.tg-s .pbadge{top:-8px;right:-8px;min-width:14px;height:14px;font-size:9px;line-height:11px;padding:0 3px;border-width:1px}
+.tg-m .pin{font-size:10px;padding:2px 5px;border-radius:7px}.tg-m .pin .pn{font-size:9px;max-width:95px}
+.tg-m .pbadge{min-width:16px;height:16px;font-size:10px;line-height:13px;top:-9px;right:-9px}
 .pin:hover{z-index:4;transform:translate(-50%,-50%) scale(1.15)}
 .pin.blk{box-shadow:0 0 0 3px var(--blk),0 1px 4px rgba(0,0,0,.35);z-index:3}
 .pbadge{position:absolute;top:-10px;right:-10px;min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:var(--blk);color:#fff;border:2px solid #fff;font:800 11px/16px system-ui,sans-serif;font-style:normal;text-align:center;text-shadow:none;box-shadow:0 1px 4px rgba(0,0,0,.4)}
-.pin.dim .pbadge{opacity:1}.pin.dim{opacity:.22}.pin.sel{outline:3px solid var(--hp);z-index:3}
+.pin.dim .pbadge{opacity:1}.pin.dim{opacity:.55;filter:grayscale(.85)}.pin.sel{outline:3px solid var(--hp);z-index:3}
 .pin.flash{animation:pinf .9s 4}@keyframes pinf{50%{transform:translate(-50%,-50%) scale(1.9)}}
 .planin.editing .pin{touch-action:none;cursor:move}.planin.placing,.planin.placing img{cursor:crosshair}
 .pedit{border-color:var(--hp);background:#f3f8ff}.pedit .chips{flex-wrap:wrap;max-height:120px;overflow:auto}
@@ -232,6 +238,8 @@ details.tools .tmenu .btn{text-align:left}
 .flrow{cursor:pointer;border-radius:8px;padding:2px 4px}.flrow:hover{background:#f6f8fb}
 .qrlist{max-height:55vh;overflow:auto;margin-top:8px;border:1px solid var(--line);border-radius:8px}
 .qrlist button{display:flex;gap:10px;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);background:#fff;padding:9px 12px;font:inherit;cursor:pointer;color:var(--ink)}
+.bmh{font-size:12px;color:var(--mute);font-weight:600}.bmh small{font-weight:400}
+.form label.bmrow{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--line);font-size:13px;color:var(--ink);font-weight:400;cursor:pointer}.bmrow:hover{background:#f6f8fb}
 .qrlist button:hover{background:var(--acc2)}.qrlist button[hidden]{display:none}
 .setup{display:grid;grid-template-columns:220px 1fr;gap:18px;align-items:start}
 .smenu{position:sticky;top:120px;background:#fff;border:1px solid var(--line);border-radius:var(--rad);padding:6px;display:flex;flex-direction:column;gap:2px}
@@ -254,6 +262,7 @@ details.tools .tmenu .btn{text-align:left}
     <button class="logout" data-act="user" title="Log out of this device">Log out</button>
   </header>
   <nav class="tabs">
+    <button id="navback" class="navback" data-act="navback" title="Back to the previous screen" hidden>← Back</button>
     <button data-view="cockpit">📊 Cockpit</button>
     <button data-view="rooms">🏠 Rooms</button>
     <button data-view="blockers">⚠ Blocking points<span class="nb" id="nbk"></span></button>
@@ -498,6 +507,8 @@ const store={
   patchRoom(id,patch){if(roBlock())return;if(USE_FB)return fb.updateDoc(dref('rooms',id),patch).catch(fail);for(const k in patch)setPath(S.rooms[id],k,patch[k]);persist();},
   patchRooms(list){if(roBlock())return;if(USE_FB)return runOps(list.map(([id,p])=>['upd','rooms',id,p])).catch(fail);list.forEach(([id,p])=>{if(S.rooms[id])for(const k in p)setPath(S.rooms[id],k,p[k]);});persist();},
   setBlocker(b){if(roBlock())return;if(USE_FB)return fb.setDoc(dref('blockers',b.id),b).catch(fail);S.blockers[b.id]=b;persist();},
+  setBlockers(list){if(roBlock())return;if(USE_FB)return runOps(list.map(b=>['set','blockers',b.id,b])).catch(fail);list.forEach(b=>S.blockers[b.id]=b);persist();},
+  delBlockers(ids){if(roBlock())return;if(USE_FB)return runOps(ids.map(id=>['del','blockers',id])).catch(fail);ids.forEach(id=>delete S.blockers[id]);persist();},
   delBlocker(id){if(roBlock())return;if(USE_FB)return fb.deleteDoc(dref('blockers',id)).catch(fail);delete S.blockers[id];persist();},
   addLog(e){if(USE_FB)return fb.addDoc(fb.collection(db,P+'log'),e).catch(()=>{});S.log.unshift(e);S.log=S.log.slice(0,1500);},
   savePin(name,hash){if(USE_FB)return fb.setDoc(dref('auth','pins'),{[name]:hash},{merge:true});S.pins[name]=hash;persist();return Promise.resolve();},
@@ -673,7 +684,7 @@ function doRender(){
   $('#pname').textContent=S.settings.project||'Riviera Tower';
   $('#userchip').textContent=`👤 ${m.name.split(',')[0]} · ${roleName(m)}`;
   $('#userchip').title='Signed in as '+m.name;
-  const nOpen=Object.values(S.blockers).filter(b=>b.status==='open').length;
+  const nOpen=new Set(Object.values(S.blockers).filter(b=>b.status==='open').map(b=>b.grp||b.id)).size;
   $('#nbk').textContent=nOpen||'';$('#nbk').style.display=nOpen?'':'none';
   const tab=ROOMV.includes(F.view)?'rooms':F.view;
   document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.view===tab));
@@ -689,6 +700,7 @@ function doRender(){
   if(fid&&(fid==='q'||fid==='bq')){const el=document.getElementById(fid);if(el){el.focus();try{el.setSelectionRange(pos,pos);}catch(e){}}}
   if(drawerRoom)renderDrawer();
   refreshPop();
+  navSync();
   setTimeout(ensureSnapshots,0);
 }
 document.addEventListener('focusout',()=>{if(pending){pending=false;setTimeout(render,0);}});
@@ -949,7 +961,7 @@ function vBlockers(){
   const owners=[...new Set(all.map(b=>b.owner).filter(Boolean))].sort(ABC);
   const opt=(v,l,cur)=>`<option value="${esc(v)}" ${cur===v?'selected':''}>${esc(l)}</option>`;
   const rows=blkRows();
-  let h=`<div class="kpis"><div class="kpi"><b style="color:var(--blk)">${open.length}</b><span>Open blocking points</span></div><div class="kpi"><b>${roomsB}</b><span>Rooms blocked</span></div><div class="kpi"><b class="${over.length?'overdue':''}">${over.length}</b><span>Overdue (target date passed)</span></div><div class="kpi"><b>${age} d</b><span>Average age of open points</span></div><div class="kpi"><b style="color:var(--done)">${cl7}</b><span>Resolved last 7 days</span></div></div>`;
+  let h=`<div class="kpis"><div class="kpi"><b style="color:var(--blk)">${new Set(open.map(b=>b.grp||b.id)).size}</b><span>Open blocking points</span></div><div class="kpi"><b>${roomsB}</b><span>Rooms blocked</span></div><div class="kpi"><b class="${over.length?'overdue':''}">${over.length}</b><span>Overdue (target date passed)</span></div><div class="kpi"><b>${age} d</b><span>Average age of open points</span></div><div class="kpi"><b style="color:var(--done)">${cl7}</b><span>Resolved last 7 days</span></div></div>`;
   h+=`<div class="filters noprint"><button class="btn pri" data-newblk="|">+ New blocking point</button>
     <select data-fs="bStatus">${opt('open','Open',F.bStatus)}${opt('closed','Resolved',F.bStatus)}${opt('all','All',F.bStatus)}</select>
     <select data-fs="bFloor">${opt('all','All floors',F.bFloor)}${s.floors.map(f=>opt(f.id,f.name,F.bFloor)).join('')}</select>
@@ -969,7 +981,7 @@ function vBlockers(){
     if(gk)h+=`<tr class="grp"><td colspan="12">${esc(k)} (${groups[k].length})</td></tr>`;
     groups[k].forEach(b=>{
       const r=S.rooms[b.roomId],a=b.actId&&actById(b.actId),od=b.status==='open'&&b.due&&b.due<t;
-      h+=`<tr class="click" data-editblk="${b.id}"><td><b>${esc(b.no)}</b></td><td>${esc(r?floorById(r.floor)?.name:'')}</td><td><b>${esc(r?r.code:'?')}</b> ${esc(r?r.name:'')}</td><td>${a?`<span class="dot" style="background:${a.color}"></span> ${esc(a.name)}`:'General'}</td><td>${esc(b.title)}</td><td>${esc(b.cat)}</td><td>${esc(b.owner)}</td><td>${fmtD(b.raised)}</td><td class="${od?'overdue':''}">${fmtD(b.due)}${od?' ⏰':''}</td><td>${b.status==='open'?days(b.raised||t,t)+' d':''}</td><td>${b.status==='open'?'<span class="tag red">Open</span>':`<span class="tag green">Resolved ${fmtD(b.closed)}</span>`}</td><td class="noprint">${b.status==='open'?`<button class="btn sm" data-closeblk="${b.id}">✓ Resolve</button>`:''}</td></tr>`;
+      h+=`<tr class="click" data-editblk="${b.id}"><td><b>${esc(b.no)}</b>${b.grp?` <span class="tag" title="Same blocking point on ${grpOf(b).length} rooms">×${grpOf(b).length}</span>`:''}</td><td>${esc(r?floorById(r.floor)?.name:'')}</td><td><b>${esc(r?r.code:'?')}</b> ${esc(r?r.name:'')}</td><td>${a?`<span class="dot" style="background:${a.color}"></span> ${esc(a.name)}`:'General'}</td><td>${esc(b.title)}</td><td>${esc(b.cat)}</td><td>${esc(b.owner)}</td><td>${fmtD(b.raised)}</td><td class="${od?'overdue':''}">${fmtD(b.due)}${od?' ⏰':''}</td><td>${b.status==='open'?days(b.raised||t,t)+' d':''}</td><td>${b.status==='open'?'<span class="tag red">Open</span>':`<span class="tag green">Resolved ${fmtD(b.closed)}</span>`}</td><td class="noprint">${b.status==='open'?`<button class="btn sm" data-closeblk="${b.id}">✓ Resolve</button>`:''}</td></tr>`;
     });
   });
   return h+'</tbody></table></div>';
@@ -994,7 +1006,7 @@ function vCockpit(){
   h+=`<div class="kpis">
     <div class="kpi"><b>${pc(overall)}%</b><span>Overall progress</span>${dl}</div>
     <div class="kpi"><b style="color:var(--done)">${complete}<span style="font-size:15px;color:var(--mute)"> / ${rooms.length}</span></b><span>Rooms complete</span></div>
-    <div class="kpi lnk" style="text-decoration:none;color:inherit" data-view="blockers"><b style="color:var(--blk)">${open.length}</b><span>Open blocking points${over.length?` · <span class="overdue">${over.length} overdue</span>`:''}</span><small style="color:var(--mute)">${roomsB} room(s) blocked</small></div>
+    <div class="kpi lnk" style="text-decoration:none;color:inherit" data-view="blockers"><b style="color:var(--blk)">${new Set(open.map(b=>b.grp||b.id)).size}</b><span>Open blocking points${over.length?` · <span class="overdue">${new Set(over.map(b=>b.grp||b.id)).size} overdue</span>`:''}</span><small style="color:var(--mute)">${roomsB} room(s) blocked</small></div>
     <div class="kpi"><b style="color:var(--hp)">${hpWait.length}</b><span>◆ Rooms waiting for a hold point</span><small style="color:var(--mute)">${hpReq} inspection(s) requested</small></div>
     <div class="kpi"><b>${doneWk}</b><span>Activities completed (last 7 days)</span></div></div>`;
   // progress by floor (click = see the rooms of that floor)
@@ -1008,10 +1020,12 @@ function vCockpit(){
   h+=bn.length?`<div class="bneck">${bn.map(x=>`<span class="lab" data-gonext="${x.a.id}" title="${esc(x.a.name)}">${x.a.isHp?'◆ HP – '+esc(x.a.name.slice(5)):esc(x.a.name)}</span><div class="bb"><i style="width:${(x.n-x.b)/mx*100}%;background:${x.a.isHp?'var(--hp)':x.a.color}"></i><i style="width:${x.b/mx*100}%;background:var(--blk)"></i></div><b>${x.n}</b>`).join('')}</div>`:'<div class="empty">All rooms are complete 🎉</div>';
   h+=`</div></div>`;
   // ALL open blocking points
-  const rows=[...open].sort((a,b)=>{const oa=a.due&&a.due<t,ob=b.due&&b.due<t;if(oa!==ob)return oa?-1:1;if(oa)return a.due.localeCompare(b.due);return (a.raised||t).localeCompare(b.raised||t);});
-  h+=`<div class="card"><div class="row" style="margin-bottom:10px"><h2 style="margin:0">⚠ Open blocking points (${open.length})</h2>${over.length?`<span class="tag red">${over.length} overdue</span>`:''}<span class="sp"></span>${isRO()?'':'<button class="btn pri noprint" data-newblk="|">+ New blocking point</button>'}<button class="btn noprint" data-view="blockers">Full list & filters →</button></div>`;
-  h+=rows.length?`<div class="tbwrap"><table class="tb"><thead><tr><th>No</th><th>Room</th><th>Activity</th><th>Description</th><th>Category</th><th>Responsible</th><th>Target</th><th>Age</th><th class="noprint"></th></tr></thead><tbody>${rows.map(b=>{const r=S.rooms[b.roomId],a=b.actId&&actById(b.actId),od=b.due&&b.due<t;
-    return `<tr class="click" data-editblk="${b.id}"><td><b>${esc(b.no)}</b></td><td><b>${esc(r?r.code:'?')}</b> ${esc(r?r.name:'')}<br><small style="color:var(--mute)">${esc(r?floorById(r.floor)?.name||'':'')}</small></td><td>${a?`<span class="dot" style="background:${a.color}"></span> ${esc(a.name)}`:'General'}</td><td>${esc(b.title)}</td><td>${esc(b.cat)}</td><td>${esc(b.owner||'—')}</td><td class="${od?'overdue':''}">${fmtD(b.due)||'—'}${od?' ⏰':''}</td><td>${days(b.raised||t,t)} d</td><td class="noprint">${isRO()?'':`<button class="btn sm" data-closeblk="${b.id}">✓ Resolve</button>`}</td></tr>`;}).join('')}</tbody></table></div>`:'<div class="empty">No open blocking point 👍</div>';
+  const G={};open.forEach(b=>(G[b.grp||b.id]=G[b.grp||b.id]||[]).push(b));const nB=Object.keys(G).length,nOver=Object.values(G).filter(g=>g[0].due&&g[0].due<t).length;
+  const rows=Object.values(G).map(g=>g[0]).sort((a,b)=>{const oa=a.due&&a.due<t,ob=b.due&&b.due<t;if(oa!==ob)return oa?-1:1;if(oa)return a.due.localeCompare(b.due);return (a.raised||t).localeCompare(b.raised||t);});
+  h+=`<div class="card"><div class="row" style="margin-bottom:10px"><h2 style="margin:0">⚠ Open blocking points (${nB})</h2>${nOver?`<span class="tag red">${nOver} overdue</span>`:''}<span class="sp"></span>${isRO()?'':'<button class="btn pri noprint" data-newblk="|">+ New blocking point</button>'}<button class="btn noprint" data-view="blockers">Full list & filters →</button></div>`;
+  h+=rows.length?`<div class="tbwrap"><table class="tb"><thead><tr><th>No</th><th>Room</th><th>Activity</th><th>Description</th><th>Category</th><th>Responsible</th><th>Target</th><th>Age</th><th class="noprint"></th></tr></thead><tbody>${rows.map(b=>{const r=S.rooms[b.roomId],a=b.actId&&actById(b.actId),od=b.due&&b.due<t,g=G[b.grp||b.id],gr=g.map(x=>S.rooms[x.roomId]).filter(Boolean);
+    const fl=[...new Set(gr.map(x=>floorById(x.floor)?.name||''))].join(', ');
+    return `<tr class="click" data-editblk="${b.id}"><td><b>${esc(b.no)}</b></td><td>${g.length>1?`<b>${g.length} rooms</b><br><small style="color:var(--mute)">${esc(fl)} · ${esc(gr.map(x=>x.code).sort(ABC).slice(0,6).join(', '))}${g.length>6?'…':''}</small>`:`<b>${esc(r?r.code:'?')}</b> ${esc(r?r.name:'')}<br><small style="color:var(--mute)">${esc(r?floorById(r.floor)?.name||'':'')}</small>`}</td><td>${a?`<span class="dot" style="background:${a.color}"></span> ${esc(a.name)}`:'General'}</td><td>${esc(b.title)}</td><td>${esc(b.cat)}</td><td>${esc(b.owner||'—')}</td><td class="${od?'overdue':''}">${fmtD(b.due)||'—'}${od?' ⏰':''}</td><td>${days(b.raised||t,t)} d</td><td class="noprint">${isRO()?'':`<button class="btn sm" data-closeblk="${b.id}" ${g.length>1?'data-all="1"':''}>✓ Resolve${g.length>1?' all':''}</button>`}</td></tr>`;}).join('')}</tbody></table></div>`:'<div class="empty">No open blocking point 👍</div>';
   h+=`</div>`;
   // trend + latest updates
   const live={...makeSnapshot('9999-12-31'),id:'live',date:t};
@@ -1166,8 +1180,29 @@ function vWeekly(){
 }
 
 /* ===================== ROOM DRAWER ===================== */
-function openRoom(id){drawerRoom=id;$('#drawer').scrollTop=0;renderDrawer();$('#drawer').classList.add('open');$('#scrim').classList.add('open');}
-function closeDrawer(){drawerRoom=null;$('#drawer').classList.remove('open');$('#scrim').classList.remove('open');}
+function openRoom(id){drawerRoom=id;$('#drawer').scrollTop=0;renderDrawer();$('#drawer').classList.add('open');$('#scrim').classList.add('open');navLater();}
+function closeDrawer(){const was=drawerRoom;drawerRoom=null;$('#drawer').classList.remove('open');$('#scrim').classList.remove('open');if(was)navLater();}
+/* ===================== BACK NAVIGATION =====================
+   Each screen (tab, room view, cockpit / weekly, setup section, floor / next-step filter, sheet, open room panel)
+   is a browser history entry: the browser / phone Back button and the "← Back" button return to the previous one. */
+const NAV={last:null,i:(history.state&&history.state.i)||0,restoring:false,t:null};
+const navSnap=()=>JSON.stringify({v:F.view,ck:F.ck,ss:F.ss,fl:F.floor,nx:F.next,pf:F.pfloor||'',ps:F.psheet||'',d:drawerRoom||''});
+function navSync(){
+  clearTimeout(NAV.t);const sn=navSnap();if(sn===NAV.last){NAV.restoring=false;navBackBtn();return;}
+  try{if(NAV.last===null||NAV.restoring)history.replaceState({nav:sn,i:NAV.i},'');else{NAV.i++;history.pushState({nav:sn,i:NAV.i},'');}}catch(e){}
+  NAV.last=sn;NAV.restoring=false;navBackBtn();
+}
+function navBackBtn(){const b=$('#navback');if(b)b.hidden=!(NAV.i>0);}
+const navLater=()=>{clearTimeout(NAV.t);NAV.t=setTimeout(navSync,60);};
+addEventListener('popstate',e=>{
+  const st=e.state;if(!st||!st.nav)return;let o;try{o=JSON.parse(st.nav);}catch(_){return;}
+  NAV.i=st.i||0;NAV.last=st.nav;NAV.restoring=true;
+  Object.assign(F,{view:o.v,ck:o.ck,ss:o.ss,floor:o.fl,next:o.nx,pfloor:o.pf||F.pfloor,psheet:o.ps||F.psheet});
+  closeModal();closePop();
+  if(o.d&&S.rooms[o.d]){drawerRoom=o.d;renderDrawer();$('#drawer').classList.add('open');$('#scrim').classList.add('open');}
+  else{drawerRoom=null;$('#drawer').classList.remove('open');$('#scrim').classList.remove('open');}
+  render();
+});
 function renderDrawer(){
   const r=S.rooms[drawerRoom];if(!r){closeDrawer();return;}
   const D=$('#drawer'),ae=document.activeElement;
@@ -1201,30 +1236,69 @@ function renderDrawer(){
 /* ===================== MODALS ===================== */
 function modal(html,lock){$('#modal').innerHTML=`<div class="box">${html}</div>`;$('#modal').dataset.lock=lock?'1':'';$('#modal').classList.add('open');}
 function closeModal(){$('#modal').classList.remove('open');$('#modal').innerHTML='';}
+/* Blocking point form. "Several rooms": pick rooms by floor(s) and/or room type(s), then tick / untick them —
+   one blocking point per room is saved, all with the same number and a shared group id (b.grp). */
+const grpOf=b=>b&&b.grp?Object.values(S.blockers).filter(x=>x.grp===b.grp):b?[b]:[];
+let BM=null;
 function blkModal(bid,roomId,actId){
   const s=S.settings;
   const b=bid?{...S.blockers[bid]}:{id:uid('b'),no:nextBlkNo(),roomId:roomId||'',actId:actId||'',title:'',cat:s.cats[0],owner:'',raised:today(),due:'',status:'open',closed:'',by:user()};
+  const grp=bid?grpOf(b):[];
+  BM={b,bid,multi:false,floors:new Set(),types:new Set(),act:actId||'',sel:new Set(),touched:false};
   const owners=[...new Set(Object.values(S.blockers).map(x=>x.owner).filter(Boolean))];
   const ro=s.floors.map(f=>`<optgroup label="${esc(f.name)}">${roomsList().filter(r=>r.floor===f.id).map(r=>`<option value="${r.id}" ${r.id===b.roomId?'selected':''}>${esc(r.code+' – '+r.name)}</option>`).join('')}</optgroup>`).join('');
   modal(`<h2>${bid?'Edit':'New'} blocking point ${esc(b.no)}</h2><div class="form">
-    <label>Room<select id="m_room"><option value="">— select —</option>${ro}</select></label>
-    <label>Activity concerned<select id="m_act"></select></label>
+    ${bid?(grp.length>1?`<div class="pdraw">This blocking point covers <b>${grp.length} rooms</b> (${esc(grp.map(x=>S.rooms[x.roomId]?.code||'?').sort(ABC).slice(0,12).join(', '))}${grp.length>12?'…':''}).<label class="chk" style="margin-top:4px"><input type="checkbox" id="m_grp" checked>Apply the changes (description, category, responsible, dates, status) to all ${grp.length} rooms</label></div>`:'')
+      :`<div class="row"><b style="font-size:12px;color:var(--mute)">APPLIES TO</b><div class="vswitch"><button type="button" class="on" data-bm="one">One room</button><button type="button" data-bm="multi">Several rooms</button></div></div>`}
+    <div id="bm_one"><div class="form"><label>Room<select id="m_room"><option value="">— select —</option>${ro}</select></label>
+    <label>Activity concerned<select id="m_act"></select></label></div></div>
+    <div id="bm_multi" hidden></div>
     <label>Description of the blocking point<textarea id="m_title" rows="3">${esc(b.title)}</textarea></label>
     <div class="row"><label>Category<select id="m_cat">${[...s.cats].sort(ABC).map(c=>`<option ${c===b.cat?'selected':''}>${esc(c)}</option>`).join('')}</select></label><label>Responsible<input id="m_owner" list="m_owners" value="${esc(b.owner)}" placeholder="Who must solve it"><datalist id="m_owners">${[...new Set([...owners,...(s.subs||[]).map(x=>x.name),...people().map(p=>p.name)])].sort(ABC).map(o=>`<option value="${esc(o)}">`).join('')}</datalist></label></div>
     <div class="row"><label>Raised on<input type="date" id="m_raised" value="${b.raised||''}"></label><label>Target date<input type="date" id="m_due" value="${b.due||''}"></label><label>Status<select id="m_status"><option value="open" ${b.status==='open'?'selected':''}>Open</option><option value="closed" ${b.status==='closed'?'selected':''}>Resolved</option></select></label></div>
     <div class="row"><button class="btn pri" id="m_save">Save</button><button class="btn" id="m_cancel">Cancel</button>${bid?'<span class="sp"></span><button class="btn red" id="m_del">Delete</button>':''}</div></div>`);
   const fillActs=()=>{const r=S.rooms[$('#m_room').value];$('#m_act').innerHTML=`<option value="">General / whole room</option>`+(r?roomActs(r):[]).map(id=>`<option value="${id}" ${id===b.actId?'selected':''}>${esc(actById(id).name)}</option>`).join('');};
   fillActs();$('#m_room').onchange=fillActs;$('#m_cancel').onclick=closeModal;
+  $('#modal').querySelectorAll('[data-bm]').forEach(x=>x.onclick=()=>{BM.multi=x.dataset.bm==='multi';$('#modal').querySelectorAll('[data-bm]').forEach(y=>y.classList.toggle('on',y===x));
+    $('#bm_one').hidden=BM.multi;$('#bm_multi').hidden=!BM.multi;if(BM.multi){if(!BM.touched&&$('#m_room').value){const r=S.rooms[$('#m_room').value];if(r){BM.floors.add(r.floor);BM.sel.add(r.id);}}bmRender();}});
   $('#m_save').onclick=()=>{
-    const rid=$('#m_room').value,title=$('#m_title').value.trim();
-    if(!rid)return alert('Please select a room.');if(!title)return alert('Please describe the blocking point.');
-    const stt=$('#m_status').value;
-    store.setBlocker({...b,roomId:rid,actId:$('#m_act').value,title,cat:$('#m_cat').value,owner:$('#m_owner').value.trim(),raised:$('#m_raised').value||today(),due:$('#m_due').value||'',status:stt,closed:stt==='closed'?(b.closed||today()):''});
+    const title=$('#m_title').value.trim(),stt=$('#m_status').value;
+    if(!title)return alert('Please describe the blocking point.');
+    const f={title,cat:$('#m_cat').value,owner:$('#m_owner').value.trim(),raised:$('#m_raised').value||today(),due:$('#m_due').value||'',status:stt};
+    const cl=x=>stt==='closed'?(x.closed||today()):'';
+    if(BM.multi){
+      const ids=bmRooms().filter(r=>BM.sel.has(r.id)).map(r=>r.id);if(!ids.length)return alert('Please select at least one room.');
+      const grpId=ids.length>1?uid('g'):'';
+      store.setBlockers(ids.map((rid,k)=>({...b,id:k?uid('b'):b.id,grp:grpId,roomId:rid,actId:BM.act,...f,closed:cl(b)})));closeModal();return;
+    }
+    const rid=$('#m_room').value;if(!rid)return alert('Please select a room.');
+    const main={...b,roomId:rid,actId:$('#m_act').value,...f,closed:cl(b)};
+    if(bid&&grp.length>1&&$('#m_grp')&&$('#m_grp').checked)store.setBlockers(grp.map(x=>x.id===b.id?main:{...x,...f,no:b.no,closed:cl(x)}));
+    else store.setBlocker(main);
     closeModal();
   };
-  if(bid)$('#m_del').onclick=()=>{if(confirm('Delete this blocking point permanently?')){store.delBlocker(bid);closeModal();}};
+  if(bid)$('#m_del').onclick=()=>{const all=grp.length>1&&confirm(`This blocking point covers ${grp.length} rooms.\n\nOK = delete it for ALL ${grp.length} rooms\nCancel = choose for this room only`);
+    if(all){store.delBlockers(grp.map(x=>x.id));closeModal();return;}
+    if(confirm(`Delete this blocking point${grp.length>1?' for room '+(S.rooms[b.roomId]?.code||''):''} permanently?`)){store.delBlocker(bid);closeModal();}};
 }
-
+/* rooms matching the floors / room types ticked (none ticked = all), with the chosen activity if any */
+const bmRooms=()=>roomsList().filter(r=>(!BM.floors.size||BM.floors.has(r.floor))&&(!BM.types.size||BM.types.has(r.type||''))&&(!BM.act||roomActs(r).includes(BM.act)));
+function bmRender(){
+  const s=S.settings,box=$('#bm_multi');if(!box||!BM)return;const rs=bmRooms(),n=rs.filter(r=>BM.sel.has(r.id)).length,sc=box.querySelector('.qrlist')?.scrollTop||0;
+  const chip=(k,v,l,on)=>`<button type="button" class="chip ${on?'on':''}" data-bmt="${k}|${esc(v)}">${l}</button>`;
+  box.innerHTML=`<div class="form"><div class="bmh">Floors <small>(none ticked = all floors)</small></div><div class="row">${s.floors.map(f=>chip('f',f.id,esc(f.name),BM.floors.has(f.id))).join('')}</div>
+    <div class="bmh">Room types <small>(none ticked = all types)</small></div><div class="row">${s.types.map(t=>chip('t',t.id,`<i class="sq" style="background:${typeCol(t.id)};border:0"></i>${esc(t.name)}`,BM.types.has(t.id))).join('')}</div>
+    <label>Activity concerned<select id="bm_act"><option value="">General / whole room</option>${allSteps().map(a=>`<option value="${a.id}" ${a.id===BM.act?'selected':''}>${a.isHp?'◆ ':''}${esc(a.name)}</option>`).join('')}</select></label>
+    <div class="row"><b>${n}</b> of ${rs.length} matching room(s) selected<span class="sp"></span><button type="button" class="btn sm" data-bmall="1">Select all</button><button type="button" class="btn sm" data-bmall="0">None</button></div>
+    <div class="qrlist" style="max-height:220px;margin-top:0">${rs.map(r=>`<label class="bmrow"><input type="checkbox" data-bmr="${r.id}" ${BM.sel.has(r.id)?'checked':''}><b style="width:70px">${esc(r.code)}</b> ${esc(r.name)} <small style="color:var(--mute);margin-left:auto">${esc(floorById(r.floor)?.name||'')} · ${esc(typeById(r.type)?.name||'no type')}</small></label>`).join('')||'<div class="empty" style="padding:8px">No room matches.</div>'}</div></div>`;
+  box.querySelector('.qrlist').scrollTop=sc;
+  box.querySelectorAll('[data-bmt]').forEach(x=>x.onclick=()=>{const [k,v]=x.dataset.bmt.split('|'),set=k==='f'?BM.floors:BM.types;set.has(v)?set.delete(v):set.add(v);
+    // picking floors / types selects all the rooms that match (untick the exceptions afterwards)
+    BM.touched=true;BM.sel=new Set(bmRooms().map(r=>r.id));bmRender();});
+  box.querySelector('#bm_act').onchange=e=>{BM.act=e.target.value;bmRender();};
+  box.querySelectorAll('[data-bmall]').forEach(x=>x.onclick=()=>{bmRooms().forEach(r=>x.dataset.bmall==='1'?BM.sel.add(r.id):BM.sel.delete(r.id));bmRender();});
+  box.querySelectorAll('[data-bmr]').forEach(x=>x.onchange=()=>{x.checked?BM.sel.add(x.dataset.bmr):BM.sel.delete(x.dataset.bmr);BM.touched=true;bmRender();});
+}
 
 /* "✓ Update a room": search box → open the room panel */
 function quickRoom(){
@@ -1263,6 +1337,7 @@ function exportAll(){
 /* ===================== EVENTS ===================== */
 const ACT={
   print:()=>window.print(),
+  navback:()=>history.back(),
   morefilters:()=>{F.more=!F.more;render();},
   clearfilters:()=>{Object.assign(F,{type:'all',sub:'all',resp:'all',blk:'all',q:'',next:'all'});if(F.view!=='plans')F.floor='all';render();},
   quickroom:quickRoom,
@@ -1324,7 +1399,9 @@ document.addEventListener('click',e=>{
   if(d.typecopy){const t=typeById(d.typecopy);const n=prompt('Name of the new template:',t.name+' (copy)');if(!n)return;saveS(s=>s.types.push({id:uid('t'),name:n.trim(),acts:[...cleanSeq(t.acts)]}));return;}
   if(d.view){const tabClick=d.view==='rooms';F.view=tabClick?(ROOMV.includes(F.rv)?F.rv:'overview'):d.view;closeDrawer();render();if(!ROOMV.includes(F.view)||tabClick)window.scrollTo(0,0);return;}
   if(d.f){F[d.f]=d.v;render();return;}
-  if(d.closeblk){const b=S.blockers[d.closeblk];store.setBlocker({...b,status:'closed',closed:today(),closedBy:user()});return;}
+  if(d.closeblk){const b=S.blockers[d.closeblk];if(!b)return;const cl=x=>({...x,status:'closed',closed:today(),closedBy:user()});
+    if(d.all){const g=grpOf(b).filter(x=>x.status==='open');if(!confirm(`Resolve ${b.no} in all ${g.length} rooms?`))return;store.setBlockers(g.map(cl));return;}
+    store.setBlocker(cl(b));return;}
   if(d.editblk){blkModal(d.editblk);return;}
   if(d.newblk!==undefined){const [rid,aid]=d.newblk.split('|');blkModal(null,rid,aid);return;}
   if(d.set){const [rid,aid,k]=d.set.split('|');if(mxGroupSet(rid,aid,+k))return;setStatus(rid,aid,+k);return;}
@@ -1648,6 +1725,8 @@ function vPlans(){
   const ok=r=>{const f=F.floor;F.floor='all';const v=passes(r,false);F.floor=f;return v;};
   if(sheets.length>1||adm)h+=`<div class="chips noprint" style="align-items:center"><small style="color:var(--mute)">Sheets:</small>${sheets.map(x=>`<button class="chip ${x.id===pid?'on':''}" data-f="psheet" data-v="${x.id}">📄 ${esc(x.sheet||'Sheet')} <span class="n">${Object.keys(x.pins||{}).filter(id=>S.rooms[id]).length}</span></button>`).join('')}${adm?`<label class="chip">+ Add sheet(s)${fin(true)}</label>`:''}</div>`;
   h+=`<div class="filters noprint"><div class="seg"><button data-pzoom="${ZOOMS[Math.max(0,zi-1)]}" ${zi?'':'disabled'}>−</button><button data-pzoom="1" class="${z===1?'on0':''}">Fit</button><button data-pzoom="${ZOOMS[Math.min(ZOOMS.length-1,zi+1)]}" ${zi<ZOOMS.length-1?'':'disabled'}>+</button></div>
+    ${adm?`<button class="btn ${PLAN.addMode?'pri':'on'}" data-act="paddroom" title="Create a room that is missing: click where it is on the plan">${PLAN.addMode?'✓ Done adding rooms':'＋ New room'}</button>`:''}
+    <div class="seg" title="Size of the room tags"><button disabled style="cursor:default">Tags</button>${[['s','S'],['m','M'],['l','L']].map(([v,l])=>`<button data-f="psz" data-v="${v}" class="${(F.psz||'s')===v?'on0':''}">${l}</button>`).join('')}</div>
     <div class="seg" title="Room name on the labels"><button data-act="pname" class="${shownm?'on0':''}">🏷 Name: show</button><button data-act="pname" class="${shownm?'':'on0'}">hide</button></div>
     ${mv?`<button class="btn sm ${PLAN.edit?'pri':''}" data-act="pedit" title="Drag the labels to move them">✥ ${PLAN.edit?'Done moving':'Move labels'}</button>`:''}${adm?`<button class="btn sm ${PLAN.tmode?'pri':''}" data-act="ptype" title="Change the room type directly on the plan">🏷 ${PLAN.tmode?'Done with types':'Room types'}</button>`:''}<small style="color:var(--mute)">${Math.round(z*100)}% · ${here.length} rooms on this sheet${here.some(r=>r.floor!==fid)?` (incl. ${here.filter(r=>r.floor!==fid).length} double-height)`:''} · ${onF.length-unplaced.length}/${onF.length} of the floor on the plans · ${esc(m.name)}${here.some(r=>openBlk(r).length)?` · <span style="color:var(--blk);font-weight:700">🔴 ${here.filter(r=>openBlk(r).length).length} blocked</span>`:''}</small><span class="sp"></span>
     ${adm?`${m.pages>1?`<select data-ppage="${pid}" title="Page of the PDF">${Array.from({length:m.pages},(_,i)=>`<option value="${i+1}" ${(m.page||1)===i+1?'selected':''}>Page ${i+1}</option>`).join('')}</select>`:''}<details class="tools" data-dk="ptools"><summary>⚙ Sheet tools ▾</summary><div class="tmenu"><button class="btn sm" data-act="pimpmodal" title="Create the rooms written on the plans that are not yet in the tracker">🏷 Rooms from plans</button><button class="btn sm" data-act="pdetect">🔎 Detect rooms again</button><button class="btn sm" data-act="prename">✎ Rename this sheet</button><label class="btn sm">⬆ Replace the PDF${fin(false,pid)}</label><button class="btn sm red" data-act="pdel">✕ Remove this sheet</button></div></details>`:''}</div>`;
@@ -1659,6 +1738,7 @@ function vPlans(){
     h+=`<div class="card noprint pedit">${dr}<b>✥ Move labels:</b> drag a label to move it (saved for everyone) · ${PLAN.place?`<span class="tag" style="background:var(--hp);color:#fff">Click on the plan ${PLAN.place==='__new'?'where the new room is':'to place '+esc(S.rooms[PLAN.place]?.code||'')}</span> <button class="btn sm" data-pplace="">Cancel</button>`:'pick a room below, then click on the plan to place it'}${sel?` · selected <b>${esc(sel.code)}</b> ${adm?` <button class="btn sm" data-act="psplit" title="Cut this room into several rooms (e.g. a parking zone)">✂ Split</button>`:''} <button class="btn sm red" data-punpin="${sel.id}">Remove from this sheet</button>`:''}${adm&&!PLAN.place?` · <button class="btn sm pri" data-pplace="__new">+ New room</button> <small style="color:var(--mute)">then click on the plan</small>`:''}
       <div class="chips" style="margin:8px 0 0">${unplaced.length?unplaced.map(r=>`<button class="chip ${PLAN.place===r.id?'on':''}" data-pplace="${r.id}"><b>${esc(r.code)}</b> ${esc(r.name)}</button>`).join(''):'<span style="color:var(--done);font-size:13px">✓ All rooms of this floor are on the plans.</span>'}</div>${(()=>{const o=onF.filter(r=>!pins[r.id]&&onFloorPlans(r,fid)).sort(byCode);return o.length?`<div style="margin-top:8px;font-size:12px">Also show on this sheet (room drawn on both sheets): <select data-paddsheet><option value="">— room —</option>${o.map(r=>`<option value="${r.id}">${esc(r.code)} ${esc(r.name)}</option>`).join('')}</select></div>`:'';})()}</div>`;
   }
+  if(PLAN.addMode)h+=`<div class="card noprint pedit"><div class="row"><b>＋ New room:</b> click on the plan <b>where the missing room is</b>, then give its code, name and type. You can add several rooms one after the other.<span class="sp"></span><button class="btn sm pri" data-act="paddroom">✓ Done</button></div></div>`;
   if(PLAN.tmode){
     if(!typeById(PLAN.ttype))PLAN.ttype=(s.types[0]||{}).id||'';const tt=typeById(PLAN.ttype),cnt={};here.forEach(r=>cnt[r.type]=(cnt[r.type]||0)+1);
     h+=`<div class="card noprint pedit"><div class="row"><b>🏷 Room types:</b><select data-ptt>${s.types.map(t=>`<option value="${t.id}" ${t.id===PLAN.ttype?'selected':''}>${esc(t.name)}</option>`).join('')}</select>
@@ -1670,14 +1750,15 @@ function vPlans(){
   h+=`<div class="printonly"><h2>${esc(s.project)} — ${esc(floorById(fid)?.name||'')}${sheets.length>1?' — '+esc(m.sheet||''):''} — ${fmtLong(today())}</h2></div>`;
   if(!im){planImage(pid);return h+`<div class="planwrap" id="planwrap"><div class="empty" style="padding:30px;text-align:center">Loading the plan…</div></div>`;}
   if(im.err)return h+`<div class="card"><b>The plan could not be displayed:</b> ${esc(im.err)} <button class="btn sm" data-act="pretry">Retry</button></div>`;
-  h+=`<div class="planwrap" id="planwrap"><div class="planin ${PLAN.edit?'editing':''} ${PLAN.place||PLAN.draw||(PLAN.tmode&&PLAN.multi)?'placing':''}" id="planin" style="width:${z*100}%"><img src="${im.url}" alt="" draggable="false">`;
+  {const nd=here.filter(r=>!ok(r)).length;if(nd)h+=`<div class="pdraw noprint row"><span>🔍 <b>${nd}</b> room tag(s) are greyed out because they don't match the active filters${F.next!=='all'?' (next step)':''}.</span><button class="btn sm pri" data-act="clearfilters">Show all rooms normally</button></div>`;}
+  h+=`<div class="planwrap" id="planwrap"><div class="planin tg-${F.psz||'s'} ${PLAN.edit?'editing':''} ${PLAN.place||PLAN.addMode||PLAN.draw||(PLAN.tmode&&PLAN.multi)?'placing':''}" id="planin" style="width:${z*100}%"><img src="${im.url}" alt="" draggable="false">`;
   {const L=m.lines||{},pts=a=>{let o=[];for(let i=0;i+1<a.length;i+=2)o.push((a[i]*im.w).toFixed(1)+','+(a[i+1]*im.h).toFixed(1));return o.join(' ');};
    const sel=PLAN.edit&&!PLAN.draw,k=im.w/Math.max(300,((document.getElementById('planwrap')||{}).clientWidth||1200)*z);   // screen px → image px
    h+=`<svg class="plines ${sel?'selectable':''}" style="--k:${k.toFixed(3)}" viewBox="0 0 ${im.w} ${im.h}" preserveAspectRatio="none">${Object.entries(L).map(([id,l])=>`<polyline points="${pts(l.p||[])}" class="pl ${PLAN.lsel===id&&sel?'lsel':''}"/>${sel?`<polyline points="${pts(l.p||[])}" class="plhit" data-line="${id}"/>`:''}`).join('')}${PLAN.draw?`<polyline id="pcur" points="${pts(PLAN.cur)}" class="pl cur"/><line id="prub" class="pl rub" x1="0" y1="0" x2="0" y2="0" style="display:none"/>`:''}</svg>`;}
   here.forEach(r=>{const p=pins[r.id],n=nextStep(r),a=n&&actById(n),pr=progress(r),bl=openBlk(r);
     const c=PLAN.tmode?typeCol(r.type):F.colorBy==='progress'?heat(pr):(a?(a.isHp?'var(--hp)':a.color):'var(--done)');
     const oth=r.floor!==fid,tip=`${r.code} ${r.name} — ${typeById(r.type)?.name||'no type'}${oth?` — double height, room of ${floorById(r.floor)?.name||'another level'}`:''} — ${pc(pr)}% — ${a?(a.isHp?'Awaiting '+a.name:'Next: '+a.name):'Complete'}${bl.length?` — ⚠ ${bl.length} blocking point(s)`:''}`;
-    h+=`<button class="pin ${bl.length?'blk':''} ${ok(r)?'':'dim'} ${PLAN.sel===r.id&&PLAN.edit?'sel':''} ${PLAN.flash===r.id?'flash':''} ${PLAN.tmode&&PLAN.msel.has(r.id)?'msel':''}" data-pin="${r.id}" ${PLAN.edit||PLAN.tmode?'':isRO()?`data-room="${r.id}"`:`data-proom="${r.id}"`} style="left:${p.x*100}%;top:${p.y*100}%;--c:${c}" title="${esc(tip)}">${bl.length?`<i class="pbadge" title="${bl.length} open blocking point(s)">${bl.length}</i>`:''}<b>${oth?'⇕ ':''}${esc(r.code)}${F.colorBy==='progress'?` · ${pc(pr)}%`:''}</b>${shownm&&r.name?`<span class="pn">${esc(r.name)}</span>`:''}</button>`;});
+    h+=`<button class="pin ${bl.length?'blk':''} ${ok(r)?'':'dim'} ${PLAN.sel===r.id&&PLAN.edit?'sel':''} ${PLAN.flash===r.id?'flash':''} ${PLAN.tmode&&PLAN.msel.has(r.id)?'msel':''}" data-pin="${r.id}" ${PLAN.edit||PLAN.tmode||PLAN.addMode?'':isRO()?`data-room="${r.id}"`:`data-proom="${r.id}"`} style="left:${p.x*100}%;top:${p.y*100}%;--c:${c}" title="${esc(tip)}">${bl.length?`<i class="pbadge" title="${bl.length} open blocking point(s)">${bl.length}</i>`:''}<b>${oth?'⇕ ':''}${esc(r.code)}${F.colorBy==='progress'?` · ${pc(pr)}%`:''}</b>${shownm&&r.name?`<span class="pn">${esc(r.name)}</span>`:''}</button>`;});
   PLAN.shown=here.filter(ok).map(r=>r.id);
   h+=`</div></div>`;
   if(adm)h+=allSheetsCard();
@@ -1737,6 +1818,8 @@ function planClick(e){
     const pn=e.target.closest('.pin[data-pin]');if(pn){const id=pn.dataset.pin;if(PLAN.multi){PLAN.msel.has(id)?PLAN.msel.delete(id):PLAN.msel.add(id);render();}else assignType([id]);return true;}
     const lg=e.target.closest('[data-ptlegend]');if(lg){PLAN.ttype=lg.dataset.ptlegend;render();return true;}
   }
+  if(pi&&PLAN.addMode&&!PLAN.edit&&!e.target.closest('.pin')){const b=pi.getBoundingClientRect();
+    newRoomModal(PLAN.pid,clamp01((e.clientX-b.left)/b.width),clamp01((e.clientY-b.top)/b.height));return true;}
   if(pi&&PLAN.edit&&PLAN.place==='__new'&&!e.target.closest('.pin')){const b=pi.getBoundingClientRect();PLAN.place=null;
     newRoomModal(PLAN.pid,clamp01((e.clientX-b.left)/b.width),clamp01((e.clientY-b.top)/b.height));render();return true;}
   if(pi&&PLAN.edit&&PLAN.place&&!e.target.closest('.pin')){const b=pi.getBoundingClientRect(),rid=PLAN.place;PLAN.place=null;PLAN.sel=rid;
@@ -1782,6 +1865,7 @@ function newRoomModal(pid,x,y){
   modal(`<h2>+ New room on ${esc(floorById(fid)?.name||'')}</h2><div class="form"><div class="row"><label>Code<input id="pn_code" value="${esc(nextFreeCode(fid))}"></label><label style="flex:1">Name<input id="pn_name" placeholder="e.g. Parking zone A"></label></div><label>Room type<select id="pn_type">${typeOpts(S.settings.types[0]&&S.settings.types[0].id)}</select></label></div>
     <div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn" data-act="mclose">Cancel</button><button class="btn pri" data-act="pnewok">Create room here</button></div>`);
   setTimeout(()=>{const e=$('#pn_name');if(e)e.focus();},50);
+  $('#modal').querySelectorAll('input').forEach(i=>i.onkeydown=ev=>{if(ev.key==='Enter'){ev.preventDefault();newRoomOk();}});
 }
 async function newRoomOk(){
   const A=PLAN.newAt;if(!A)return;const code=$('#pn_code').value.trim(),name=$('#pn_name').value.trim(),type=$('#pn_type').value,t=typeById(type);
@@ -1850,7 +1934,7 @@ Object.assign(ACT,{
   pdraw:()=>{PLAN.draw=!PLAN.draw;PLAN.cur=[];PLAN.lsel=null;PLAN.place=null;render();},
   pdrawend:drawFinish,
   plinedel:()=>{if(!PLAN.lsel||!confirm('Delete this limit?'))return;store.patchPlan(PLAN.pid,{['lines.'+PLAN.lsel]:null});PLAN.lsel=null;},
-  ptype:()=>{PLAN.tmode=!PLAN.tmode;PLAN.edit=false;PLAN.place=null;PLAN.sel=null;PLAN.msel.clear();render();},
+  ptype:()=>{PLAN.addMode=false;PLAN.tmode=!PLAN.tmode;PLAN.edit=false;PLAN.place=null;PLAN.sel=null;PLAN.msel.clear();render();},
   ptone:()=>{PLAN.multi=false;PLAN.msel.clear();render();},
   ptmulti:()=>{PLAN.multi=true;render();},
   ptassign:()=>assignType([...PLAN.msel]),
@@ -1861,7 +1945,8 @@ Object.assign(ACT,{
   psplitok:splitOk,
   mclose:()=>{PLAN.imp=null;closeModal();},
   pname:()=>{F.pname=F.pname===false;render();},
-  pedit:()=>{PLAN.edit=!PLAN.edit;PLAN.tmode=false;PLAN.draw=false;PLAN.cur=[];PLAN.lsel=null;PLAN.place=null;PLAN.sel=null;render();},
+  paddroom:()=>{PLAN.addMode=!PLAN.addMode;PLAN.edit=false;PLAN.tmode=false;PLAN.draw=false;PLAN.place=null;render();},
+  pedit:()=>{PLAN.edit=!PLAN.edit;PLAN.addMode=false;PLAN.tmode=false;PLAN.draw=false;PLAN.cur=[];PLAN.lsel=null;PLAN.place=null;PLAN.sel=null;render();},
   pimpmodal:()=>importModal(PLAN.fid),
   pimport:doImport,
   pdetect:()=>{const m=S.plans[PLAN.pid];if(!m)return;const man=Object.values(m.pins||{}).some(p=>p.m);
