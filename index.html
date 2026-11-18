@@ -240,6 +240,16 @@ details.tools .tmenu .btn{text-align:left}
 .qrlist button{display:flex;gap:10px;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);background:#fff;padding:9px 12px;font:inherit;cursor:pointer;color:var(--ink)}
 .bmh{font-size:12px;color:var(--mute);font-weight:600}.bmh small{font-weight:400}
 .form label.bmrow{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--line);font-size:13px;color:var(--ink);font-weight:400;cursor:pointer}.bmrow:hover{background:#f6f8fb}
+.ptag{display:inline-block;color:#fff;font-size:11px;font-weight:700;border-radius:6px;padding:1px 7px;white-space:nowrap}
+.form label.phadd{display:flex;width:84px;flex:none;color:var(--acc);font-size:22px}.form label.chk{display:flex;font-weight:400;color:var(--ink)}
+.bico{color:var(--mute);white-space:nowrap;margin-left:4px}
+.phs{display:flex;flex-wrap:wrap;gap:8px}
+.ph{position:relative;width:84px;height:84px;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:#f3f4f7}.ph img{width:100%;height:100%;object-fit:cover;cursor:zoom-in;display:block}
+.phx{position:absolute;top:3px;right:3px;border:0;border-radius:50%;width:22px;height:22px;background:rgba(0,0,0,.6);color:#fff;cursor:pointer;font-size:11px}
+.phadd{width:84px;height:84px;border:2px dashed #c9d3e0;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;font-size:22px;color:var(--acc)}.phadd span{font-size:11px;font-weight:700}.phadd:hover{background:var(--acc2)}
+.cmts{max-height:200px;overflow:auto;display:grid;gap:6px}
+.cmt{background:#f6f8fb;border-radius:8px;padding:6px 10px;font-size:13px}.cmt small{color:var(--mute)}.cmt.sys{background:none;padding:2px 10px;color:var(--mute);font-size:12px}.cmt.sys div{display:inline;margin-left:6px}
+#lightbox{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.85);display:none;flex-direction:column;align-items:center;justify-content:center;gap:8px;cursor:zoom-out}#lightbox.open{display:flex}#lightbox img{max-width:95vw;max-height:88vh;border-radius:6px}#lightbox span{color:#ccc;font-size:12px}
 .qrlist button:hover{background:var(--acc2)}.qrlist button[hidden]{display:none}
 .setup{display:grid;grid-template-columns:220px 1fr;gap:18px;align-items:start}
 .smenu{position:sticky;top:120px;background:#fff;border:1px solid var(--line);border-radius:var(--rad);padding:6px;display:flex;flex-direction:column;gap:2px}
@@ -509,6 +519,9 @@ const store={
   setBlocker(b){if(roBlock())return;if(USE_FB)return fb.setDoc(dref('blockers',b.id),b).catch(fail);S.blockers[b.id]=b;persist();},
   setBlockers(list){if(roBlock())return;if(USE_FB)return runOps(list.map(b=>['set','blockers',b.id,b])).catch(fail);list.forEach(b=>S.blockers[b.id]=b);persist();},
   delBlockers(ids){if(roBlock())return;if(USE_FB)return runOps(ids.map(id=>['del','blockers',id])).catch(fail);ids.forEach(id=>delete S.blockers[id]);persist();},
+  savePhotos(list){if(roBlock())return;if(USE_FB)return Promise.all(list.map(p=>fb.setDoc(dref('blkphotos',p.id),p))).catch(fail);S.bphotos=S.bphotos||{};list.forEach(p=>S.bphotos[p.id]=p);persist();},
+  async getPhoto(id){if(USE_FB){const d=await fb.getDoc(dref('blkphotos',id));return d.exists()?d.data().d:'';}return ((S.bphotos||{})[id]||{}).d||'';},
+  delPhotos(ids){if(roBlock())return;if(USE_FB)return runOps(ids.map(id=>['del','blkphotos',id])).catch(e=>console.error(e));ids.forEach(id=>delete (S.bphotos||{})[id]);persist();},
   delBlocker(id){if(roBlock())return;if(USE_FB)return fb.deleteDoc(dref('blockers',id)).catch(fail);delete S.blockers[id];persist();},
   addLog(e){if(USE_FB)return fb.addDoc(fb.collection(db,P+'log'),e).catch(()=>{});S.log.unshift(e);S.log=S.log.slice(0,1500);},
   savePin(name,hash){if(USE_FB)return fb.setDoc(dref('auth','pins'),{[name]:hash},{merge:true});S.pins[name]=hash;persist();return Promise.resolve();},
@@ -940,11 +953,20 @@ document.addEventListener('click',e=>{
 const closePop=()=>{const p=$('#pop');if(p)p.classList.remove('open');POP=null;};
 addEventListener('scroll',e=>{const p=$('#pop');if(p&&e.target instanceof Node&&p.contains(e.target))return;closePop();},true);
 
+/* Blocking point follow-up: priority, stage (status 'open' + stage 'wip' = In progress), dated notes, photos */
+const PRIO=[['high','High','#d64040'],['med','Medium','#e69100'],['low','Low','#8a93a3']];
+const prioOf=b=>b.prio||'med',prioRank=b=>({high:0,med:1,low:2})[prioOf(b)];
+const prioTag=b=>{const p=PRIO.find(x=>x[0]===prioOf(b));return `<span class="ptag" style="background:${p[2]}">${p[1]}</span>`;};
+const stLbl=b=>b.status==='closed'?'Resolved':b.stage==='wip'?'In progress':'Open';
+const stTag=b=>b.status==='closed'?`<span class="tag green">Resolved ${fmtD(b.closed)}</span>`:b.stage==='wip'?'<span class="tag" style="background:#fff4dc;color:#b57800">In progress</span>':'<span class="tag red">Open</span>';
+const blkIcons=b=>{const n=(b.cmts||[]).filter(c=>!c.sys).length,p=(b.photos||[]).length;return (n?` <small class="bico" title="${n} follow-up note(s)">💬${n}</small>`:'')+(p?` <small class="bico" title="${p} photo(s)">📷${p}</small>`:'');};
+const cmtE=(txt,sys)=>({ts:Date.now(),by:user(),txt,...(sys?{sys:1}:{})});
 function blkRows(){
   const t=today();
   return Object.values(S.blockers).filter(b=>{
     const r=S.rooms[b.roomId];
-    if(F.bStatus!=='all'&&b.status!==F.bStatus)return false;
+    if(F.bStatus==='wip'){if(!(b.status==='open'&&b.stage==='wip'))return false;}else if(F.bStatus==='todo'){if(!(b.status==='open'&&b.stage!=='wip'))return false;}else if(F.bStatus!=='all'&&b.status!==F.bStatus)return false;
+    if(F.bPrio&&F.bPrio!=='all'&&prioOf(b)!==F.bPrio)return false;
     if(F.bFloor!=='all'&&(!r||r.floor!==F.bFloor))return false;
     if(F.bCat!=='all'&&b.cat!==F.bCat)return false;
     if(F.bOwner!=='all'&&(b.owner||'')!==F.bOwner)return false;
@@ -963,28 +985,37 @@ function vBlockers(){
   const rows=blkRows();
   let h=`<div class="kpis"><div class="kpi"><b style="color:var(--blk)">${new Set(open.map(b=>b.grp||b.id)).size}</b><span>Open blocking points</span></div><div class="kpi"><b>${roomsB}</b><span>Rooms blocked</span></div><div class="kpi"><b class="${over.length?'overdue':''}">${over.length}</b><span>Overdue (target date passed)</span></div><div class="kpi"><b>${age} d</b><span>Average age of open points</span></div><div class="kpi"><b style="color:var(--done)">${cl7}</b><span>Resolved last 7 days</span></div></div>`;
   h+=`<div class="filters noprint"><button class="btn pri" data-newblk="|">+ New blocking point</button>
-    <select data-fs="bStatus">${opt('open','Open',F.bStatus)}${opt('closed','Resolved',F.bStatus)}${opt('all','All',F.bStatus)}</select>
+    <select data-fs="bStatus">${opt('open','Open + in progress',F.bStatus)}${opt('todo','Open, not started',F.bStatus)}${opt('wip','In progress',F.bStatus)}${opt('closed','Resolved',F.bStatus)}${opt('all','All',F.bStatus)}</select>
+    <select data-fs="bPrio">${opt('all','All priorities',F.bPrio||'all')}${PRIO.map(([v,l])=>opt(v,l+' priority',F.bPrio||'all')).join('')}</select>
     <select data-fs="bFloor">${opt('all','All floors',F.bFloor)}${s.floors.map(f=>opt(f.id,f.name,F.bFloor)).join('')}</select>
     <select data-fs="bCat">${opt('all','All categories',F.bCat)}${[...s.cats].sort(ABC).map(c=>opt(c,c,F.bCat)).join('')}</select>
     <select data-fs="bOwner">${opt('all','All responsibles',F.bOwner)}${owners.map(o=>opt(o,o,F.bOwner)).join('')}</select>
     <select data-fs="bGroup">${opt('none','No grouping',F.bGroup)}${opt('room','Group by room',F.bGroup)}${opt('cat','Group by category',F.bGroup)}${opt('owner','Group by responsible',F.bGroup)}${opt('act','Group by activity',F.bGroup)}</select>
     <input id="bq" data-fs="bq" placeholder="🔍 Search…" value="${esc(F.bq)}" style="width:150px">
     <span class="sp"></span><button class="btn" data-act="print">🖨 Print report</button><button class="btn" data-act="xlsblk">⬇ Excel</button></div>`;
-  const fl=[F.bStatus!=='all'?(F.bStatus==='open'?'Open':'Resolved'):'All statuses',F.bFloor!=='all'?floorById(F.bFloor)?.name:'All floors',F.bCat!=='all'?F.bCat:'',F.bOwner!=='all'?F.bOwner:''].filter(Boolean).join(' · ');
+  h+=ownerSummary(open);
+  const fl=[{open:'Open + in progress',todo:'Open, not started',wip:'In progress',closed:'Resolved',all:'All statuses'}[F.bStatus]||'',F.bPrio&&F.bPrio!=='all'?prioTag({prio:F.bPrio}).replace(/<[^>]+>/g,'')+' priority':'',F.bFloor!=='all'?floorById(F.bFloor)?.name:'All floors',F.bCat!=='all'?F.bCat:'',F.bOwner!=='all'?F.bOwner:''].filter(Boolean).join(' · ');
   h+=`<div class="printonly"><h2 style="margin:0">${esc(s.project)} — Blocking points report</h2><p>${fmtLong(t)} · ${esc(fl)} · ${rows.length} item(s) · issued by ${esc(user())}</p></div>`;
   if(!rows.length)return h+`<div class="card">No blocking point for these filters 👍</div>`;
   const gk={room:b=>{const r=S.rooms[b.roomId];return r?`${floorById(r.floor)?.name||''} · ${r.code} ${r.name}`:'(deleted room)';},cat:b=>b.cat||'—',owner:b=>b.owner||'(no responsible)',act:b=>b.actId?(actById(b.actId)?.name||'—'):'General / whole room'}[F.bGroup];
   const groups={};rows.forEach(b=>{const k=gk?gk(b):'';(groups[k]=groups[k]||[]).push(b);});
   const keys=gk?Object.keys(groups).sort(ABC):[''];
-  h+=`<div class="tbwrap"><table class="tb"><thead><tr><th>No</th><th>Floor</th><th>Room</th><th>Activity</th><th>Description</th><th>Category</th><th>Responsible</th><th>Raised</th><th>Target</th><th>Age</th><th>Status</th><th class="noprint"></th></tr></thead><tbody>`;
+  h+=`<div class="tbwrap"><table class="tb"><thead><tr><th>No</th><th>Priority</th><th>Floor</th><th>Room</th><th>Activity</th><th>Description</th><th>Category</th><th>Responsible</th><th>Raised</th><th>Target</th><th>Age</th><th>Status</th><th class="noprint"></th></tr></thead><tbody>`;
   keys.forEach(k=>{
-    if(gk)h+=`<tr class="grp"><td colspan="12">${esc(k)} (${groups[k].length})</td></tr>`;
+    if(gk)h+=`<tr class="grp"><td colspan="13">${esc(k)} (${groups[k].length})</td></tr>`;
     groups[k].forEach(b=>{
       const r=S.rooms[b.roomId],a=b.actId&&actById(b.actId),od=b.status==='open'&&b.due&&b.due<t;
-      h+=`<tr class="click" data-editblk="${b.id}"><td><b>${esc(b.no)}</b>${b.grp?` <span class="tag" title="Same blocking point on ${grpOf(b).length} rooms">×${grpOf(b).length}</span>`:''}</td><td>${esc(r?floorById(r.floor)?.name:'')}</td><td><b>${esc(r?r.code:'?')}</b> ${esc(r?r.name:'')}</td><td>${a?`<span class="dot" style="background:${a.color}"></span> ${esc(a.name)}`:'General'}</td><td>${esc(b.title)}</td><td>${esc(b.cat)}</td><td>${esc(b.owner)}</td><td>${fmtD(b.raised)}</td><td class="${od?'overdue':''}">${fmtD(b.due)}${od?' ⏰':''}</td><td>${b.status==='open'?days(b.raised||t,t)+' d':''}</td><td>${b.status==='open'?'<span class="tag red">Open</span>':`<span class="tag green">Resolved ${fmtD(b.closed)}</span>`}</td><td class="noprint">${b.status==='open'?`<button class="btn sm" data-closeblk="${b.id}">✓ Resolve</button>`:''}</td></tr>`;
+      h+=`<tr class="click" data-editblk="${b.id}"><td><b>${esc(b.no)}</b>${b.grp?` <span class="tag" title="Same blocking point on ${grpOf(b).length} rooms">×${grpOf(b).length}</span>`:''}</td><td>${prioTag(b)}</td><td>${esc(r?floorById(r.floor)?.name:'')}</td><td><b>${esc(r?r.code:'?')}</b> ${esc(r?r.name:'')}</td><td>${a?`<span class="dot" style="background:${a.color}"></span> ${esc(a.name)}`:'General'}</td><td>${esc(b.title)}${blkIcons(b)}</td><td>${esc(b.cat)}</td><td>${esc(b.owner)}</td><td>${fmtD(b.raised)}</td><td class="${od?'overdue':''}">${fmtD(b.due)}${od?' ⏰':''}</td><td>${b.status==='open'?days(b.raised||t,t)+' d':''}</td><td>${stTag(b)}</td><td class="noprint">${b.status==='open'?`<button class="btn sm" data-closeblk="${b.id}">✓ Resolve</button>`:''}</td></tr>`;
     });
   });
   return h+'</tbody></table></div>';
+}
+/* who has to act: open blocking points per responsible (a multi-room point counts once) */
+function ownerSummary(open){
+  if(!open.length)return '';const t=today(),G={};open.forEach(b=>{const k=b.grp||b.id;if(!G[k])G[k]=b;});const O={};
+  Object.values(G).forEach(b=>{const k=b.owner||'';const o=O[k]=O[k]||{n:0,wip:0,over:0,high:0,old:0};o.n++;if(b.stage==='wip')o.wip++;if(b.due&&b.due<t)o.over++;if(prioOf(b)==='high')o.high++;o.old=Math.max(o.old,days(b.raised||t,t));});
+  const rows=Object.entries(O).sort((a,b)=>b[1].over-a[1].over||b[1].high-a[1].high||b[1].n-a[1].n);
+  return `<div class="card"><h2>👷 Who has to act — open blocking points by responsible</h2><div class="tbwrap"><table class="tb"><thead><tr><th>Responsible</th><th style="text-align:center">Open</th><th style="text-align:center">In progress</th><th style="text-align:center">High priority</th><th style="text-align:center">Overdue</th><th style="text-align:center">Oldest</th></tr></thead><tbody>${rows.map(([k,o])=>`<tr class="click noprint-click" data-f="bOwner" data-v="${esc(k||'all')}" title="Show only ${esc(k||'all')}"><td><b>${esc(k||'(no responsible)')}</b></td><td style="text-align:center"><b>${o.n}</b></td><td style="text-align:center">${o.wip||''}</td><td style="text-align:center;${o.high?'color:var(--blk);font-weight:700':''}">${o.high||''}</td><td style="text-align:center" class="${o.over?'overdue':''}">${o.over?o.over+' ⏰':''}</td><td style="text-align:center">${o.old} d</td></tr>`).join('')}</tbody></table></div></div>`;
 }
 
 const ROOMV=['overview','matrix','plans'];
@@ -1021,11 +1052,11 @@ function vCockpit(){
   h+=`</div></div>`;
   // ALL open blocking points
   const G={};open.forEach(b=>(G[b.grp||b.id]=G[b.grp||b.id]||[]).push(b));const nB=Object.keys(G).length,nOver=Object.values(G).filter(g=>g[0].due&&g[0].due<t).length;
-  const rows=Object.values(G).map(g=>g[0]).sort((a,b)=>{const oa=a.due&&a.due<t,ob=b.due&&b.due<t;if(oa!==ob)return oa?-1:1;if(oa)return a.due.localeCompare(b.due);return (a.raised||t).localeCompare(b.raised||t);});
+  const rows=Object.values(G).map(g=>g[0]).sort((a,b)=>{const oa=a.due&&a.due<t,ob=b.due&&b.due<t;if(oa!==ob)return oa?-1:1;return prioRank(a)-prioRank(b)||(oa?a.due.localeCompare(b.due):(a.raised||t).localeCompare(b.raised||t));});
   h+=`<div class="card"><div class="row" style="margin-bottom:10px"><h2 style="margin:0">⚠ Open blocking points (${nB})</h2>${nOver?`<span class="tag red">${nOver} overdue</span>`:''}<span class="sp"></span>${isRO()?'':'<button class="btn pri noprint" data-newblk="|">+ New blocking point</button>'}<button class="btn noprint" data-view="blockers">Full list & filters →</button></div>`;
-  h+=rows.length?`<div class="tbwrap"><table class="tb"><thead><tr><th>No</th><th>Room</th><th>Activity</th><th>Description</th><th>Category</th><th>Responsible</th><th>Target</th><th>Age</th><th class="noprint"></th></tr></thead><tbody>${rows.map(b=>{const r=S.rooms[b.roomId],a=b.actId&&actById(b.actId),od=b.due&&b.due<t,g=G[b.grp||b.id],gr=g.map(x=>S.rooms[x.roomId]).filter(Boolean);
+  h+=rows.length?`<div class="tbwrap"><table class="tb"><thead><tr><th>No</th><th>Priority</th><th>Room</th><th>Activity</th><th>Description</th><th>Category</th><th>Responsible</th><th>Target</th><th>Age</th><th class="noprint"></th></tr></thead><tbody>${rows.map(b=>{const r=S.rooms[b.roomId],a=b.actId&&actById(b.actId),od=b.due&&b.due<t,g=G[b.grp||b.id],gr=g.map(x=>S.rooms[x.roomId]).filter(Boolean);
     const fl=[...new Set(gr.map(x=>floorById(x.floor)?.name||''))].join(', ');
-    return `<tr class="click" data-editblk="${b.id}"><td><b>${esc(b.no)}</b></td><td>${g.length>1?`<b>${g.length} rooms</b><br><small style="color:var(--mute)">${esc(fl)} · ${esc(gr.map(x=>x.code).sort(ABC).slice(0,6).join(', '))}${g.length>6?'…':''}</small>`:`<b>${esc(r?r.code:'?')}</b> ${esc(r?r.name:'')}<br><small style="color:var(--mute)">${esc(r?floorById(r.floor)?.name||'':'')}</small>`}</td><td>${a?`<span class="dot" style="background:${a.color}"></span> ${esc(a.name)}`:'General'}</td><td>${esc(b.title)}</td><td>${esc(b.cat)}</td><td>${esc(b.owner||'—')}</td><td class="${od?'overdue':''}">${fmtD(b.due)||'—'}${od?' ⏰':''}</td><td>${days(b.raised||t,t)} d</td><td class="noprint">${isRO()?'':`<button class="btn sm" data-closeblk="${b.id}" ${g.length>1?'data-all="1"':''}>✓ Resolve${g.length>1?' all':''}</button>`}</td></tr>`;}).join('')}</tbody></table></div>`:'<div class="empty">No open blocking point 👍</div>';
+    return `<tr class="click" data-editblk="${b.id}"><td><b>${esc(b.no)}</b></td><td>${prioTag(b)}${b.stage==='wip'?'<br><small style="color:#b57800;font-weight:700">In progress</small>':''}</td><td>${g.length>1?`<b>${g.length} rooms</b><br><small style="color:var(--mute)">${esc(fl)} · ${esc(gr.map(x=>x.code).sort(ABC).slice(0,6).join(', '))}${g.length>6?'…':''}</small>`:`<b>${esc(r?r.code:'?')}</b> ${esc(r?r.name:'')}<br><small style="color:var(--mute)">${esc(r?floorById(r.floor)?.name||'':'')}</small>`}</td><td>${a?`<span class="dot" style="background:${a.color}"></span> ${esc(a.name)}`:'General'}</td><td>${esc(b.title)}${blkIcons(b)}</td><td>${esc(b.cat)}</td><td>${esc(b.owner||'—')}</td><td class="${od?'overdue':''}">${fmtD(b.due)||'—'}${od?' ⏰':''}</td><td>${days(b.raised||t,t)} d</td><td class="noprint">${isRO()?'':`<button class="btn sm" data-closeblk="${b.id}" ${g.length>1?'data-all="1"':''}>✓ Resolve${g.length>1?' all':''}</button>`}</td></tr>`;}).join('')}</tbody></table></div>`:'<div class="empty">No open blocking point 👍</div>';
   h+=`</div>`;
   // trend + latest updates
   const live={...makeSnapshot('9999-12-31'),id:'live',date:t};
@@ -1224,7 +1255,7 @@ function renderDrawer(){
   });
   const allb=Object.values(S.blockers).filter(b=>b.roomId===r.id).sort((a,b)=>(a.status==='open'?0:1)-(b.status==='open'?0:1));
   h+=`<h3>Blocking points</h3>`;
-  h+=allb.length?allb.map(b=>{const a=b.actId&&actById(b.actId);return `<div class="bcard ${b.status}"><div class="row"><b>${esc(b.no)}</b><span class="tag">${esc(b.cat)}</span>${a?`<span class="tag">${esc(a.name)}</span>`:''}<span class="sp"></span>${b.status==='open'?`<button class="btn sm" data-closeblk="${b.id}">✓ Resolve</button>`:`<span class="tag green">Resolved ${fmtD(b.closed)}</span>`}<button class="btn sm" data-editblk="${b.id}">Edit</button></div><div style="margin:4px 0">${esc(b.title)}</div><small>Responsible: ${esc(b.owner||'—')} · raised ${fmtD(b.raised)}${b.due?' · target '+fmtD(b.due):''}</small></div>`;}).join(''):'<div class="empty">None 👍</div>';
+  h+=allb.length?allb.map(b=>{const a=b.actId&&actById(b.actId);return `<div class="bcard ${b.status}"><div class="row"><b>${esc(b.no)}</b>${b.status==='open'?prioTag(b)+stTag(b):''}<span class="tag">${esc(b.cat)}</span>${a?`<span class="tag">${esc(a.name)}</span>`:''}<span class="sp"></span>${b.status==='open'?`<button class="btn sm" data-closeblk="${b.id}">✓ Resolve</button>`:`<span class="tag green">Resolved ${fmtD(b.closed)}</span>`}<button class="btn sm" data-editblk="${b.id}">Edit</button></div><div style="margin:4px 0">${esc(b.title)}${blkIcons(b)}</div><small>Responsible: ${esc(b.owner||'—')} · raised ${fmtD(b.raised)}${b.due?' · target '+fmtD(b.due):''}</small></div>`;}).join(''):'<div class="empty">None 👍</div>';
   h+=`<button class="btn" data-newblk="${r.id}|">+ Raise blocking point</button>`;
   h+=`<h3>Notes</h3><textarea data-hold data-rnote="${r.id}" ${isRO()?'readonly':''} rows="3" style="width:100%" placeholder="Site remarks, access, materials…">${esc(r.note||'')}</textarea>`;
   h+=`<details data-dk="room_cust" class="rwonly" style="margin-top:14px"><summary><b>Customize sequence</b> <small style="color:var(--mute)">(${cleanSeq(r.acts).length} activities)</small></summary><div class="row" style="margin:8px 0">Reset from template: <select id="tplsel">${s.types.map(x=>`<option value="${x.id}" ${x.id===r.type?'selected':''}>${esc(x.name)}</option>`).join('')}</select><button class="btn sm" data-act="applytpl">Apply</button></div>${seqEditor('room',r.id,r.acts)}</details>`;
@@ -1244,7 +1275,7 @@ function blkModal(bid,roomId,actId){
   const s=S.settings;
   const b=bid?{...S.blockers[bid]}:{id:uid('b'),no:nextBlkNo(),roomId:roomId||'',actId:actId||'',title:'',cat:s.cats[0],owner:'',raised:today(),due:'',status:'open',closed:'',by:user()};
   const grp=bid?grpOf(b):[];
-  BM={b,bid,multi:false,floors:new Set(),types:new Set(),act:actId||'',sel:new Set(),touched:false};
+  BM={b,bid,multi:false,floors:new Set(),types:new Set(),act:actId||'',sel:new Set(),touched:false,photos:[...(b.photos||[])],newPh:{},cmts:[...(b.cmts||[])]};
   const owners=[...new Set(Object.values(S.blockers).map(x=>x.owner).filter(Boolean))];
   const ro=s.floors.map(f=>`<optgroup label="${esc(f.name)}">${roomsList().filter(r=>r.floor===f.id).map(r=>`<option value="${r.id}" ${r.id===b.roomId?'selected':''}>${esc(r.code+' – '+r.name)}</option>`).join('')}</optgroup>`).join('');
   modal(`<h2>${bid?'Edit':'New'} blocking point ${esc(b.no)}</h2><div class="form">
@@ -1255,31 +1286,72 @@ function blkModal(bid,roomId,actId){
     <div id="bm_multi" hidden></div>
     <label>Description of the blocking point<textarea id="m_title" rows="3">${esc(b.title)}</textarea></label>
     <div class="row"><label>Category<select id="m_cat">${[...s.cats].sort(ABC).map(c=>`<option ${c===b.cat?'selected':''}>${esc(c)}</option>`).join('')}</select></label><label>Responsible<input id="m_owner" list="m_owners" value="${esc(b.owner)}" placeholder="Who must solve it"><datalist id="m_owners">${[...new Set([...owners,...(s.subs||[]).map(x=>x.name),...people().map(p=>p.name)])].sort(ABC).map(o=>`<option value="${esc(o)}">`).join('')}</datalist></label></div>
-    <div class="row"><label>Raised on<input type="date" id="m_raised" value="${b.raised||''}"></label><label>Target date<input type="date" id="m_due" value="${b.due||''}"></label><label>Status<select id="m_status"><option value="open" ${b.status==='open'?'selected':''}>Open</option><option value="closed" ${b.status==='closed'?'selected':''}>Resolved</option></select></label></div>
+    <div class="row"><label>Raised on<input type="date" id="m_raised" value="${b.raised||''}"></label><label>Target date<input type="date" id="m_due" value="${b.due||''}"></label><label>Status<select id="m_status"><option value="open" ${b.status==='open'&&b.stage!=='wip'?'selected':''}>Open</option><option value="wip" ${b.status==='open'&&b.stage==='wip'?'selected':''}>In progress</option><option value="closed" ${b.status==='closed'?'selected':''}>Resolved</option></select></label><label>Priority<select id="m_prio">${PRIO.map(([v,l])=>`<option value="${v}" ${prioOf(b)===v?'selected':''}>${l}</option>`).join('')}</select></label></div>
+    <div class="bmh">📷 Photos</div><div class="phs" id="m_ph"></div>
+    <div class="bmh">💬 Follow-up <small>(calls, reminders, answers… dated and signed)</small></div>
+    <div class="row" style="flex-wrap:nowrap"><textarea id="m_cmt" rows="2" style="flex:1" placeholder="Add a note…"></textarea>${bid?'<button type="button" class="btn" id="m_cmtadd">Add note</button>':''}</div>
+    <div class="cmts" id="m_cmts"></div>
     <div class="row"><button class="btn pri" id="m_save">Save</button><button class="btn" id="m_cancel">Cancel</button>${bid?'<span class="sp"></span><button class="btn red" id="m_del">Delete</button>':''}</div></div>`);
   const fillActs=()=>{const r=S.rooms[$('#m_room').value];$('#m_act').innerHTML=`<option value="">General / whole room</option>`+(r?roomActs(r):[]).map(id=>`<option value="${id}" ${id===b.actId?'selected':''}>${esc(actById(id).name)}</option>`).join('');};
   fillActs();$('#m_room').onchange=fillActs;$('#m_cancel').onclick=closeModal;
+  phRender();cmtRender();
+  if($('#m_cmtadd'))$('#m_cmtadd').onclick=()=>{const v=$('#m_cmt').value.trim();if(!v||roBlock())return;const e=cmtE(v);BM.cmts.push(e);$('#m_cmt').value='';cmtRender();
+    // a note is saved at once, on every room of the blocking point
+    store.setBlockers(grpOf(S.blockers[bid]||b).map(x=>({...S.blockers[x.id],cmts:[...((S.blockers[x.id]||{}).cmts||[]),e]})));};
   $('#modal').querySelectorAll('[data-bm]').forEach(x=>x.onclick=()=>{BM.multi=x.dataset.bm==='multi';$('#modal').querySelectorAll('[data-bm]').forEach(y=>y.classList.toggle('on',y===x));
     $('#bm_one').hidden=BM.multi;$('#bm_multi').hidden=!BM.multi;if(BM.multi){if(!BM.touched&&$('#m_room').value){const r=S.rooms[$('#m_room').value];if(r){BM.floors.add(r.floor);BM.sel.add(r.id);}}bmRender();}});
   $('#m_save').onclick=()=>{
-    const title=$('#m_title').value.trim(),stt=$('#m_status').value;
+    const title=$('#m_title').value.trim(),sv=$('#m_status').value,stt=sv==='closed'?'closed':'open';
     if(!title)return alert('Please describe the blocking point.');
-    const f={title,cat:$('#m_cat').value,owner:$('#m_owner').value.trim(),raised:$('#m_raised').value||today(),due:$('#m_due').value||'',status:stt};
+    const f={title,cat:$('#m_cat').value,owner:$('#m_owner').value.trim(),raised:$('#m_raised').value||today(),due:$('#m_due').value||'',status:stt,stage:sv==='wip'?'wip':'',prio:$('#m_prio').value,photos:[...BM.photos]};
+    // history: what changed, plus the note being typed
+    const ev=[];const o=bid?S.blockers[bid]:null,nb={...b,...f};
+    if(!o)ev.push(cmtE('Raised',1));else{if(stLbl(o)!==stLbl(nb))ev.push(cmtE('Status → '+stLbl(nb),1));if(prioOf(o)!==prioOf(nb))ev.push(cmtE('Priority → '+PRIO.find(x=>x[0]===prioOf(nb))[1],1));
+      if((o.owner||'')!==f.owner)ev.push(cmtE('Responsible → '+(f.owner||'none'),1));if((o.due||'')!==f.due)ev.push(cmtE('Target date → '+(f.due?fmtD(f.due):'none'),1));
+      const ad=f.photos.filter(x=>!(o.photos||[]).includes(x)).length,rm=(o.photos||[]).filter(x=>!f.photos.includes(x)).length;if(ad)ev.push(cmtE(ad+' photo(s) added',1));if(rm)ev.push(cmtE(rm+' photo(s) removed',1));}
+    const typed=$('#m_cmt').value.trim();if(typed)ev.push(cmtE(typed));
+    const withH=x=>({...x,cmts:[...((S.blockers[x.id]||x).cmts||[]),...ev]});
+    const np=Object.entries(BM.newPh).filter(([id])=>BM.photos.includes(id)).map(([id,d])=>({id,d,ts:Date.now(),by:user()}));if(np.length)store.savePhotos(np);
+    const gone=o?(o.photos||[]).filter(x=>!BM.photos.includes(x)):[];
     const cl=x=>stt==='closed'?(x.closed||today()):'';
     if(BM.multi){
       const ids=bmRooms().filter(r=>BM.sel.has(r.id)).map(r=>r.id);if(!ids.length)return alert('Please select at least one room.');
       const grpId=ids.length>1?uid('g'):'';
-      store.setBlockers(ids.map((rid,k)=>({...b,id:k?uid('b'):b.id,grp:grpId,roomId:rid,actId:BM.act,...f,closed:cl(b)})));closeModal();return;
+      store.setBlockers(ids.map((rid,k)=>withH({...b,id:k?uid('b'):b.id,grp:grpId,roomId:rid,actId:BM.act,...f,closed:cl(b),cmts:[]})));closeModal();return;
     }
     const rid=$('#m_room').value;if(!rid)return alert('Please select a room.');
-    const main={...b,roomId:rid,actId:$('#m_act').value,...f,closed:cl(b)};
-    if(bid&&grp.length>1&&$('#m_grp')&&$('#m_grp').checked)store.setBlockers(grp.map(x=>x.id===b.id?main:{...x,...f,no:b.no,closed:cl(x)}));
+    const main=withH({...b,roomId:rid,actId:$('#m_act').value,...f,closed:cl(b)});
+    const all=bid&&grp.length>1&&$('#m_grp')&&$('#m_grp').checked;
+    if(all)store.setBlockers(grp.map(x=>x.id===b.id?main:withH({...S.blockers[x.id],...f,no:b.no,closed:cl(x)})));
     else store.setBlocker(main);
+    // a photo no longer used by any blocking point is deleted
+    const used=new Set();Object.values(S.blockers).forEach(x=>{if(x.id!==b.id&&!(all&&grp.some(g=>g.id===x.id)))(x.photos||[]).forEach(p=>used.add(p));});
+    const del=gone.filter(p=>!used.has(p));if(del.length)store.delPhotos(del);
     closeModal();
   };
   if(bid)$('#m_del').onclick=()=>{const all=grp.length>1&&confirm(`This blocking point covers ${grp.length} rooms.\n\nOK = delete it for ALL ${grp.length} rooms\nCancel = choose for this room only`);
     if(all){store.delBlockers(grp.map(x=>x.id));closeModal();return;}
     if(confirm(`Delete this blocking point${grp.length>1?' for room '+(S.rooms[b.roomId]?.code||''):''} permanently?`)){store.delBlocker(bid);closeModal();}};
+}
+/* photos of a blocking point: resized on the phone (max 1280 px, JPEG) and stored one per document (ft_blkphotos) */
+const PHC={};
+function shrinkImg(file){return new Promise((res,rej)=>{const u=URL.createObjectURL(file),im=new Image();
+  im.onload=()=>{let k=Math.min(1,1280/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);
+    let d=c.toDataURL('image/jpeg',.72);if(d.length>850000)d=c.toDataURL('image/jpeg',.45);res(d);};
+  im.onerror=()=>{URL.revokeObjectURL(u);rej(new Error('Not an image'));};im.src=u;});}
+async function phSrc(id){if(PHC[id])return PHC[id];if(BM&&BM.newPh[id])return BM.newPh[id];try{PHC[id]=await store.getPhoto(id);}catch(e){PHC[id]='';}return PHC[id];}
+function phRender(){
+  const box=$('#m_ph');if(!box||!BM)return;
+  box.innerHTML=BM.photos.map(id=>`<div class="ph" data-ph="${id}"><img alt="" data-phimg="${id}"><button type="button" class="phx rwonly" data-phdel="${id}" title="Remove this photo">✕</button></div>`).join('')+(isRO()?'':`<label class="phadd">📷<span>Add photo</span><input type="file" accept="image/*" capture="environment" multiple hidden id="m_phin"></label>`)+(BM.photos.length||!isRO()?'':'<small style="color:var(--mute)">No photo.</small>');
+  box.querySelectorAll('[data-phimg]').forEach(async im=>{im.src=await phSrc(im.dataset.phimg);});
+  box.querySelectorAll('[data-phimg]').forEach(im=>im.onclick=()=>{if(im.src)showPhoto(im.src);});
+  box.querySelectorAll('[data-phdel]').forEach(x=>x.onclick=e=>{e.stopPropagation();if(!confirm('Remove this photo? (applied when you Save)'))return;BM.photos=BM.photos.filter(p=>p!==x.dataset.phdel);phRender();});
+  const inp=$('#m_phin');if(inp)inp.onchange=async()=>{for(const f of [...inp.files]){try{const d=await shrinkImg(f),id=uid('ph');BM.newPh[id]=d;BM.photos.push(id);}catch(e){alert(f.name+': '+e.message);}}phRender();};
+}
+function showPhoto(src){let lb=$('#lightbox');if(!lb){lb=document.createElement('div');lb.id='lightbox';lb.onclick=()=>lb.classList.remove('open');document.body.appendChild(lb);}lb.innerHTML=`<img src="${src}" alt=""><span>Click anywhere to close</span>`;lb.classList.add('open');}
+function cmtRender(){
+  const box=$('#m_cmts');if(!box||!BM)return;const l=[...BM.cmts].sort((a,b)=>b.ts-a.ts);
+  box.innerHTML=l.length?l.map(c=>`<div class="cmt ${c.sys?'sys':''}"><small>${new Date(c.ts).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})} · ${esc(c.by||'')}</small><div>${esc(c.txt)}</div></div>`).join(''):'<small style="color:var(--mute)">No follow-up yet.</small>';
 }
 /* rooms matching the floors / room types ticked (none ticked = all), with the chosen activity if any */
 const bmRooms=()=>roomsList().filter(r=>(!BM.floors.size||BM.floors.has(r.floor))&&(!BM.types.size||BM.types.has(r.type||''))&&(!BM.act||roomActs(r).includes(BM.act)));
@@ -1317,7 +1389,7 @@ document.addEventListener('click',e=>{document.querySelectorAll('details.tools[o
 
 /* ===================== EXCEL ===================== */
 function xls(){if(!window.XLSX){alert('Excel library not loaded (check internet connection).');return null;}return XLSX;}
-const blkRow=b=>{const r=S.rooms[b.roomId];return {No:b.no,Floor:r?floorById(r.floor)?.name:'',Room:r?r.code:'','Room name':r?r.name:'',Activity:b.actId?actById(b.actId)?.name||'':'General',Description:b.title,Category:b.cat,Responsible:b.owner,Raised:b.raised,Target:b.due,Status:b.status==='open'?'Open':'Resolved',Resolved:b.closed||'','Age (days)':b.status==='open'?days(b.raised||today(),today()):''};};
+const blkRow=b=>{const r=S.rooms[b.roomId];return {No:b.no,Floor:r?floorById(r.floor)?.name:'',Room:r?r.code:'','Room name':r?r.name:'',Activity:b.actId?actById(b.actId)?.name||'':'General',Description:b.title,Category:b.cat,Responsible:b.owner,Priority:PRIO.find(x=>x[0]===prioOf(b))[1],Raised:b.raised,Target:b.due,Status:stLbl(b),'Last follow-up':((b.cmts||[]).filter(c=>!c.sys).slice(-1)[0]||{}).txt||'',Photos:(b.photos||[]).length||'',Resolved:b.closed||'','Age (days)':b.status==='open'?days(b.raised||today(),today()):''};};
 function exportBlk(){const X=xls();if(!X)return;const wb=X.utils.book_new();X.utils.book_append_sheet(wb,X.utils.json_to_sheet(blkRows().map(blkRow)),'Blocking points');X.writeFile(wb,`RT_BlockingPoints_${today()}.xlsx`);}
 function exportAll(){
   const X=xls();if(!X)return;const s=S.settings,wb=X.utils.book_new();
@@ -1399,7 +1471,7 @@ document.addEventListener('click',e=>{
   if(d.typecopy){const t=typeById(d.typecopy);const n=prompt('Name of the new template:',t.name+' (copy)');if(!n)return;saveS(s=>s.types.push({id:uid('t'),name:n.trim(),acts:[...cleanSeq(t.acts)]}));return;}
   if(d.view){const tabClick=d.view==='rooms';F.view=tabClick?(ROOMV.includes(F.rv)?F.rv:'overview'):d.view;closeDrawer();render();if(!ROOMV.includes(F.view)||tabClick)window.scrollTo(0,0);return;}
   if(d.f){F[d.f]=d.v;render();return;}
-  if(d.closeblk){const b=S.blockers[d.closeblk];if(!b)return;const cl=x=>({...x,status:'closed',closed:today(),closedBy:user()});
+  if(d.closeblk){const b=S.blockers[d.closeblk];if(!b)return;const ev=cmtE('Status → Resolved',1),cl=x=>({...x,status:'closed',stage:'',closed:today(),closedBy:user(),cmts:[...(x.cmts||[]),ev]});
     if(d.all){const g=grpOf(b).filter(x=>x.status==='open');if(!confirm(`Resolve ${b.no} in all ${g.length} rooms?`))return;store.setBlockers(g.map(cl));return;}
     store.setBlocker(cl(b));return;}
   if(d.editblk){blkModal(d.editblk);return;}
@@ -1964,7 +2036,7 @@ Object.assign(ACT,{
     catch(err){$('#sync').textContent='🔴 Offline';$('#view').innerHTML=`<div class="card"><h2>Connection problem</h2><p>${esc(err.message)}</p><p>Check in the Firebase console: Firestore database created · Authentication → Anonymous sign-in enabled · Firestore rules published.</p></div>`;return;}
   }else{
     let d={};try{d=JSON.parse(lsGet(LSK,'{}'))||{};}catch(e){}
-    S={settings:d.settings||null,rooms:d.rooms||{},blockers:d.blockers||{},log:d.log||[],snaps:d.snaps||[],pins:d.pins||{},plans:d.plans||{}};
+    S={settings:d.settings||null,bphotos:d.bphotos||{},rooms:d.rooms||{},blockers:d.blockers||{},log:d.log||[],snaps:d.snaps||[],pins:d.pins||{},plans:d.plans||{}};
     $('#sync').textContent='🟡 Local mode';
   }
   // Monday: first opening of the day shows the weekly progress of last week
