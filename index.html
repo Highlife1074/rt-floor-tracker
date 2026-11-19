@@ -398,8 +398,20 @@ let drawerRoom=null;
 const HP='__hp';
 const isHP=id=>String(id).endsWith(HP);
 const mainOf=id=>isHP(id)?id.slice(0,-HP.length):id;
-function actById(id){const a=S.settings.acts.find(x=>x.id===mainOf(id));if(!a||!isHP(id))return a;return {id,main:a.id,isHp:true,name:'HP – '+a.name,short:'HP',color:a.color};}
-const allSteps=()=>{const o=[];[...S.settings.acts].sort(byNm).forEach(a=>{o.push(a);if(a.hp)o.push(actById(a.id+HP));});return o;};
+/* Phases: the same library activity can appear several times in a sequence (works done in several phases).
+   Phase 1 keeps the activity id; phase n≥2 is the step "<id>__p<n>" (own status, blockers, hold point). */
+const PH='__p';
+const phaseOf=id=>{const m=/__p(\d+)$/.exec(mainOf(id));return m?+m[1]:1;};
+const baseOf=id=>mainOf(id).replace(/__p\d+$/,'');
+const phaseId=(aid,n)=>n>1?aid+PH+n:aid;
+function actById(id){const b=S.settings.acts.find(x=>x.id===baseOf(id));if(!b)return b;const n=phaseOf(id);
+  const a=n>1?{...b,id:mainOf(id),base:b.id,phase:n,name:b.name+' – phase '+n,short:(b.short||'')+n}:b;
+  if(!isHP(id))return a;return {id,main:a.id,isHp:true,name:'HP – '+a.name,short:'HP',color:a.color};}
+/* next free step id for activity aid in a sequence (phase 1, else the first unused phase number) */
+const nextPhase=(l,aid)=>{let n=1;while(l.includes(phaseId(aid,n)))n++;return phaseId(aid,n);};
+const maxPhase=aid=>{let m=1;const scan=l=>(l||[]).forEach(x=>{if(baseOf(x)===aid)m=Math.max(m,phaseOf(x));});
+  S.settings.types.forEach(t=>scan(t.acts));Object.values(S.rooms||{}).forEach(r=>scan(r.acts));return m;};
+const allSteps=()=>{const o=[];[...S.settings.acts].sort(byNm).forEach(b=>{for(let n=1,m=maxPhase(b.id);n<=m;n++){const a=actById(phaseId(b.id,n));o.push(a);if(a.hp)o.push(actById(a.id+HP));}});return o;};
 const lbls=id=>isHP(id)?['Pending','Inspection requested','Released']:['To do','In progress','Done'];
 const lbl=(id,s)=>lbls(id)[s]||'';
 const stepLabel=(r,id)=>{const a=actById(id),s=st(r,id);if(a.isHp)return (s===1?'Inspection requested':'Awaiting HP')+': <b>'+esc(a.name.slice(5))+'</b>';return (s===1?'In progress':'Next')+': <b>'+esc(a.name)+'</b>';};
@@ -408,13 +420,13 @@ const typeById=id=>S.settings.types.find(t=>t.id===id);
 const floorIdx=id=>{const i=S.settings.floors.findIndex(f=>f.id===id);return i<0?999:i;};
 /* A room's sequence is the ORDER of r.acts (copied from its template, re-orderable per room); each activity
    flagged as hold point gets its HP step right after it. */
-function roomActs(r){const o=[],seen={};(r.acts||[]).forEach(id=>{if(seen[id])return;seen[id]=1;const a=S.settings.acts.find(x=>x.id===id);if(!a)return;o.push(id);if(a.hp&&!(r.hpOff||[]).includes(id))o.push(id+HP);});return o;}
-const cleanSeq=l=>{const seen={};return (l||[]).filter(x=>{if(seen[x]||!S.settings.acts.some(a=>a.id===x))return false;return seen[x]=1;});};
-const libOrd=id=>S.settings.acts.findIndex(a=>a.id===id);
+function roomActs(r){const o=[],seen={};(r.acts||[]).forEach(id=>{if(seen[id]||isHP(id))return;seen[id]=1;const a=S.settings.acts.find(x=>x.id===baseOf(id));if(!a)return;o.push(id);if(a.hp&&!(r.hpOff||[]).includes(id))o.push(id+HP);});return o;}
+const cleanSeq=l=>{const seen={};return (l||[]).filter(x=>{if(seen[x]||isHP(x)||!S.settings.acts.some(a=>a.id===baseOf(x)))return false;return seen[x]=1;});};
+const libOrd=id=>S.settings.acts.findIndex(a=>a.id===baseOf(id))+(phaseOf(id)-1)/100;
 /* Assignment: each activity has a default subcontractor (settings.subs id) and responsible (team member),
    overridable per room in r.asg[actId]. A hold point uses the responsible of its activity. */
 const subName=id=>{const s=(S.settings.subs||[]).find(x=>x.id===id);return s?s.name:'';};
-function asg(r,stepId){const m=mainOf(stepId),o=(r&&r.asg&&r.asg[m])||{},a=S.settings.acts.find(x=>x.id===m)||{};return {sub:o.sub||a.sub||'',resp:o.resp||a.resp||'',ov:!!(o.sub||o.resp)};}
+function asg(r,stepId){const m=mainOf(stepId),o=(r&&r.asg&&r.asg[m])||{},a=S.settings.acts.find(x=>x.id===baseOf(m))||{};return {sub:o.sub||a.sub||'',resp:o.resp||a.resp||'',ov:!!(o.sub||o.resp)};}
 function asgModal(rid,aid){
   const r=S.rooms[rid],a=actById(aid),o=(r.asg&&r.asg[aid])||{},subs=S.settings.subs||[];
   modal(`<h2>${esc(r.code)} · ${esc(a.name)}</h2><p style="margin-top:0;color:var(--mute);font-size:12px">Leave “Default” to follow the activity library.</p><div class="form">
@@ -443,7 +455,7 @@ function sqPick(btn){
   const [k,id,aid]=btn.dataset.sqpick.split('|');
   if(btn.closest('#pop')){SQF=null;openPosPop(id,aid);return;}SQF={key:k+'|'+id,q:''};
   const inp=btn.closest('.sqpick').querySelector('[data-sqq]');inp.value='';
-  setSeq(k,id,l=>{l.push(aid);return l;});
+  setSeq(k,id,l=>{l.push(nextPhase(l,aid));return l;});
 }
 /* Quick "+ New activity": creates the activity in the library and appends it to the sequence in one go.
    An existing activity with the same name is reused instead of creating a duplicate. */
@@ -452,8 +464,9 @@ function sqCreate(k,id,name){
   if(name===undefined){name=prompt('New activity name (added to the library and at the end of this sequence):','');if(name===null)return;}
   name=String(name).trim();if(!name)return;
   const ex=S.settings.acts.find(a=>normTxt(a.name)===normTxt(name));
-  if(ex){if(k==='room'&&cleanSeq((S.rooms[id]||{}).acts).includes(ex.id)||k==='type'&&cleanSeq((typeById(id)||{}).acts).includes(ex.id)){alert(`“${ex.name}” is already in this sequence.`);return;}
-    SQF={key:k+'|'+id,q:''};setSeq(k,id,l=>{l.push(ex.id);return l;});return;}
+  if(ex){const cur=cleanSeq(k==='room'?(S.rooms[id]||{}).acts:(typeById(id)||{}).acts);
+    if(cur.includes(ex.id)&&!confirm(`“${ex.name}” is already in this sequence.\n\nAdd it again as a new phase (phase ${phaseOf(nextPhase(cur,ex.id))})?`))return;
+    SQF={key:k+'|'+id,q:''};setSeq(k,id,l=>{l.push(nextPhase(l,ex.id));return l;});return;}
   const aid=uid('a'),act={id:aid,name,short:name.split(/\s+/).map(w=>w[0]).join('').toUpperCase().slice(0,4),color:PALETTE[S.settings.acts.length%PALETTE.length]};
   SQF={key:k+'|'+id,q:''};
   if(k==='type'){const t0=typeById(id);if(!t0)return;const oldT=cleanSeq(t0.acts),newT=[...oldT,aid];
@@ -498,10 +511,10 @@ function syncTypeRooms(tid,oldT,newT){
 function setSeq(kind,id,fn){if(kind==='type'){const t0=typeById(id);if(!t0)return;const oldT=cleanSeq(t0.acts),newT=fn([...oldT]);
     saveS(s=>{const t=s.types.find(x=>x.id===id);if(t)t.acts=newT;});syncTypeRooms(id,oldT,newT);}else{const r=S.rooms[id];if(r)store.patchRoom(id,{acts:fn(cleanSeq(r.acts))});}}
 function seqEditor(kind,id,list){
-  list=cleanSeq(list);const avail=S.settings.acts.filter(a=>!list.includes(a.id)).sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:'base',numeric:true}));const r=kind==='room'?S.rooms[id]:null;
+  list=cleanSeq(list);const avail=[...S.settings.acts].sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:'base',numeric:true}));const r=kind==='room'?S.rooms[id]:null;
   return `<div class="seqed">${list.length?'':'<div class="empty" style="padding:6px">No activity yet — add the first one below.</div>'}${list.map((aid,i)=>{const a=actById(aid),hpOn=a.hp&&!(r&&(r.hpOff||[]).includes(aid));
     return `<div class="sqrow" draggable="true" data-sqdrag="${kind}|${id}|${i}"><span class="sqn">${i+1}</span><span class="grip" title="Drag to re-order">⋮⋮</span><span class="dot" style="background:${a.color}"></span><span class="sqname">${esc(a.name)}</span>${a.hp?(r?`<label class="chk" style="padding:0" title="Hold point after this activity"><input type="checkbox" data-rhp="${id}|${aid}" ${hpOn?'checked':''}><span class="hptag">◆ HP</span></label>`:'<span class="hptag" title="Followed by a hold point">◆ HP</span>'):''}<button class="btn sm" data-sqmv="${kind}|${id}|${i}|-1" ${i?'':'disabled'}>↑</button><button class="btn sm" data-sqmv="${kind}|${id}|${i}|1" ${i<list.length-1?'':'disabled'}>↓</button><button class="btn sm red" data-sqrm="${kind}|${id}|${i}" title="Remove from the sequence">✕</button></div>`;}).join('')}
-    <div class="row" style="margin-top:6px"><div class="sqpick"><input type="search" data-sqq="${kind}|${id}" autocomplete="off" placeholder="+ Add an activity — type to search…"><div class="sqopts">${avail.length?avail.map(a=>`<button type="button" class="sqopt" data-sqpick="${kind}|${id}|${a.id}" data-nm="${esc(normTxt(a.name))}"><span class="dot" style="background:${a.color}"></span>${esc(a.name)}</button>`).join(''):'<div class="sqnone">All activities are already in the sequence</div>'}<div class="sqnone sqnm" hidden>No matching activity — press <b>Enter</b> to create it</div></div></div><button class="btn sm pri" data-sqnew="${kind}|${id}" title="Create a new activity in the library and add it at the end of this sequence">+ New activity</button><button class="btn sm" data-sqsort="${kind}|${id}" title="Re-order like the activity library">Sort as library</button></div></div>`;
+    <div class="row" style="margin-top:6px"><div class="sqpick"><input type="search" data-sqq="${kind}|${id}" autocomplete="off" placeholder="+ Add an activity (again = new phase) — type to search…"><div class="sqopts">${avail.map(a=>{const nx=nextPhase(list,a.id),n=phaseOf(nx);return `<button type="button" class="sqopt" data-sqpick="${kind}|${id}|${a.id}" data-nm="${esc(normTxt(a.name))}"><span class="dot" style="background:${a.color}"></span>${esc(a.name)}${n>1?` <small style="color:var(--mute)">· add again as phase ${n}</small>`:''}</button>`;}).join('')||'<div class="sqnone">The activity library is empty</div>'}<div class="sqnone sqnm" hidden>No matching activity — press <b>Enter</b> to create it</div></div></div><button class="btn sm pri" data-sqnew="${kind}|${id}" title="Create a new activity in the library and add it at the end of this sequence">+ New activity</button><button class="btn sm" data-sqsort="${kind}|${id}" title="Re-order like the activity library">Sort as library</button></div></div>`;
 }
 const st=(r,a)=>(r.st&&r.st[a]&&r.st[a].s)||0;
 const openBlk=(r,a)=>Object.values(S.blockers).filter(b=>b.status==='open'&&b.roomId===r.id&&(a===undefined||b.actId===a));
@@ -931,8 +944,8 @@ function openNaPop(td,rid,aid){
 /* insert an activity in a room sequence at the place it has in the room-type template (else in the library order) */
 function seqPos(r,aid){   // suggested insertion index
   const l=cleanSeq(r.acts),t=typeById(r.type),tl=t?cleanSeq(t.acts):[];
-  const ref=tl.includes(aid)?tl:S.settings.acts.map(a=>a.id),ri=ref.indexOf(aid);
-  const pos=l.findIndex(x=>ref.indexOf(x)>ri);return pos<0?l.length:pos;
+  const ref=tl.includes(aid)?tl:S.settings.acts.map(a=>a.id),ix=x=>{const i=ref.indexOf(x);return i>=0?i:ref.indexOf(baseOf(x))+(phaseOf(x)-1)/100;},ri=ix(aid);
+  const pos=l.findIndex(x=>ix(x)>ri);return pos<0?l.length:pos;
 }
 /* after: '^' = first step, an activity id = right after it (if the room has it), undefined = suggested place */
 function seqWith(r,aid,after){
@@ -1093,7 +1106,7 @@ function vCockpit(){
 }
 function vSetup(){
   const s=S.settings,rooms=Object.values(S.rooms);
-  const cnt=id=>rooms.filter(r=>(r.acts||[]).includes(id)).length;
+  const cnt=id=>rooms.filter(r=>(r.acts||[]).some(x=>baseOf(x)===id)).length;
   if(!isAdmin())return `<div class="card">Setup is reserved for admins.</div>`;
   const MK=[];let h='';MK.push(['team',0]);
   h+=`<div class="card"><h2>👥 Team & access</h2><p style="margin:0 0 10px;color:var(--mute);font-size:12px">Only the people in this list can open the app. On their first login they pick their name and choose a 4-digit PIN; next time, name + PIN. <b>Admin</b>: everything including Setup · <b>Editor</b>: statuses, hold points, blocking points, notes · <b>Read only</b>: view, print and export.</p>
@@ -1114,7 +1127,7 @@ function vSetup(){
   s.acts.forEach((a,i)=>{h+=`<div class="row" style="margin-bottom:6px"><input type="color" data-actcolor="${a.id}" value="${a.color}" style="width:42px;padding:2px;height:34px" title="Pick any colour"><input data-hold data-actral="${a.id}" list="ralList" value="${a.ral&&RAL[a.ral]?`RAL ${a.ral} – ${esc(RAL[a.ral].name)}`:''}" placeholder="RAL…" title="Colour from a RAL code: type e.g. 3020 or a name, then pick" style="width:210px"><input data-hold data-actname="${a.id}" value="${esc(a.name)}" style="flex:1;min-width:150px"><input data-hold data-actshort="${a.id}" value="${esc(a.short)}" style="width:70px" title="Short code"><select data-actsub="${a.id}" title="Default subcontractor" style="width:150px"><option value="">🏗 — sub —</option>${(s.subs||[]).map(x=>`<option value="${x.id}" ${a.sub===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select><select data-actresp="${a.id}" title="Default responsible" style="width:160px"><option value="">👷 — responsible —</option>${people().map(p=>`<option value="${esc(p.name)}" ${a.resp===p.name?'selected':''}>${esc(p.name)}</option>`).join('')}</select><label class="chk" title="Adds a linked hold point (inspection) step right after this activity"><input type="checkbox" data-acthp="${a.id}" ${a.hp?'checked':''}><span class="hptag">◆ HP</span>Hold point</label><small style="color:var(--mute);width:70px">${cnt(a.id)} rooms</small><button class="btn sm" data-actup="${i}" ${i?'':'disabled'}>↑</button><button class="btn sm" data-actdown="${i}" ${i<s.acts.length-1?'':'disabled'}>↓</button><button class="btn sm red" data-actdel="${a.id}">✕</button></div>`;});
   h+=`<button class="btn sm" data-act="addact">+ Add activity</button>${ralList()}</div>`;
   MK.push(['types',h.length]);
-  h+=`<div class="card"><h2>Room types (sequence templates)</h2><p style="margin:0 0 10px;color:var(--mute);font-size:12px">Each template is an ordered <b>sequence</b> of activities: step 1, then step 2… Re-order with ↑ ↓ or drag the rows. Each type has a colour (colour picker or <b>RAL</b> code) used on the plans and in the matrix. New rooms copy the sequence of their template; each room can still be adjusted in its own “Customize sequence”.</p>`;
+  h+=`<div class="card"><h2>Room types (sequence templates)</h2><p style="margin:0 0 10px;color:var(--mute);font-size:12px">Each template is an ordered <b>sequence</b> of activities: step 1, then step 2… Re-order with ↑ ↓ or drag the rows. Each type has a colour (colour picker or <b>RAL</b> code) used on the plans and in the matrix. New rooms copy the sequence of their template; each room can still be adjusted in its own “Customize sequence”. <b>Several phases:</b> add the same activity again to the sequence — it becomes “phase 2”, “phase 3”… with its own status.</p>`;
   s.types.forEach(t=>{h+=`<details data-dk="type_${t.id}" style="border-bottom:1px solid var(--line)"><summary><i class="sq" style="background:${typeCol(t.id)};border:0;vertical-align:middle"></i> <b>${esc(t.name)}</b> <button class="btn sm" data-typeren="${t.id}" title="Rename this room type" style="padding:1px 7px;margin-left:4px">✏ Rename</button> <small style="color:var(--mute)">· ${t.acts.filter(x=>actById(x)).length} activities · ${rooms.filter(r=>r.type===t.id).length} rooms</small></summary><div class="row" style="margin:8px 0"><input type="color" data-typecolor="${t.id}" value="${typeCol(t.id)}" style="width:42px;padding:2px;height:34px" title="Colour of this room type (plans, matrix)"><input data-hold data-typeral="${t.id}" list="ralList" value="${t.ral&&RAL[t.ral]?`RAL ${t.ral} – ${esc(RAL[t.ral].name)}`:''}" placeholder="RAL…" title="Colour from a RAL code: type e.g. 3020 or a name, then pick" style="width:210px"><input data-hold data-typename="${t.id}" value="${esc(t.name)}" style="flex:1"><button class="btn sm" data-typecopy="${t.id}">Duplicate</button><button class="btn sm red" data-typedel="${t.id}">Delete type</button></div>${seqEditor('type',t.id,t.acts)}${(()=>{const ts=cleanSeq(t.acts).join('|'),nd=rooms.filter(r=>r.type===t.id&&cleanSeq(r.acts).join('|')!==ts).length;return nd?`<div class="row" style="margin:6px 0 10px"><small style="color:var(--mute)">Changes to this sequence are applied automatically to the rooms of this type. <b>${nd}</b> room(s) of this type have a sequence different from the template (customized per room).</small><button class="btn sm" data-typesync="${t.id}">⟳ Reset them to the template</button></div>`:`<div style="margin:6px 0 10px"><small style="color:var(--mute)">✓ All rooms of this type follow this sequence — changes are applied to them automatically.</small></div>`;})()}</details>`;});
   h+=`<button class="btn sm" data-act="addtype" style="margin-top:8px">+ Add room type</button></div>`;
   MK.push(['rooms',h.length]);
@@ -1498,7 +1511,7 @@ document.addEventListener('click',e=>{
   if(d.gofloor){Object.assign(F,{view:'overview',floor:d.gofloor,next:'all'});render();window.scrollTo(0,0);return;}
   if(d.gonext){Object.assign(F,{view:'overview',next:d.gonext,floor:'all',type:'all',q:'',blk:'all'});render();window.scrollTo(0,0);return;}
   if(d.actup||d.actdown){const i=+(d.actup??d.actdown),j=d.actup!==undefined?i-1:i+1;saveS(s=>{[s.acts[i],s.acts[j]]=[s.acts[j],s.acts[i]];});return;}
-  if(d.actdel){const a=actById(d.actdel),n=Object.values(S.rooms).filter(r=>(r.acts||[]).includes(a.id)).length;if(!confirm(`Delete activity “${a.name}”?${n?` It is used in ${n} room(s) and will disappear from them.`:''}`))return;saveS(s=>{s.acts=s.acts.filter(x=>x.id!==d.actdel);s.types.forEach(t=>t.acts=t.acts.filter(x=>x!==d.actdel));});return;}
+  if(d.actdel){const a=actById(d.actdel),n=Object.values(S.rooms).filter(r=>(r.acts||[]).some(x=>baseOf(x)===a.id)).length;if(!confirm(`Delete activity “${a.name}”?${n?` It is used in ${n} room(s) and will disappear from them.`:''}`))return;saveS(s=>{s.acts=s.acts.filter(x=>x.id!==d.actdel);s.types.forEach(t=>t.acts=t.acts.filter(x=>baseOf(x)!==d.actdel));});return;}
   if(d.typesync){const t=typeById(d.typesync);if(!t)return;const tl=cleanSeq(t.acts),rs=Object.values(S.rooms).filter(r=>r.type===t.id&&cleanSeq(r.acts).join('|')!==tl.join('|'));
     if(!rs.length||!confirm(`Replace the sequence of ${rs.length} room(s) of type “${t.name}” with the template?\n\nTheir per-room customizations are lost. Statuses already entered are kept.`))return;store.patchRooms(rs.map(r=>[r.id,{acts:[...tl]}]));return;}
   if(d.typedel){if(!confirm('Delete this room type? Rooms keep their activities.'))return;saveS(s=>s.types=s.types.filter(x=>x.id!==d.typedel));return;}
