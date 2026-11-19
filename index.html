@@ -445,6 +445,21 @@ function sqPick(btn){
   const inp=btn.closest('.sqpick').querySelector('[data-sqq]');inp.value='';
   setSeq(k,id,l=>{l.push(aid);return l;});
 }
+/* Quick "+ New activity": creates the activity in the library and appends it to the sequence in one go.
+   An existing activity with the same name is reused instead of creating a duplicate. */
+function sqCreate(k,id,name){
+  if(roBlock())return;
+  if(name===undefined){name=prompt('New activity name (added to the library and at the end of this sequence):','');if(name===null)return;}
+  name=String(name).trim();if(!name)return;
+  const ex=S.settings.acts.find(a=>normTxt(a.name)===normTxt(name));
+  if(ex){if(k==='room'&&cleanSeq((S.rooms[id]||{}).acts).includes(ex.id)||k==='type'&&cleanSeq((typeById(id)||{}).acts).includes(ex.id)){alert(`“${ex.name}” is already in this sequence.`);return;}
+    SQF={key:k+'|'+id,q:''};setSeq(k,id,l=>{l.push(ex.id);return l;});return;}
+  const aid=uid('a'),act={id:aid,name,short:name.split(/\s+/).map(w=>w[0]).join('').toUpperCase().slice(0,4),color:PALETTE[S.settings.acts.length%PALETTE.length]};
+  SQF={key:k+'|'+id,q:''};
+  if(k==='type'){const t0=typeById(id);if(!t0)return;const oldT=cleanSeq(t0.acts),newT=[...oldT,aid];
+    saveS(s=>{s.acts.push(act);const t=s.types.find(x=>x.id===id);if(t)t.acts=newT;});syncTypeRooms(id,oldT,newT);}
+  else{const r=S.rooms[id];if(!r)return;saveS(s=>s.acts.push(act));store.patchRoom(id,{acts:[...cleanSeq(r.acts),aid]});}
+}
 function sqRestore(root){
   if(!SQF)return;const ae=document.activeElement;if(ae&&ae!==document.body)return;
   const inp=root.querySelector(`[data-sqq="${SQF.key}"]`);if(!inp)return;
@@ -456,7 +471,7 @@ document.addEventListener('focusout',e=>{const t=e.target;if(t.dataset&&t.datase
 window.addEventListener('keydown',e=>{
   const t=e.target;if(!(t.dataset&&t.dataset.sqq!==undefined))return;
   if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();sqMove(t,e.key==='ArrowDown'?1:-1);}
-  else if(e.key==='Enter'){e.preventDefault();e.stopPropagation();const h=t.parentNode.querySelector('.sqopt.hi:not([hidden])');if(h)sqPick(h);}
+  else if(e.key==='Enter'){e.preventDefault();e.stopPropagation();const h=t.parentNode.querySelector('.sqopt.hi:not([hidden])');if(h)sqPick(h);else if(t.value.trim()&&!t.dataset.sqq.startsWith('pop|')){const [k,id]=t.dataset.sqq.split('|');sqCreate(k,id,t.value);}}
   else if(e.key==='Escape'){e.stopPropagation();e.preventDefault();if(t.value){t.value='';SQF={key:t.dataset.sqq,q:''};sqFilter(t);}else t.blur();}
 },true);
 document.addEventListener('mousedown',e=>{if(e.target.closest&&e.target.closest('.sqopt'))e.preventDefault();});
@@ -486,7 +501,7 @@ function seqEditor(kind,id,list){
   list=cleanSeq(list);const avail=S.settings.acts.filter(a=>!list.includes(a.id)).sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:'base',numeric:true}));const r=kind==='room'?S.rooms[id]:null;
   return `<div class="seqed">${list.length?'':'<div class="empty" style="padding:6px">No activity yet — add the first one below.</div>'}${list.map((aid,i)=>{const a=actById(aid),hpOn=a.hp&&!(r&&(r.hpOff||[]).includes(aid));
     return `<div class="sqrow" draggable="true" data-sqdrag="${kind}|${id}|${i}"><span class="sqn">${i+1}</span><span class="grip" title="Drag to re-order">⋮⋮</span><span class="dot" style="background:${a.color}"></span><span class="sqname">${esc(a.name)}</span>${a.hp?(r?`<label class="chk" style="padding:0" title="Hold point after this activity"><input type="checkbox" data-rhp="${id}|${aid}" ${hpOn?'checked':''}><span class="hptag">◆ HP</span></label>`:'<span class="hptag" title="Followed by a hold point">◆ HP</span>'):''}<button class="btn sm" data-sqmv="${kind}|${id}|${i}|-1" ${i?'':'disabled'}>↑</button><button class="btn sm" data-sqmv="${kind}|${id}|${i}|1" ${i<list.length-1?'':'disabled'}>↓</button><button class="btn sm red" data-sqrm="${kind}|${id}|${i}" title="Remove from the sequence">✕</button></div>`;}).join('')}
-    <div class="row" style="margin-top:6px"><div class="sqpick"><input type="search" data-sqq="${kind}|${id}" autocomplete="off" placeholder="+ Add an activity — type to search…"><div class="sqopts">${avail.length?avail.map(a=>`<button type="button" class="sqopt" data-sqpick="${kind}|${id}|${a.id}" data-nm="${esc(normTxt(a.name))}"><span class="dot" style="background:${a.color}"></span>${esc(a.name)}</button>`).join(''):'<div class="sqnone">All activities are already in the sequence</div>'}<div class="sqnone sqnm" hidden>No matching activity</div></div></div><button class="btn sm" data-sqsort="${kind}|${id}" title="Re-order like the activity library">Sort as library</button></div></div>`;
+    <div class="row" style="margin-top:6px"><div class="sqpick"><input type="search" data-sqq="${kind}|${id}" autocomplete="off" placeholder="+ Add an activity — type to search…"><div class="sqopts">${avail.length?avail.map(a=>`<button type="button" class="sqopt" data-sqpick="${kind}|${id}|${a.id}" data-nm="${esc(normTxt(a.name))}"><span class="dot" style="background:${a.color}"></span>${esc(a.name)}</button>`).join(''):'<div class="sqnone">All activities are already in the sequence</div>'}<div class="sqnone sqnm" hidden>No matching activity — press <b>Enter</b> to create it</div></div></div><button class="btn sm pri" data-sqnew="${kind}|${id}" title="Create a new activity in the library and add it at the end of this sequence">+ New activity</button><button class="btn sm" data-sqsort="${kind}|${id}" title="Re-order like the activity library">Sort as library</button></div></div>`;
 }
 const st=(r,a)=>(r.st&&r.st[a]&&r.st[a].s)||0;
 const openBlk=(r,a)=>Object.values(S.blockers).filter(b=>b.status==='open'&&b.roomId===r.id&&(a===undefined||b.actId===a));
@@ -1455,7 +1470,7 @@ document.addEventListener('click',e=>{
   if(e.target.id==='modal'&&!$('#modal').dataset.lock){closeModal();return;}
   const inPop=!!e.target.closest('#pop');if(!inPop)closePop();
   if(planClick(e))return;
-  const t=e.target.closest('[data-view],[data-f],[data-closeblk],[data-editblk],[data-newblk],[data-set],[data-cell],[data-room],[data-act],[data-gofloor],[data-actup],[data-actdown],[data-actdel],[data-typedel],[data-delfloor],[data-gonext],[data-preset],[data-pdel],[data-sqmv],[data-sqrm],[data-sqsort],[data-typecopy],[data-typeren],[data-typesync],[data-asg],[data-subdel]');
+  const t=e.target.closest('[data-view],[data-f],[data-closeblk],[data-editblk],[data-newblk],[data-set],[data-cell],[data-room],[data-act],[data-gofloor],[data-actup],[data-actdown],[data-actdel],[data-typedel],[data-delfloor],[data-gonext],[data-preset],[data-pdel],[data-sqmv],[data-sqrm],[data-sqnew],[data-sqsort],[data-typecopy],[data-typeren],[data-typesync],[data-asg],[data-subdel]');
   if(!t)return;const d=t.dataset;if(inPop&&d.keep===undefined)setTimeout(closePop,0);
   if(d.preset){if(confirm(`Reset the PIN of ${d.preset}?\n\nThey will choose a new PIN at their next login.`))store.resetPin(d.preset);return;}
   if(d.pdel){if(!confirm(`Remove ${d.pdel} from the team?\n\nThey will no longer be able to log in. Their past updates stay in the history.`))return;const n=d.pdel;editPeople(l=>{const i=l.findIndex(p=>p.name===n);if(i>=0)l.splice(i,1);});if(S.pins[n])store.resetPin(n);return;}
@@ -1463,6 +1478,7 @@ document.addEventListener('click',e=>{
   if(d.subdel){const x=(S.settings.subs||[]).find(y=>y.id===d.subdel);if(!confirm(`Delete subcontractor “${x?x.name:''}”? Activities assigned to it become unassigned.`))return;saveS(s=>{s.subs=(s.subs||[]).filter(y=>y.id!==d.subdel);s.acts.forEach(a=>{if(a.sub===d.subdel)a.sub='';});});return;}
   if(d.sqmv){const [k,id,i,dir]=d.sqmv.split('|');setSeq(k,id,l=>{const a=+i,b=a+(+dir);if(b<0||b>=l.length)return l;[l[a],l[b]]=[l[b],l[a]];return l;});return;}
   if(d.sqrm){const [k,id,i]=d.sqrm.split('|');setSeq(k,id,l=>{l.splice(+i,1);return l;});return;}
+  if(d.sqnew){const [k,id]=d.sqnew.split('|');const q=t.closest(".row").querySelector('[data-sqq]');const v=q&&q.value.trim();sqCreate(k,id,v||undefined);return;}
   if(d.sqsort){const [k,id]=d.sqsort.split('|');if(!confirm('Re-order this sequence like the activity library?'))return;setSeq(k,id,l=>l.sort((a,b)=>libOrd(a)-libOrd(b)));return;}
   if(d.typeren){const x=S.settings.types.find(y=>y.id===d.typeren);if(!x)return;e.preventDefault();
     const n=prompt('New name for this room type:',x.name);if(n===null||!n.trim()||n.trim()===x.name)return;
