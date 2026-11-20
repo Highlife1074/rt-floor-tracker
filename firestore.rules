@@ -1,9 +1,100 @@
 rules_version = '2';
+// RT Floor Tracker — access rules.
+// Who is who: a browser signs in anonymously, then opens a session ft_sess/<uid> = {k: person key, h: PIN hash}.
+// The session can only be created with the right PIN hash (compared with ft_pins/<k>, which nobody can read).
+// Roles come from ft_settings/main.roles {personKey: 'admin'|'edit'|'view'}, kept up to date by the app.
+// The owner (OWNER below = key of APP_ADMIN in index.html) is always admin.
 service cloud.firestore {
   match /databases/{database}/documents {
-    // RT Floor Tracker collections (ft_settings, ft_rooms, ft_blockers, ft_log, ft_plans, ft_planchunks…)
-    match /{coll}/{doc} {
-      allow read, write: if request.auth != null && coll.matches('ft_.*');
+
+    function OWNER() { return 'horn_philippe'; }
+    function signedIn() { return request.auth != null; }
+    function sessPath() { return /databases/$(database)/documents/ft_sess/$(request.auth.uid); }
+    function settingsPath() { return /databases/$(database)/documents/ft_settings/main; }
+    function pinPath(k) { return /databases/$(database)/documents/ft_pins/$(k); }
+
+    function hasSess() { return signedIn() && exists(sessPath()); }
+    function myKey() { return get(sessPath()).data.k; }
+    function roleOf(k) { return get(settingsPath()).data.get('roles', {}).get(k, 'none'); }
+    function isOwner() { return hasSess() && myKey() == OWNER(); }
+    function isMember() { return isOwner() || (hasSess() && roleOf(myKey()) in ['admin', 'edit', 'view']); }
+    function canEdit() { return isOwner() || (hasSess() && roleOf(myKey()) in ['admin', 'edit']); }
+    function isAdmin() { return isOwner() || (hasSess() && roleOf(myKey()) == 'admin'); }
+    function isPerson(k) { return k == OWNER() || roleOf(k) in ['admin', 'edit', 'view']; }
+    function pinOk(k, h, lh) {
+      let p = get(pinPath(k)).data;
+      return p.get('h', '') == h || (p.get('lh', '') != '' && p.get('lh', '') == lh);
+    }
+
+    // ---- sign-in ----
+    match /ft_sess/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['k', 'h', 'lh', 'at'])
+        && request.resource.data.k is string && isPerson(request.resource.data.k)
+        && exists(pinPath(request.resource.data.k))
+        && pinOk(request.resource.data.k, request.resource.data.h, request.resource.data.get('lh', ''));
+      allow delete: if signedIn() && request.auth.uid == uid;
+    }
+    match /ft_pins/{k} {
+      allow read: if false;
+      allow create: if signedIn() && isPerson(k)
+        && request.resource.data.keys().hasOnly(['h']) && request.resource.data.h is string && request.resource.data.h.size() >= 8;
+      allow update: if hasSess() && (myKey() == k || isAdmin())
+        && request.resource.data.keys().hasOnly(['h']) && request.resource.data.h is string && request.resource.data.h.size() >= 8;
+      allow delete: if isAdmin();
+    }
+    // public "this person has a PIN" flags for the login screen (no hash inside)
+    match /ft_pinflag/{k} {
+      allow read: if signedIn();
+      allow create: if signedIn() && existsAfter(pinPath(k));
+      allow delete: if isAdmin();
+    }
+    // legacy PIN list (moved to ft_pins by the app): closed
+    match /ft_auth/{doc} {
+      allow read, write: if false;
+    }
+
+    // ---- project data ----
+    match /ft_settings/{doc} {
+      allow read: if signedIn();   // team list needed by the login screen
+      allow create: if isAdmin();
+      allow update: if isAdmin()
+        || (canEdit() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['people', 'roles']));
+      allow delete: if false;
+    }
+    match /ft_rooms/{id} {
+      allow read: if isMember();
+      allow create, update: if canEdit();
+      allow delete: if isAdmin();
+    }
+    match /ft_blockers/{id} {
+      allow read: if isMember();
+      allow write: if canEdit();
+    }
+    match /ft_blkphotos/{id} {
+      allow read: if isMember();
+      allow write: if canEdit();
+    }
+    match /ft_log/{id} {
+      allow read: if isMember();
+      allow create: if canEdit();
+      allow update, delete: if false;
+    }
+    match /ft_snapshots/{id} {
+      allow read: if isMember();
+      allow create: if isMember();   // the first person to open the app after Saturday freezes the week
+      allow update, delete: if isAdmin();
+    }
+    match /ft_plans/{id} {
+      allow read: if isMember();
+      allow create, update: if canEdit();
+      allow delete: if isAdmin();
+    }
+    match /ft_planchunks/{id} {
+      allow read: if isMember();
+      allow create, update: if canEdit();
+      allow delete: if isAdmin();
     }
   }
 }

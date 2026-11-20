@@ -378,9 +378,23 @@ function sortSettings(s){if(!s)return;(s.types||[]).sort(byNm);(s.subs||[]).sort
 const normName=s=>(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z ]/g,' ').split(/\s+/).filter(Boolean).sort().join(' ');
 function simpleHash(str){let h=0;for(let i=0;i<str.length;i++){h=((h<<5)-h)+str.charCodeAt(i);h|=0;}return Math.abs(h).toString(36);}
 const isOwner=n=>normName(n)===normName(APP_ADMIN);
+/* Person key: the normalised name ("HORN, Philippe" → "horn_philippe"). Used as document id for PINs and sessions,
+   and in settings.roles — the role map the Firestore rules read (firestore.rules hard-codes the owner's key). */
+const pkey=n=>normName(n).replace(/ /g,'_');
+const rolesOf=s=>{const o={};peopleOf(s).forEach(p=>{o[pkey(p.name)]=isOwner(p.name)?'admin':(p.role||'edit');});return o;};
+/* PIN hash: SHA-256 of key + PIN. Stored in ft_pins/<key>, which nobody can read: the Firestore rules compare it
+   when a session is opened. (Legacy PINs used simpleHash(name+PIN); they are accepted once and upgraded.) */
+async function pinHash(name,pin){const t='rtft|'+pkey(name)+'|'+pin;
+  if(!(window.crypto&&crypto.subtle))return 'x'+simpleHash(t);
+  const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');}
+const hasPin=n=>USE_FB?!!S.pinset[pkey(n)]:!!(S.pins[pkey(n)]||S.pins[n]);
 function peopleOf(s){const l=((s&&s.people)||[]).map(p=>({...p}));if(!l.some(p=>isOwner(p.name)))l.unshift({name:APP_ADMIN,role:'admin'});return l;}
 const people=()=>peopleOf(S.settings).sort(byNm);
-function me(){const n=lsGet(LSU,'');if(!n||!S.settings)return null;return people().find(p=>normName(p.name)===normName(n))||null;}
+/* Who is signed in. Shared mode: ONLY the session document ft_sess/<auth uid>, which the Firestore rules let a
+   browser create only with the right PIN — editing localStorage no longer makes anyone admin.
+   Local mode (data in this browser only): the name remembered on this device. */
+function myKey(){if(USE_FB)return S.sess&&S.sess.k||null;const n=lsGet(LSU,'');return n?pkey(n):null;}
+function me(){const k=myKey();if(!k||!S.settings)return null;return people().find(p=>pkey(p.name)===k)||null;}
 const isAdmin=()=>{const m=me();return !!m&&(isOwner(m.name)||m.role==='admin');};
 const isRO=()=>{const m=me();return !!m&&!isOwner(m.name)&&m.role==='view';};
 const ROLES=[['admin','Admin'],['edit','Editor'],['view','Read only']];
@@ -389,7 +403,8 @@ const user=()=>{const m=me();return m?m.name:'auto';};
 function roBlock(){if(isRO()){alert('Your account is read only.\n\nYou can view, print and export everything, but not change it. Ask '+APP_ADMIN+' if you need to edit.');return true;}return false;}
 
 /* ===================== STATE ===================== */
-let S={settings:null,rooms:{},blockers:{},log:[],snaps:[],pins:{},plans:{}};
+let S={settings:null,rooms:{},blockers:{},log:[],snaps:[],pins:{},pinset:{},sess:null,plans:{}};
+let DATA_OK=!USE_FB;   // shared mode: rooms / blockers / snapshots received (they are only readable once signed in)
 let F={view:'cockpit',ss:'team',rv:'overview',ck:'live',more:false,mx:'act',sub:'all',resp:'all',floor:'all',next:'all',type:'all',q:'',blk:'all',colorBy:'next',quick:false,bStatus:'open',bFloor:'all',bCat:'all',bOwner:'all',bGroup:'none',bq:''};
 try{Object.assign(F,JSON.parse(lsGet(LSF,'{}')));}catch(e){}
 let drawerRoom=null;
@@ -538,7 +553,7 @@ const dref=(c,id)=>fb.doc(db,P+c,id);
 function setPath(o,path,v){const k=path.split('.');for(let i=0;i<k.length-1;i++){o[k[i]]=o[k[i]]||{};o=o[k[i]];}o[k[k.length-1]]=v;}
 function persist(){lsSet(LSK,JSON.stringify(S));render();}
 async function runOps(ops){for(let i=0;i<ops.length;i+=400){const b=fb.writeBatch(db);ops.slice(i,i+400).forEach(([k,c,id,v])=>k==='del'?b.delete(dref(c,id)):k==='upd'?b.update(dref(c,id),v):b.set(dref(c,id),v));await b.commit();}}
-const fail=e=>{console.error(e);alert('Save failed: '+e.message);};
+const fail=e=>{console.error(e);alert(e&&e.code==='permission-denied'?'Not saved: your account does not have the rights for this change.\n\nIf your role was just changed, or your PIN was reset, log out and log in again.':'Save failed: '+e.message);};
 const store={
   saveSettings(s){if(roBlock())return;if(USE_FB)return fb.setDoc(dref('settings','main'),s).catch(fail);S.settings=s;persist();},
   setRoom(r){if(roBlock())return;if(USE_FB)return fb.setDoc(dref('rooms',r.id),r).catch(fail);S.rooms[r.id]=r;persist();},
@@ -552,8 +567,23 @@ const store={
   delPhotos(ids){if(roBlock())return;if(USE_FB)return runOps(ids.map(id=>['del','blkphotos',id])).catch(e=>console.error(e));ids.forEach(id=>delete (S.bphotos||{})[id]);persist();},
   delBlocker(id){if(roBlock())return;if(USE_FB)return fb.deleteDoc(dref('blockers',id)).catch(fail);delete S.blockers[id];persist();},
   addLog(e){if(USE_FB)return fb.addDoc(fb.collection(db,P+'log'),e).catch(()=>{});S.log.unshift(e);S.log=S.log.slice(0,1500);},
-  savePin(name,hash){if(USE_FB)return fb.setDoc(dref('auth','pins'),{[name]:hash},{merge:true});S.pins[name]=hash;persist();return Promise.resolve();},
-  resetPin(name){if(USE_FB)return fb.setDoc(dref('auth','pins'),{[name]:fb.deleteField()},{merge:true}).catch(fail);delete S.pins[name];persist();},
+  /* first login: store the PIN hash (+ a public "PIN set" flag), then open the session */
+  async setFirstPin(name,pin){const k=pkey(name),h=await pinHash(name,pin);
+    if(USE_FB){const b=fb.writeBatch(db);b.set(dref('pins',k),{h});b.set(dref('pinflag',k),{at:Date.now()});await b.commit();return this.login(name,pin);}
+    S.pins[k]=h;delete S.pins[name];lsSet(LSU,name);persist();return true;},
+  /* true = signed in, false = wrong PIN. Shared mode: the Firestore rules accept the session only with the right hash. */
+  async login(name,pin){const k=pkey(name),h=await pinHash(name,pin),lh=simpleHash(name+pin);
+    if(!USE_FB){const ok=S.pins[k]===h||(!!S.pins[name]&&S.pins[name]===lh);if(!ok)return false;if(S.pins[name]){S.pins[k]=h;delete S.pins[name];}lsSet(LSU,name);persist();return true;}
+    // while the previous (open) rules are still published the PIN document is readable: check it here as well
+    try{const d=await fb.getDoc(dref('pins',k));if(!d.exists())return false;const p=d.data();if(!(p.h===h||(p.lh&&p.lh===lh)))return false;}
+    catch(e){if(e.code!=='permission-denied')throw e;}
+    try{await fb.setDoc(dref('sess',AUTH_UID),{k,h,lh,at:Date.now()});}catch(e){if(e.code==='permission-denied')return false;throw e;}
+    if(!S.sess||S.sess.k!==k)onSess({k,h,lh});   // don't wait for the listener
+    fb.setDoc(dref('pins',k),{h}).catch(()=>{});   // upgrade a legacy hash
+    lsSet(LSU,name);return true;},
+  logout(){lsSet(LSU,'');if(USE_FB)return fb.deleteDoc(dref('sess',AUTH_UID)).catch(e=>console.error(e));return Promise.resolve();},
+  resetPin(name){const k=pkey(name);if(USE_FB){const b=fb.writeBatch(db);b.delete(dref('pins',k));b.delete(dref('pinflag',k));return b.commit().catch(fail);}
+    delete S.pins[k];delete S.pins[name];persist();},
   saveSnaps(list){if(!list.length)return;if(USE_FB)return runOps(list.map(x=>['set','snapshots',x.id,x])).catch(e=>console.error(e));list.forEach(x=>{S.snaps=S.snaps.filter(y=>y.id!==x.id);S.snaps.push(x);});persist();},
   async savePlan(fid,meta,str,prog){if(roBlock())return;const old=S.plans[fid];
     if(USE_FB){for(let i=0;i<meta.chunks;i++){prog&&prog(i+1,meta.chunks);await fb.setDoc(dref('planchunks',`${fid}_${meta.ver}_${i}`),{d:str.slice(i*CHUNK,(i+1)*CHUNK)});}
@@ -572,7 +602,7 @@ const store={
     delete PLAN.mem[fid];try{localStorage.removeItem('rtft_plan_'+fid);}catch(e){}delete S.plans[fid];persist();},
   async addRooms(rooms){if(roBlock())return;if(USE_FB)return runOps(rooms.map(r=>['set','rooms',r.id,r])).catch(fail);rooms.forEach(r=>S.rooms[r.id]=r);persist();},
   async delRooms(roomIds,blkIds){if(roBlock())return;if(USE_FB)return runOps([...roomIds.map(id=>['del','rooms',id]),...blkIds.map(id=>['del','blockers',id])]).catch(fail);roomIds.forEach(id=>delete S.rooms[id]);blkIds.forEach(id=>delete S.blockers[id]);persist();},
-  async replaceAll(d){if(roBlock())return;
+  async replaceAll(d){if(roBlock())return;if(d.settings)d.settings.roles=rolesOf(d.settings);
     const rooms=Array.isArray(d.rooms)?d.rooms:Object.values(d.rooms||{});
     const blks=Array.isArray(d.blockers)?d.blockers:Object.values(d.blockers||{});
     if(USE_FB){
@@ -582,22 +612,44 @@ const store={
     S.settings=d.settings;S.rooms={};rooms.forEach(r=>S.rooms[r.id]=r);S.blockers={};blks.forEach(b=>S.blockers[b.id]=b);persist();
   }
 };
+let AUTH_UID=null;
 async function initFB(){
   const base='https://www.gstatic.com/firebasejs/10.12.2/';
   const [app,fs,au]=await Promise.all([import(base+'firebase-app.js'),import(base+'firebase-firestore.js'),import(base+'firebase-auth.js')]);
   const a=app.initializeApp(FIREBASE_CONFIG);db=fs.getFirestore(a);fb=fs;
-  await au.signInAnonymously(au.getAuth(a));
-  const got={s:0,r:0,b:0,n:0,p:0};let booted=false;
+  const cred=await au.signInAnonymously(au.getAuth(a));AUTH_UID=cred.user.uid;
+  migrateLegacyPins();
+  /* Phase 1 (readable before login): settings (team list), "PIN set" flags, this browser's session */
+  const got={s:0,p:0,u:0};let booted=false;
   return new Promise((res,rej)=>{
-    const ready=()=>{if(got.s&&got.r&&got.b&&got.n&&got.p){if(!booted){booted=true;res();}else render();}};
-    fs.onSnapshot(dref('auth','pins'),d=>{S.pins=d.exists()?d.data():{};got.p=1;ready();},rej);
-    fs.onSnapshot(fs.collection(db,P+'snapshots'),q=>{S.snaps=q.docs.map(d=>d.data());got.n=1;ready();},rej);
+    const ready=()=>{if(got.s&&got.p&&got.u){if(!booted){booted=true;res();}else render();}};
+    fs.onSnapshot(fs.collection(db,P+'pinflag'),q=>{const o={};q.forEach(d=>o[d.id]=1);S.pinset=o;got.p=1;ready();},rej);
     fs.onSnapshot(dref('settings','main'),d=>{S.settings=d.exists()?d.data():null;got.s=1;ready();},rej);
-    fs.onSnapshot(fs.collection(db,P+'rooms'),q=>{S.rooms={};q.forEach(d=>S.rooms[d.id]=d.data());got.r=1;ready();},rej);
-    fs.onSnapshot(fs.collection(db,P+'blockers'),q=>{S.blockers={};q.forEach(d=>S.blockers[d.id]=d.data());got.b=1;ready();},rej);
-    fs.onSnapshot(fs.collection(db,P+'plans'),q=>{S.plans={};q.forEach(d=>S.plans[d.id]=d.data());if(booted)render();},e=>console.error(e));
-    fs.onSnapshot(fs.query(fs.collection(db,P+'log'),fs.orderBy('ts','desc'),fs.limit(400)),q=>{S.log=q.docs.map(d=>d.data());if(booted)render();},()=>{});
+    // pending (not yet confirmed) writes are ignored: a session refused by the rules (wrong PIN) must never show up
+    fs.onSnapshot(dref('sess',AUTH_UID),d=>{if(d.metadata.hasPendingWrites)return;onSess(d.exists()?d.data():null);got.u=1;ready();},rej);
   });
+}
+/* Phase 2: the project data, subscribed once a session exists (the rules refuse it before) */
+let UNSUB=[],SESSK=null;
+function onSess(v){
+  S.sess=v;const k=v&&v.k||null;if(k===SESSK)return;SESSK=k;
+  UNSUB.forEach(u=>u());UNSUB=[];DATA_OK=false;Object.assign(S,{rooms:{},blockers:{},snaps:[],plans:{},log:[]});
+  if(!k){render();return;}
+  const fs=fb,got={r:0,b:0,n:0},on=(q,f,flag)=>UNSUB.push(fs.onSnapshot(q,x=>{f(x);if(flag){got[flag]=1;DATA_OK=got.r&&got.b&&got.n;}render();},e=>{console.error(e);if(flag){got[flag]=1;DATA_OK=got.r&&got.b&&got.n;render();}}));
+  on(fs.collection(db,P+'rooms'),q=>{S.rooms={};q.forEach(d=>S.rooms[d.id]=d.data());},'r');
+  on(fs.collection(db,P+'blockers'),q=>{S.blockers={};q.forEach(d=>S.blockers[d.id]=d.data());},'b');
+  on(fs.collection(db,P+'snapshots'),q=>{S.snaps=q.docs.map(d=>d.data());},'n');
+  on(fs.collection(db,P+'plans'),q=>{S.plans={};q.forEach(d=>S.plans[d.id]=d.data());});
+  on(fs.query(fs.collection(db,P+'log'),fs.orderBy('ts','desc'),fs.limit(400)),q=>{S.log=q.docs.map(d=>d.data());});
+}
+/* One-off move of the old PIN list (ft_auth/pins: name → weak hash, readable by everyone) to ft_pins/<key>.
+   Only possible while the previous open rules are still published; with the new rules ft_auth is unreadable. */
+async function migrateLegacyPins(){
+  try{const d=await fb.getDoc(dref('auth','pins'));if(!d.exists())return;const old=d.data(),b=fb.writeBatch(db);
+    for(const [name,lh] of Object.entries(old)){const k=pkey(name);if(!k||!lh)continue;const e=await fb.getDoc(dref('pins',k));if(e.exists())continue;
+      b.set(dref('pins',k),{lh});b.set(dref('pinflag',k),{at:Date.now()});}
+    b.delete(dref('auth','pins'));await b.commit();console.info('PINs moved to ft_pins');
+  }catch(e){if(e.code!=='permission-denied')console.error(e);}
 }
 
 /* ===================== ACTIONS ===================== */
@@ -626,6 +678,7 @@ const ralList=()=>`<datalist id="ralList">${Object.entries(RAL).map(([c,r])=>`<o
 function saveS(mut){const s=JSON.parse(JSON.stringify(S.settings));mut(s);
   // never drop a level that still has rooms or plans (protects against saving an out-of-date copy of the settings)
   missingFloors(s).forEach(f=>s.floors.push({id:f.id,name:f.name}));
+  s.roles=rolesOf(s);   // read by the Firestore rules
   store.saveSettings(s);}
 function floorRepairBanner(){
   if(!isAdmin())return '';const m=missingFloors();if(!m.length)return '';
@@ -651,7 +704,7 @@ function renderLogin(){
   const pinsOk=USE_FB?!!fb:true;
   if(LG.step==='pick'){
     const list=people().map(p=>p.name);
-    h+=`<div class="lg-title">Who are you?</div><div class="lg-sub">Select your name to continue</div><div class="lg-list">${list.map(n=>`<button class="lg-p" data-lgpick="${esc(n)}"><span class="lg-av">${esc(n[0]||'?')}</span><span>${esc(n)}</span><span style="margin-left:auto;font-size:10px;${S.pins[n]?'color:#aaa':'color:#c9a84c;font-weight:700'}">${S.pins[n]?'🔒 PIN set':'new'}</span></button>`).join('')}</div>${pinsOk?'':'<div class="lg-sub">Connecting…</div>'}`;
+    h+=`<div class="lg-title">Who are you?</div><div class="lg-sub">Select your name to continue</div><div class="lg-list">${list.map(n=>`<button class="lg-p" data-lgpick="${esc(n)}"><span class="lg-av">${esc(n[0]||'?')}</span><span>${esc(n)}</span><span style="margin-left:auto;font-size:10px;${hasPin(n)?'color:#aaa':'color:#c9a84c;font-weight:700'}">${hasPin(n)?'🔒 PIN set':'new'}</span></button>`).join('')}</div>${pinsOk?'':'<div class="lg-sub">Connecting…</div>'}`;
   }else if(LG.step==='pin'){
     h+=`<div class="lg-title">Hello, ${esc(LG.name.split(',').slice(-1)[0].trim()||LG.name)}</div><div class="lg-sub">Enter your 4-digit PIN</div>${LG.err?`<div class="lg-err">${esc(LG.err)}</div>`:''}
       <div class="pinbox">${[0,1,2,3].map(i=>`<div class="${LG.pin.length>i?'f':''}">${LG.pin[i]?'●':''}</div>`).join('')}</div>
@@ -666,25 +719,27 @@ function renderLogin(){
       <button class="btn pri" data-lgset="1" style="width:100%;padding:10px">Set PIN &amp; Continue</button></div>
       <button class="lg-link" data-lgback="1">← Back</button>`;
   }
-  $('#login').innerHTML=h+`</div><div style="margin-top:12px;font-size:11px;color:#9fb3c8;text-align:center">PINs are stored hashed in the shared database.<br>Only you know your PIN.</div>`;
+  $('#login').innerHTML=h+`</div><div style="margin-top:12px;font-size:11px;color:#9fb3c8;text-align:center">PINs are stored hashed and can't be read back.<br>Only you know your PIN.</div>`;
   if(LG.step==='new')setTimeout(()=>{const e=$('#lg_p1'),ae=document.activeElement;if(e&&!(ae&&ae.tagName==='INPUT'&&$('#login').contains(ae)))e.focus();},30);
 }
-function loginOk(n){lsSet(LSU,n);$('#login').classList.remove('open');$('#login').innerHTML='';render();}
+function loginOk(){$('#login').classList.remove('open');$('#login').innerHTML='';render();}
+const loginErr=e=>{console.error(e);LG.busy=false;LG.pin='';LG.err='No connection to the server. Try again.';renderLogin();};
 function pinKey(k){
   if(k==='del'){LG.pin=LG.pin.slice(0,-1);LG.err='';renderLogin();return;}
-  if(LG.pin.length>=4)return;LG.pin+=k;renderLogin();
-  if(LG.pin.length===4)setTimeout(()=>{if(simpleHash(LG.name+LG.pin)===S.pins[LG.name])loginOk(LG.name);else{LG.err='Wrong PIN. Try again.';LG.pin='';renderLogin();}},120);
+  if(LG.busy||LG.pin.length>=4)return;LG.pin+=k;renderLogin();
+  if(LG.pin.length===4){LG.busy=true;store.login(LG.name,LG.pin).then(ok=>{LG.busy=false;if(ok)loginOk();else{LG.err='Wrong PIN. Try again.';LG.pin='';renderLogin();}}).catch(loginErr);}
 }
 function loginClick(d){
-  if(d.lgpick!==undefined){if(USE_FB&&!fb){alert('Still connecting to the server, try again in a second.');return;}LG={step:S.pins[d.lgpick]?'pin':'new',name:d.lgpick,pin:'',err:''};renderLogin();return;}
+  if(d.lgpick!==undefined){if(USE_FB&&!fb){alert('Still connecting to the server, try again in a second.');return;}LG={step:hasPin(d.lgpick)?'pin':'new',name:d.lgpick,pin:'',err:''};renderLogin();return;}
   if(d.lgback!==undefined){LG={step:'pick',name:'',pin:'',err:''};renderLogin();return;}
   if(d.lgk!==undefined){pinKey(d.lgk);return;}
   if(d.lgset!==undefined){
     const a=$('#lg_p1').value,b=$('#lg_p2').value;
     if(!/^\d{4}$/.test(a)){LG.err='PIN must be 4 digits.';renderLogin();return;}
     if(a!==b){LG.err='PINs do not match.';renderLogin();return;}
-    const name=LG.name;
-    Promise.resolve(store.savePin(name,simpleHash(name+a))).then(()=>loginOk(name)).catch(()=>{LG.err='The PIN could not be saved (no connection to the server). Try again.';renderLogin();});
+    if(LG.busy)return;LG.busy=true;
+    store.setFirstPin(LG.name,a).then(ok=>{LG.busy=false;if(ok)loginOk();else{LG.err='This PIN could not be set (it may have just been set from another device). Go back and log in with your PIN.';renderLogin();}})
+      .catch(e=>{LG.busy=false;console.error(e);LG.err=e.code==='permission-denied'?'Your name is not in the team list any more, or a PIN is already set. Ask '+APP_ADMIN+'.':'The PIN could not be saved (no connection to the server). Try again.';renderLogin();});
   }
 }
 document.addEventListener('keydown',e=>{
@@ -695,7 +750,7 @@ document.addEventListener('keydown',e=>{
 function editPeople(fn){saveS(s=>{const l=peopleOf(s);fn(l);s.people=l;});}
 
 /* ===================== RENDER ===================== */
-let pending=false,migrating=false;
+let pending=false,migrating=false,RSAVE=false;
 const OPEN=new Set();   // keys of <details data-dk> the user has unfolded
 document.addEventListener('toggle',e=>{const d=e.target;if(d.dataset&&d.dataset.dk){if(d.open)OPEN.add(d.dataset.dk);else OPEN.delete(d.dataset.dk);}},true);
 const reopen=root=>{root.querySelectorAll('details[data-dk]').forEach(d=>{if(OPEN.has(d.dataset.dk))d.open=true;});sqRestore(root);};
@@ -709,6 +764,10 @@ function doRender(){
   sortSettings(S.settings);
   const m=me();
   if(!m){closeDrawer();if(!$('#login').classList.contains('open'))showLogin();else if(LG.step==='pick')renderLogin();return;}
+  if($('#login').classList.contains('open'))loginOk();
+  if(!DATA_OK){$('#view').innerHTML='<div class="empty">Loading…</div>';return;}
+  // keep settings.roles (read by the Firestore rules) in line with the team list
+  if(isAdmin()&&!RSAVE&&JSON.stringify(S.settings.roles||{})!==JSON.stringify(rolesOf(S.settings))){RSAVE=true;saveS(()=>{});setTimeout(()=>RSAVE=false,5000);}
   const ae=document.activeElement;
   if(ae&&ae.matches&&ae.matches('[data-hold]')){pending=true;return;}
   if(PLAN.drag||PLAN.box)return;   // a pin is being dragged: pointerup re-renders
@@ -1110,7 +1169,7 @@ function vSetup(){
   if(!isAdmin())return `<div class="card">Setup is reserved for admins.</div>`;
   const MK=[];let h='';MK.push(['team',0]);
   h+=`<div class="card"><h2>👥 Team & access</h2><p style="margin:0 0 10px;color:var(--mute);font-size:12px">Only the people in this list can open the app. On their first login they pick their name and choose a 4-digit PIN; next time, name + PIN. <b>Admin</b>: everything including Setup · <b>Editor</b>: statuses, hold points, blocking points, notes · <b>Read only</b>: view, print and export.</p>
-    <div class="tbwrap"><table class="tb"><thead><tr><th>Name</th><th>Role</th><th>PIN</th><th></th></tr></thead><tbody>${people().map(p=>{const own=isOwner(p.name);return `<tr><td><b>${esc(p.name)}</b>${own?' <span class="tag">owner</span>':''}</td><td>${own?'Admin':`<select data-prole="${esc(p.name)}">${ROLES.map(([v,l])=>`<option value="${v}" ${(p.role||'edit')===v?'selected':''}>${l}</option>`).join('')}</select>`}</td><td>${S.pins[p.name]?'🔒 set':'<span style="color:#b57800;font-weight:700">not yet</span>'}</td><td style="white-space:nowrap;text-align:right">${S.pins[p.name]?`<button class="btn sm" data-preset="${esc(p.name)}">Reset PIN</button> `:''}${own?'':`<button class="btn sm red" data-pdel="${esc(p.name)}">Remove</button>`}</td></tr>`;}).join('')}</tbody></table></div>
+    <div class="tbwrap"><table class="tb"><thead><tr><th>Name</th><th>Role</th><th>PIN</th><th></th></tr></thead><tbody>${people().map(p=>{const own=isOwner(p.name);return `<tr><td><b>${esc(p.name)}</b>${own?' <span class="tag">owner</span>':''}</td><td>${own?'Admin':`<select data-prole="${esc(p.name)}">${ROLES.map(([v,l])=>`<option value="${v}" ${(p.role||'edit')===v?'selected':''}>${l}</option>`).join('')}</select>`}</td><td>${hasPin(p.name)?'🔒 set':'<span style="color:#b57800;font-weight:700">not yet</span>'}</td><td style="white-space:nowrap;text-align:right">${hasPin(p.name)?`<button class="btn sm" data-preset="${esc(p.name)}">Reset PIN</button> `:''}${own?'':`<button class="btn sm red" data-pdel="${esc(p.name)}">Remove</button>`}</td></tr>`;}).join('')}</tbody></table></div>
     <div class="row" style="margin-top:10px"><textarea id="np_name" rows="2" placeholder="LASTNAME, Firstname (one per line)" style="flex:1;min-width:200px"></textarea><select id="np_role">${ROLES.map(([v,l])=>`<option value="${v}" ${v==='edit'?'selected':''}>${l}</option>`).join('')}</select><button class="btn pri" data-act="addperson">+ Add person</button></div>
     <p style="margin:8px 0 0;color:var(--mute);font-size:11px">Tip: paste several names at once, one per line. Use the same spelling as in MOM Tracker (e.g. “HORN, Philippe”).</p></div>`;
   MK.push(['general',h.length]);
@@ -1163,7 +1222,7 @@ function makeSnapshot(date){
 }
 let snapDone='';
 function ensureSnapshots(){
-  if(!S.settings||!Object.keys(S.rooms).length)return;
+  if(!S.settings||!DATA_OK||!me()||!Object.keys(S.rooms).length)return;
   const last=lastSaturday(),have=new Set(S.snaps.map(x=>x.id));
   if(have.has(last)||snapDone===last)return;
   const limit=addDays(last,-77);let first;
@@ -1442,7 +1501,7 @@ const ACT={
   clearfilters:()=>{Object.assign(F,{type:'all',sub:'all',resp:'all',blk:'all',q:'',next:'all'});if(F.view!=='plans')F.floor='all';render();},
   quickroom:quickRoom,
   close:closeDrawer,
-  user:()=>{if(!confirm('Log out of the Floor Tracker on this device?'))return;lsSet(LSU,'');closeDrawer();showLogin();},
+  user:()=>{if(!confirm('Log out of the Floor Tracker on this device?'))return;closeDrawer();store.logout().then(()=>{if(USE_FB)onSess(null);showLogin();});},
   addsub:()=>{const lines=$('#ns_name').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);if(!lines.length)return;saveS(s=>{s.subs=s.subs||[];lines.forEach(n=>{if(!s.subs.some(y=>y.name.toLowerCase()===n.toLowerCase()))s.subs.push({id:uid('s'),name:n});});});},
   addperson:()=>{const lines=$('#np_name').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean),role=$('#np_role').value;if(!lines.length)return;
     const have=people().map(p=>normName(p.name));const add=lines.filter((n,i)=>!have.includes(normName(n))&&lines.findIndex(x=>normName(x)===normName(n))===i);
@@ -1486,7 +1545,7 @@ document.addEventListener('click',e=>{
   const t=e.target.closest('[data-view],[data-f],[data-closeblk],[data-editblk],[data-newblk],[data-set],[data-cell],[data-room],[data-act],[data-gofloor],[data-actup],[data-actdown],[data-actdel],[data-typedel],[data-delfloor],[data-gonext],[data-preset],[data-pdel],[data-sqmv],[data-sqrm],[data-sqnew],[data-sqsort],[data-typecopy],[data-typeren],[data-typesync],[data-asg],[data-subdel]');
   if(!t)return;const d=t.dataset;if(inPop&&d.keep===undefined)setTimeout(closePop,0);
   if(d.preset){if(confirm(`Reset the PIN of ${d.preset}?\n\nThey will choose a new PIN at their next login.`))store.resetPin(d.preset);return;}
-  if(d.pdel){if(!confirm(`Remove ${d.pdel} from the team?\n\nThey will no longer be able to log in. Their past updates stay in the history.`))return;const n=d.pdel;editPeople(l=>{const i=l.findIndex(p=>p.name===n);if(i>=0)l.splice(i,1);});if(S.pins[n])store.resetPin(n);return;}
+  if(d.pdel){if(!confirm(`Remove ${d.pdel} from the team?\n\nThey will no longer be able to log in. Their past updates stay in the history.`))return;const n=d.pdel;editPeople(l=>{const i=l.findIndex(p=>p.name===n);if(i>=0)l.splice(i,1);});if(hasPin(n))store.resetPin(n);return;}
   if(d.asg){if(roBlock())return;const [rid,aid]=d.asg.split('|');asgModal(rid,aid);return;}
   if(d.subdel){const x=(S.settings.subs||[]).find(y=>y.id===d.subdel);if(!confirm(`Delete subcontractor “${x?x.name:''}”? Activities assigned to it become unassigned.`))return;saveS(s=>{s.subs=(s.subs||[]).filter(y=>y.id!==d.subdel);s.acts.forEach(a=>{if(a.sub===d.subdel)a.sub='';});});return;}
   if(d.sqmv){const [k,id,i,dir]=d.sqmv.split('|');setSeq(k,id,l=>{const a=+i,b=a+(+dir);if(b<0||b>=l.length)return l;[l[a],l[b]]=[l[b],l[a]];return l;});return;}

@@ -28,6 +28,27 @@ row to filter); the Cockpit list is sorted overdue first, then priority, then ag
 Firebase config goes at the top of index.html (FIREBASE_CONFIG).
 Empty config = local mode (data in the browser only).
 
+## Access & security
+Each person picks their name and a 4-digit PIN. The PIN hash (SHA-256) is in `ft_pins/<key>`, which **nobody can read**;
+signing in creates `ft_sess/<anonymous uid>` = {k: person key, h: hash}, and the Firestore rules accept it only if the
+hash matches. The app takes the signed-in person from that session (not from localStorage). Roles are enforced by
+`firestore.rules`, from `ft_settings/main.roles` (person key → admin / edit / view, kept up to date by the app):
+- not signed in: only the team list and the "PIN set" flags (`ft_pinflag`) for the login screen;
+- view: read everything, create the weekly snapshot;
+- edit: + rooms (no delete), blocking points, photos, log, plans, settings except `people` / `roles`;
+- admin: everything. The owner (`APP_ADMIN`, key `horn_philippe` hard-coded in the rules) is always admin.
+Person key = name normalised (accents / case / punctuation dropped, words sorted): "HORN, Philippe" → `horn_philippe`.
+Renaming a person changes the key: they choose a new PIN. The old PIN list `ft_auth/pins` is moved to `ft_pins`
+automatically and then deleted.
+
+**Deploying the access rules (once):**
+1. Publish the new `index.html` (GitHub Pages) and **open the app once as an admin** while the old rules are still
+   in place: it moves the old PINs to `ft_pins` and writes `settings.roles`.
+2. Then publish `firestore.rules` (Firebase console → Firestore → Rules, or `firebase deploy --only firestore:rules`).
+Everyone keeps their PIN. Tests of the rules: `cd tests && npm i && npm run test:rules` (needs Java for the emulator).
+A 4-digit PIN can still be guessed by someone who tries thousands of logins: for stronger protection, switch to
+Firebase Auth accounts (e-mail link) later.
+
 ## Floor plans (📐 Plans tab)
 Admins upload the plan of each floor as a **vector PDF exported from AutoCAD/Revit**
 (Plot → "DWG To PDF.pc3"), not a scan and not a DWG file.
