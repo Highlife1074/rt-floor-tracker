@@ -38,8 +38,19 @@ more than its crews max per day: steps are pushed later, rooms in order of earli
 both plans and its limit; table of peaks per activity (peak, average, suggested crews = average, finish ASAP vs
 leveled, delay caused) — edit "crews max" there or "Use all suggested crews"; finish per floor.
 **📅 Gantt:** rooms × days (week / day zoom), Done / In progress / Planned bars, today line, baseline under the bars.
+**Subcontractor crews:** each subcontractor can also have a crews max ("Peaks by subcontractor" table): all its
+activities share it, on top of the activity limits; the chart can show one subcontractor's load.
+**Duration of one room:** in the room panel, the small "d" field next to each step overrides the duration for that room
+(`r.pdur[stepId]`; empty = library / area).
 **Baseline** (admin): "📌 Save … as baseline" freezes the plan in `ft_baseline/main`; then the KPIs, Gantt, room
 panel and Cockpit show the drift (+n days). Excel export: plan (every step with dates) + peaks.
+
+**Hold points not respected:** setting a step to In progress / Done while an earlier hold point of the room is not
+released asks for confirmation; such steps are outlined in orange in the Matrix, flagged in the room panel, and listed
+in the Cockpit ("Work past an unreleased hold point").
+**Offline:** the data is cached on the device (Firestore persistent cache). Without network the header shows
+"🟠 Offline"; changes are kept on the device and sent automatically when the network is back. (Opening the page for the
+first time with no network at all still needs a connection: the page itself is not cached yet.)
 
 Firebase config goes at the top of index.html (FIREBASE_CONFIG).
 Empty config = local mode (data in the browser only).

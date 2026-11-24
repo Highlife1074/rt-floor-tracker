@@ -280,6 +280,18 @@ details.tools .tmenu .btn{text-align:left}
 .pdates{color:var(--acc);white-space:nowrap}
 .plchart text{font-family:inherit}
 @media print{.fab{display:none!important}.gwrap{max-height:none;overflow:visible}}
+.mx td.c.hpx{box-shadow:inset 0 0 0 3px #f97316}
+.hpxtag{color:#b45309;background:#fff1e0;border-radius:5px;padding:0 5px;font-weight:700;white-space:nowrap}
+input.dt.pdur{width:64px;border-style:solid;color:var(--ink)}
+@media (max-width:640px){
+  #drawer .arow{flex-wrap:wrap;row-gap:6px}
+  #drawer .arow .an{flex:1 1 calc(100% - 24px)}
+  #drawer .arow .seg{margin-left:18px}
+  #drawer .arow.hp .seg{margin-left:0}
+  #drawer .arow .seg button{padding:8px 12px}
+  #drawer input.dt{min-width:118px}#drawer input.dt.pdur{min-width:0}
+  .dh{padding:12px}.db{padding:6px 12px 30px}
+}
 @media print{.sticky,.noprint,#drawer,#scrim,#modal{display:none!important}.printonly{display:block}body{background:#fff}main{padding:0;max-width:none}.tile{break-inside:avoid}.mxwrap,.tbwrap{max-height:none;overflow:visible;border:0}.tb tr{break-inside:avoid}.planwrap{max-height:none;overflow:visible;border:0}.planin{width:100%!important}}
 @media (max-width:640px){.grid2{grid-template-columns:1fr}.tiles{grid-template-columns:repeat(auto-fill,minmax(145px,1fr))}main{padding:10px}.seg button{padding:7px 7px}}
 </style>
@@ -638,11 +650,20 @@ const store={
   }
 };
 let AUTH_UID=null;
+const SYNC={cache:false,pend:false};
+function setSync(){const el=$('#sync');if(!el||!USE_FB)return;const off=!navigator.onLine||SYNC.cache;
+  el.textContent=off?(SYNC.pend?'🟠 Offline · changes kept on this device':'🟠 Offline · showing saved data'):SYNC.pend?'⏳ Sending…':'🟢 Live · shared';
+  el.title=off?'No connection: you can keep working, your changes are sent automatically when the network is back.':'';}
+addEventListener('online',setSync);addEventListener('offline',setSync);
 async function initFB(){
   const base='https://www.gstatic.com/firebasejs/10.12.2/';
   const [app,fs,au]=await Promise.all([import(base+'firebase-app.js'),import(base+'firebase-firestore.js'),import(base+'firebase-auth.js')]);
-  const a=app.initializeApp(FIREBASE_CONFIG);db=fs.getFirestore(a);fb=fs;
-  const cred=await au.signInAnonymously(au.getAuth(a));AUTH_UID=cred.user.uid;
+  const a=app.initializeApp(FIREBASE_CONFIG);
+  // offline: data cached on the device (IndexedDB); changes made without network are sent when it comes back
+  try{db=fs.initializeFirestore(a,{localCache:fs.persistentLocalCache({tabManager:fs.persistentMultipleTabManager()})});}catch(e){console.warn('No offline cache',e);db=fs.getFirestore(a);}
+  fb=fs;
+  const AU=au.getAuth(a);try{await AU.authStateReady();}catch(e){}
+  AUTH_UID=AU.currentUser?AU.currentUser.uid:(await au.signInAnonymously(AU)).user.uid;   // signed in before = works offline
   migrateLegacyPins();
   /* Phase 1 (readable before login): settings (team list), "PIN set" flags, this browser's session */
   const got={s:0,p:0,u:0};let booted=false;
@@ -661,7 +682,9 @@ function onSess(v){
   UNSUB.forEach(u=>u());UNSUB=[];DATA_OK=false;Object.assign(S,{rooms:{},blockers:{},snaps:[],plans:{},log:[],baseline:null});
   if(!k){render();return;}
   const fs=fb,got={r:0,b:0,n:0},on=(q,f,flag)=>UNSUB.push(fs.onSnapshot(q,x=>{f(x);if(flag){got[flag]=1;DATA_OK=got.r&&got.b&&got.n;}render();},e=>{console.error(e);if(flag){got[flag]=1;DATA_OK=got.r&&got.b&&got.n;render();}}));
-  on(fs.collection(db,P+'rooms'),q=>{S.rooms={};q.forEach(d=>S.rooms[d.id]=d.data());},'r');
+  // rooms: also follows the sync state (cache / pending writes) for the indicator in the header
+  let firstR=true;UNSUB.push(fs.onSnapshot(fs.collection(db,P+'rooms'),{includeMetadataChanges:true},q=>{SYNC.cache=q.metadata.fromCache;SYNC.pend=q.metadata.hasPendingWrites;setSync();
+    if(!firstR&&!q.docChanges().length)return;firstR=false;S.rooms={};q.forEach(d=>S.rooms[d.id]=d.data());got.r=1;DATA_OK=got.r&&got.b&&got.n;render();},e=>{console.error(e);got.r=1;DATA_OK=got.r&&got.b&&got.n;render();}));
   on(fs.collection(db,P+'blockers'),q=>{S.blockers={};q.forEach(d=>S.blockers[d.id]=d.data());},'b');
   on(fs.collection(db,P+'snapshots'),q=>{S.snaps=q.docs.map(d=>d.data());},'n');
   on(fs.collection(db,P+'plans'),q=>{S.plans={};q.forEach(d=>S.plans[d.id]=d.data());});
@@ -675,13 +698,17 @@ async function migrateLegacyPins(){
     for(const [name,lh] of Object.entries(old)){const k=pkey(name);if(!k||!lh)continue;const e=await fb.getDoc(dref('pins',k));if(e.exists())continue;
       b.set(dref('pins',k),{lh});b.set(dref('pinflag',k),{at:Date.now()});}
     b.delete(dref('auth','pins'));await b.commit();console.info('PINs moved to ft_pins');
-  }catch(e){if(e.code!=='permission-denied')console.error(e);}
+  }catch(e){if(e.code!=='permission-denied'&&e.code!=='unavailable')console.error(e);}
 }
 
 /* ===================== ACTIONS ===================== */
-function setStatus(rid,aid,s,day){
+/* Hold points: a step started / done while an earlier hold point of the room is not released yet */
+function hpOpenBefore(r,aid){const l=roomActs(r),i=l.indexOf(aid);for(let k=0;k<i;k++)if(isHP(l[k])&&st(r,l[k])<2)return l[k];return null;}
+function hpBreach(r){const o=[];let open=null;roomActs(r).forEach(id=>{if(isHP(id)){if(!open&&st(r,id)<2)open=id;return;}if(open&&st(r,id)>0)o.push({id,hp:open});});return o;}
+function setStatus(rid,aid,s,day,force){
   if(roBlock())return;
   const r=S.rooms[rid];if(!r)return;const prev=st(r,aid);if(prev===s)return;
+  if(!force&&s>prev&&!isHP(aid)){const h=hpOpenBefore(r,aid);if(h&&!confirm(`⚠ Hold point not released in ${r.code}:\n${actById(h).name} is “${lbl(h,st(r,h))}”.\n\nWork after a hold point should wait for its release.\nSet “${actById(aid).name}” to “${lbl(aid,s)}” anyway?`))return;}
   const dt=day||today(),cur=(r.st&&r.st[aid])||{};const v={s,by:user(),d:dt};
   if(s>=1)v.ds=cur.ds||dt;if(s===2)v.dd=dt;
   store.addLog({ts:Date.now(),by:user(),roomId:rid,code:r.code,actId:aid,from:prev,to:s});
@@ -936,7 +963,9 @@ function mxApply(v,fromCell){
   const todo=rs.filter(r=>st(r,act.id)!==v);if(!todo.length)return alert(`All the selected rooms are already “${w[v]}” for ${act.name}.`);
   const day=MX.date&&MX.date<=today()?MX.date:today();
   if(!confirm(`${fromCell?'Multi-select is on: apply to all the selected rooms.\n\n':''}Set “${act.name}” to “${w[v]}” in ${todo.length} room(s)?${v?`\n\nDate: ${fmtLong(day)}`:''}${rs.length<MX.sel.size?`\n\n${MX.sel.size-rs.length} selected room(s) don't have this activity and are skipped.`:''}`))return;
-  todo.forEach(r=>setStatus(r.id,act.id,v,day));render();
+  const hpN=v&&!act.isHp?todo.filter(r=>hpOpenBefore(r,act.id)).length:0;
+  if(hpN&&!confirm(`⚠ In ${hpN} of these room(s) a hold point before “${act.name}” is not released yet.\n\nContinue anyway?`))return;
+  todo.forEach(r=>setStatus(r.id,act.id,v,day,true));render();
 }
 document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-mxset],[data-mxacth]');if(!b)return;
   if(b.dataset.mxset!==undefined){mxApply(+b.dataset.mxset);return;}
@@ -954,7 +983,7 @@ function vMatrix(){
   const s=S.settings,list=filtered(),seq=F.mx==='seq',tm=MX.tmode&&!isRO();
   let h=filterBar('matrix');
   if(!isRO())h+=mxTypeBar(list,tm);
-  const lg=`<span><i class="sq" style="background:var(--done);border:0"></i>Done</span><span><i class="sq" style="background:var(--wip);border:0"></i>In progress</span><span><i class="sq"></i>To do</span><span><i class="sq" style="background:var(--blk);border:0"></i>Blocked</span><span>◆ Hold point: <i class="sq" style="background:var(--hp);border:0"></i>requested · <i class="sq" style="background:var(--done);border:0"></i>released</span>`;
+  const lg=`<span><i class="sq" style="background:var(--done);border:0"></i>Done</span><span><i class="sq" style="background:var(--wip);border:0"></i>In progress</span><span><i class="sq"></i>To do</span><span><i class="sq" style="background:var(--blk);border:0"></i>Blocked</span><span>◆ Hold point: <i class="sq" style="background:var(--hp);border:0"></i>requested · <i class="sq" style="background:var(--done);border:0"></i>released</span><span><i class="sq" style="box-shadow:inset 0 0 0 2px #f97316;border:0"></i>done before the hold point release</span>`;
   h+=`<div class="legend noprint">${lg}${seq?'<span>Each row reads left → right in the room’s own sequence (activity short codes)</span>':`<span>Number = step of the activity in the room’s sequence</span><span><i class="sq" style="background:linear-gradient(225deg,#7e57c2 6px,#fff 6px)"></i>done in a different order than the columns</span><span>Columns: ${F.type!=='all'?'sequence of the “'+esc(typeById(F.type)?.name||'')+'” template':'dominant order of the rooms shown'}</span>`}<span><b>Click a cell</b> to set To do / WIP / Done</span></div>`;
   h+=`<div class="printonly"><h2>${esc(s.project)} — Status matrix (${seq?'by sequence':'by activity'}) — ${fmtLong(today())}</h2></div>`;
   let cols=[],order=[],N=0;
@@ -970,10 +999,10 @@ function vMatrix(){
     rs.forEach((r,ri)=>{
       if(!ri||rs[ri-1].type!==r.type){const g=rs.filter(x=>x.type===r.type),tn=(typeById(r.type)||{}).name||'No type';
         h+=`<tr class="tg"><td class="rh">${tm?`<input type="checkbox" class="mxck" data-mxfl="${f.id}|${r.type||''}" ${g.every(x=>MX.sel.has(x.id))?'checked':''} title="Select the rooms of this type on this floor">`:''}<i class="sq" style="background:${typeCol(r.type)};border:0"></i> ${esc(tn)} <small>(${g.length})</small></td><td colspan="${nCols+2}"></td></tr>`;}
-      const bl=openBlk(r),ra=roomActs(r),q=cleanSeq(r.acts);
+      const bl=openBlk(r),ra=roomActs(r),q=cleanSeq(r.acts),bx=new Set(hpBreach(r).map(x=>x.id));
       h+=`<tr class="${tm&&MX.sel.has(r.id)?'msel':''}"><td class="rh">${tm?`<input type="checkbox" class="mxck" data-mxsel="${r.id}" ${MX.sel.has(r.id)?'checked':''}>`:''}<a href="#" tabindex="-1" data-room="${r.id}"><b>${esc(r.code)}</b></a> <span style="color:var(--mute)">${esc(r.name)}</span>${tm?` <span class="tytag" style="background:${typeCol(r.type)}">${esc((typeById(r.type)||{}).name||'No type')}</span>`:''}${bl.length?` <span class="badge red">⚠${bl.length}</span>`:''}</td><td class="cmt"><input data-hold data-rnote="${r.id}" value="${esc((r.note||'').replace(/\n/g,' · '))}" placeholder="${isRO()?'':'Add a comment…'}" title="${esc(r.note||'')}" ${isRO()?'readonly':''}></td>`;
       const cell=(a,extra,inner,tipStep)=>{const sv=st(r,a.id),b=bl.some(x=>x.actId===a.id),g=asg(r,a.id);
-        return `<td class="c s${sv} ${a.isHp?'hp':''} ${b?'b':''} ${F.next===a.id?'hl':''} ${extra}" data-cell="${r.id}|${a.id}" title="${esc(r.code+' · '+tipStep+a.name+' · '+(b?'BLOCKED':lbl(a.id,sv))+(g.sub&&!a.isHp?' · '+subName(g.sub):'')+(g.resp?' · '+g.resp:''))}">${b?'!':inner}</td>`;};
+        return `<td class="c s${sv} ${a.isHp?'hp':''} ${b?'b':''} ${bx.has(a.id)?'hpx':''} ${F.next===a.id?'hl':''} ${extra}" data-cell="${r.id}|${a.id}" title="${esc(r.code+' · '+tipStep+a.name+' · '+(b?'BLOCKED':lbl(a.id,sv))+(bx.has(a.id)?' · ⚠ before HP release':'')+(g.sub&&!a.isHp?' · '+subName(g.sub):'')+(g.resp?' · '+g.resp:''))}">${b?'!':inner}</td>`;};
       if(seq){
         for(let i=0;i<N;i++){const id=ra[i];if(!id){h+=`<td class="empty"></td>`;continue;}const a=actById(id);
           h+=cell(a,'cq',a.isHp?'◆':`<span style="${st(r,id)===0?'border-bottom:3px solid '+a.color:''}">${esc(a.short||a.name.slice(0,3))}</span>`,`step ${i+1} · `);}
@@ -1157,6 +1186,8 @@ function vCockpit(){
     <div class="kpi"><b style="color:var(--hp)">${hpWait.length}</b><span>◆ Rooms waiting for a hold point</span><small style="color:var(--mute)">${hpReq} inspection(s) requested</small></div>
     <div class="kpi"><b>${doneWk}</b><span>Activities completed (last 7 days)</span></div></div>`;
   // progress by floor (click = see the rooms of that floor)
+  {const hb=rooms.map(r=>({r,l:hpBreach(r)})).filter(x=>x.l.length).sort((a,b)=>floorIdx(a.r.floor)-floorIdx(b.r.floor)||byCode(a.r,b.r));
+   if(hb.length)h+=`<div class="card" style="border-color:#f3b37a"><h2 style="color:#b45309">⚠ Work past an unreleased hold point <small style="font-weight:400;color:var(--mute)">${hb.length} room(s)</small></h2><div class="row">${hb.slice(0,40).map(x=>`<button class="chip" data-room="${x.r.id}" title="${esc(x.l.map(y=>actById(y.id).name+' (after '+actById(y.hp).name+')').join('\n'))}"><b>${esc(x.r.code)}</b> <small>${x.l.length} step(s)</small></button>`).join('')}${hb.length>40?`<small>+${hb.length-40} more</small>`:''}</div></div>`;}
   h+=`<div class="grid2"><div class="card"><h2>Progress by floor</h2>`;
   s.floors.forEach(f=>{const rs=rooms.filter(r=>r.floor===f.id);if(!rs.length)return;const p=avg(rs.map(progress)),bk=new Set(open.filter(b=>S.rooms[b.roomId]?.floor===f.id).map(b=>b.roomId)).size;
     h+=`<div class="row flrow" data-gofloor="${f.id}" title="Show the rooms of ${esc(f.name)}" style="margin:8px 0"><b style="width:90px">${esc(f.name)}</b><div class="bar" style="max-width:none;height:14px"><i style="width:${pc(p)}%"></i></div><b style="width:42px;text-align:right">${pc(p)}%</b><small style="color:var(--mute);width:150px">${rs.filter(r=>!nextStep(r)).length}/${rs.length} rooms done${bk?` · <span style="color:var(--blk);font-weight:700">${bk} blocked</span>`:''}</small></div>`;});
@@ -1256,9 +1287,9 @@ function calendar(){
   return {isW,next,add,count};
 }
 const roomArea=r=>{const v=parseFloat(String(r.area||'').replace(',','.'));return v>0?v:0;};
-function stepDur(r,id){
+function stepDur(r,id,noOv){
   if(isHP(id))return Math.max(0,pcfg().hp);
-  const ov=r.pdur&&+r.pdur[id];if(ov>0)return ov;
+  const ov=!noOv&&r.pdur&&+r.pdur[id];if(ov>0)return ov;
   const a=S.settings.acts.find(x=>x.id===baseOf(id));if(!a)return 1;
   const ar=roomArea(r);if(+a.rate>0&&ar)return Math.max(.25,Math.round(ar/a.rate*4)/4);
   return +a.dur>0?+a.dur:1;
@@ -1266,24 +1297,27 @@ function stepDur(r,id){
 let PLC=null;   // cache {asap, lev}, cleared at every render (data may have changed)
 function planOf(mode){PLC=PLC||{};return PLC[mode]=PLC[mode]||planCompute(mode==='lev');}
 const plMode=()=>F.plMode==='asap'?'asap':'lev';
-const hasCaps=()=>S.settings.acts.some(a=>+a.crews>0);
+const hasCaps=()=>S.settings.acts.some(a=>+a.crews>0)||(S.settings.subs||[]).some(x=>+x.crews>0);
 function planCompute(level){
-  const c=pcfg(),C=calendar(),T=dn(today()),P0=c.start?dn(c.start):T,use={},caps={},tasks=[],byRoom={};
-  S.settings.acts.forEach(a=>caps[a.id]=+a.crews>0?+a.crews:0);
-  const addUse=(b,s,e,ld)=>{if(!ld)return;const u=use[b]=use[b]||{};for(let n=s;n<=e;n++)if(C.isW(n))u[n]=(u[n]||0)+ld;};
-  const fits=(b,s,D,ld,cap)=>{const u=use[b]||{};let n=s;for(let k=0;k<D;k++){if((u[n]||0)+ld>cap+1e-6)return false;n=C.next(n+1);}return true;};
+  const c=pcfg(),C=calendar(),T=dn(today()),P0=c.start?dn(c.start):T,use={},useS={},caps={},capsS={},tasks=[],byRoom={};
+  S.settings.acts.forEach(a=>caps[a.id]=+a.crews>0?+a.crews:0);(S.settings.subs||[]).forEach(x=>capsS[x.id]=+x.crews>0?+x.crews:0);
+  // load per activity (use) and per subcontractor (useS)
+  const addUse=t=>{if(!t.ld)return;const u=use[t.b]=use[t.b]||{},v=t.sub?(useS[t.sub]=useS[t.sub]||{}):null;
+    for(let n=t.s;n<=t.e;n++)if(C.isW(n)){u[n]=(u[n]||0)+t.ld;if(v)v[n]=(v[n]||0)+t.ld;}};
+  const fits=(t,s,cap,capS)=>{const u=use[t.b]||{},v=(t.sub&&useS[t.sub])||{};let n=s;
+    for(let k=0;k<t.D;k++){if(cap&&(u[n]||0)+t.ld>cap+1e-6)return false;if(capS&&(v[n]||0)+t.ld>capS+1e-6)return false;n=C.next(n+1);}return true;};
   const pend=[];
   roomsList().forEach(r=>{
     const f=floorById(r.floor),base=C.next(Math.max(T,P0,f&&f.start?dn(f.start):0,r.pstart?dn(r.pstart):0)),q=[];let prev=-1e9;
     byRoom[r.id]={};
     roomActs(r).forEach(id=>{
-      const o=(r.st||{})[id]||{},sv=o.s||0,d=stepDur(r,id),D=Math.ceil(d-1e-9),ld=isHP(id)||!D?0:d/D,t={rid:r.id,id,b:baseOf(id),d,D,ld,sv};
+      const o=(r.st||{})[id]||{},sv=o.s||0,d=stepDur(r,id),D=Math.ceil(d-1e-9),ld=isHP(id)||!D?0:d/D,t={rid:r.id,id,b:baseOf(id),d,D,ld,sv,sub:isHP(id)?'':asg(r,id).sub||''};
       if(sv===2){t.e=dn(o.dd||o.d||today());t.s=Math.min(t.e,dn(o.ds||o.dd||o.d||today()));}
       else if(sv===1){t.s=dn(o.ds||o.d||today());t.e=D?C.add(t.s,D-1):t.s;if(t.e<T)t.e=C.next(T);}
       else{q.push(t);return;}
       // real dates: the crew-days of the step are spread over the working days it actually took
       if(t.ld){const k=C.count(t.s,t.e);t.ld=k?Math.min(1,t.d/k):t.ld;}
-      addUse(t.b,t.s,t.e,t.ld);prev=Math.max(prev,t.e);tasks.push(t);byRoom[r.id][id]=t;
+      addUse(t);prev=Math.max(prev,t.e);tasks.push(t);byRoom[r.id][id]=t;
     });
     if(q.length)pend.push({r,q,prev,base,fi:floorIdx(r.floor)});
   });
@@ -1294,18 +1328,28 @@ function planCompute(level){
     let bi=0;for(let i=1;i<act.length;i++){const a=act[i],b=act[bi];if(a.es<b.es||(a.es===b.es&&(a.fi<b.fi||(a.fi===b.fi&&byCode(a.r,b.r)<0))))bi=i;}
     const p=act[bi],t=p.q.shift();let s=p.es;
     if(!t.D){t.s=t.e=Math.max(p.prev,p.base);}
-    else{const cap=level?caps[t.b]:0;if(cap){const cp=Math.max(cap,t.ld);for(let g=0;g<3000&&!fits(t.b,s,t.D,t.ld,cp);g++)s=C.next(s+1);}
-      t.s=s;t.e=C.add(s,t.D-1);addUse(t.b,t.s,t.e,t.ld);}
+    else{const cap=level?caps[t.b]:0,capS=level&&t.sub?capsS[t.sub]:0;
+      if(cap||capS){const cp=cap?Math.max(cap,t.ld):0,cs=capS?Math.max(capS,t.ld):0;for(let g=0;g<3000&&!fits(t,s,cp,cs);g++)s=C.next(s+1);}
+      t.s=s;t.e=C.add(s,t.D-1);addUse(t);}
     p.prev=Math.max(p.prev,t.e);tasks.push(t);byRoom[p.r.id][t.id]=t;
     if(p.q.length)p.es=esOf(p);else act.splice(bi,1);
   }
   let end=-1e9,start=1e9;const fEnd={},rEnd={};
   tasks.forEach(t=>{end=Math.max(end,t.e);start=Math.min(start,t.s);const r=S.rooms[t.rid];rEnd[t.rid]=Math.max(rEnd[t.rid]||-1e9,t.e);fEnd[r.floor]=Math.max(fEnd[r.floor]||-1e9,t.e);});
-  return {tasks,byRoom,use,end:tasks.length?end:null,start:tasks.length?start:null,fEnd,rEnd,T,C,level};
+  return {tasks,byRoom,use,useS,end:tasks.length?end:null,start:tasks.length?start:null,fEnd,rEnd,T,C,level};
 }
 /* daily load of an activity (or all) as [{n, v, by:{base:load}}] between a and b */
-const planLoad=(pl,a,b,only)=>{const out=[];for(let n=a;n<=b;n++){if(!pl.C.isW(n))continue;const by={};let v=0;
-  for(const k in pl.use){if(only&&only!=='all'&&k!==only)continue;const x=pl.use[k][n];if(x){by[k]=x;v+=x;}}out.push({n,v,by});}return out;};
+const isSubSel=x=>String(x||'').startsWith('sub:');
+const planLoad=(pl,a,b,only)=>{const sub=isSubSel(only),src=sub?{[only]:pl.useS[only.slice(4)]||{}}:pl.use,out=[];
+  for(let n=a;n<=b;n++){if(!pl.C.isW(n))continue;const by={};let v=0;
+    for(const k in src){if(!sub&&only&&only!=='all'&&k!==only)continue;const x=src[k][n];if(x){by[k]=x;v+=x;}}out.push({n,v,by});}return out;};
+/* Per-subcontractor figures (load of all its activities together) */
+function subStats(){
+  const A=planOf('asap'),L=planOf('lev'),T=A.T,pk=u=>{let m=0,at=null;for(const n in u){if(+n<T)continue;if(u[n]>m+1e-9){m=u[n];at=+n;}}return {m,at};};
+  return (S.settings.subs||[]).map(x=>{const ts=A.tasks.filter(t=>t.sub===x.id&&!t.sv),tl=L.tasks.filter(t=>t.sub===x.id&&!t.sv);if(!ts.length)return null;
+    const work=ts.reduce((a,t)=>a+t.d,0),s0=Math.min(...ts.map(t=>t.s)),ea=Math.max(...ts.map(t=>t.e)),el=Math.max(...tl.map(t=>t.e)),wd=A.C.count(s0,ea),avgC=wd?work/wd:0;
+    return {x,n:new Set(ts.map(t=>t.rid)).size,work,peakA:pk(A.useS[x.id]||{}),peakL:pk(L.useS[x.id]||{}),avg:avgC,sug:Math.max(1,Math.ceil(avgC-1e-6)),endA:ea,endL:el};}).filter(Boolean);
+}
 /* Per-activity figures for the peaks table */
 function planStats(){
   const A=planOf('asap'),L=planOf('lev'),T=A.T,res=[];
@@ -1350,14 +1394,15 @@ function vPlanning(){
   return h;
 }
 function plLoadView(A,L,P){
-  const only=F.plAct&&F.plAct!=='all'&&S.settings.acts.some(a=>a.id===F.plAct)?F.plAct:'all';
+  const only=F.plAct&&F.plAct!=='all'&&(S.settings.acts.some(a=>a.id===F.plAct)||(isSubSel(F.plAct)&&(S.settings.subs||[]).some(x=>'sub:'+x.id===F.plAct)))?F.plAct:'all';
+  const onlySub=isSubSel(only)?(S.settings.subs||[]).find(x=>'sub:'+x.id===only):null;
   const a0=Math.min(A.T,P.start),a1=Math.max(A.end,L.end),days=a1-a0+1,week=F.plGran==='d'?false:F.plGran==='w'?true:days>100;
-  const actC=id=>(S.settings.acts.find(a=>a.id===id)||{}).color||'#999';
+  const actC=id=>isSubSel(id)?'#3d6a99':(S.settings.acts.find(a=>a.id===id)||{}).color||'#999';
   // buckets
   const mk=pl=>{const d=planLoad(pl,a0,a1,only);if(!week)return d.map(x=>({n:x.n,v:x.v,by:x.by,k:1}));
     const o=[];d.forEach(x=>{const wk=x.n-((dowN(x.n)+6)%7);let b=o[o.length-1];if(!b||b.n!==wk){b={n:wk,v:0,by:{},k:0};o.push(b);}b.k++;b.v+=x.v;for(const k in x.by)b.by[k]=(b.by[k]||0)+x.by[k];});
     o.forEach(b=>{b.v/=b.k;for(const k in b.by)b.by[k]/=b.k;});return o;};
-  const bp=mk(P),bo=mk(P===L?A:L),cap=only!=='all'?+(S.settings.acts.find(a=>a.id===only)||{}).crews||0:0;
+  const bp=mk(P),bo=mk(P===L?A:L),cap=onlySub?+onlySub.crews||0:only!=='all'?+(S.settings.acts.find(a=>a.id===only)||{}).crews||0:0;
   const max=Math.max(1,...bp.map(b=>b.v),...(only!=='all'?bo.map(b=>b.v):[]),cap)*1.1,W=Math.max(10,Math.min(28,Math.floor(1100/Math.max(1,bp.length)))),H=220,X=40;
   const y=v=>H-v/max*H;
   let svg=`<svg viewBox="0 0 ${X+bp.length*W+10} ${H+34}" style="width:100%;min-width:${Math.min(1200,X+bp.length*W)}px;height:auto" class="plchart">`;
@@ -1374,10 +1419,10 @@ function plLoadView(A,L,P){
   svg+='</svg>';
   const stats=planStats().sort((p,q)=>q.peakA.m-p.peakA.m);
   let h=`<div class="card"><div class="row" style="margin-bottom:8px"><h2 style="margin:0">Workload — crews needed${week?' (weekly average per working day)':' per working day'}</h2><span class="sp"></span>
-    <select data-pgsel="plAct"><option value="all">All activities (stacked)</option>${[...S.settings.acts].sort(byNm).map(a=>`<option value="${a.id}" ${only===a.id?'selected':''}>${esc(a.name)}</option>`).join('')}</select>
+    <select data-pgsel="plAct"><option value="all">All activities (stacked)</option><optgroup label="Activity">${[...S.settings.acts].sort(byNm).map(a=>`<option value="${a.id}" ${only===a.id?'selected':''}>${esc(a.name)}</option>`).join('')}</optgroup>${(S.settings.subs||[]).length?`<optgroup label="Subcontractor (all its activities)">${[...S.settings.subs].sort(byNm).map(x=>`<option value="sub:${x.id}" ${only==='sub:'+x.id?'selected':''}>🏗 ${esc(x.name)}</option>`).join('')}</optgroup>`:''}</select>
     <div class="seg">${[['auto','Auto'],['d','Days'],['w','Weeks']].map(([k,l])=>`<button class="${(F.plGran||'auto')===k?'on0':''}" data-pg="plGran|${k}">${l}</button>`).join('')}</div></div>
     <div style="overflow-x:auto">${svg}</div>
-    <div class="legend" style="margin:6px 0 0">${only==='all'?[...new Set(Object.keys(P.use))].sort((p,q)=>libOrd(p)-libOrd(q)).map(k=>`<span><i class="sq" style="background:${actC(k)};border:0"></i>${esc((S.settings.acts.find(a=>a.id===k)||{}).name||k)}</span>`).join(''):`<span><i class="sq" style="background:${actC(only)};border:0"></i>${plMode()==='lev'?'Leveled':'As soon as possible'}</span><span><i class="sq" style="border:1px dashed var(--ink)"></i>${plMode()==='lev'?'As soon as possible':'Leveled'}</span>${cap?'<span style="color:var(--blk)">– – crew limit</span>':''}`}</div></div>`;
+    <div class="legend" style="margin:6px 0 0">${only==='all'?[...new Set(Object.keys(P.use))].sort((p,q)=>libOrd(p)-libOrd(q)).map(k=>`<span><i class="sq" style="background:${actC(k)};border:0"></i>${esc((S.settings.acts.find(a=>a.id===k)||{}).name||k)}</span>`).join(''):`<span><i class="sq" style="background:${actC(only)};border:0"></i>${onlySub?'🏗 '+esc(onlySub.name)+' — ':''}${plMode()==='lev'?'Leveled':'As soon as possible'}</span><span><i class="sq" style="border:1px dashed var(--ink)"></i>${plMode()==='lev'?'As soon as possible':'Leveled'}</span>${cap?'<span style="color:var(--blk)">– – crew limit</span>':''}`}</div></div>`;
   h+=`<div class="card"><h2>Peaks by activity — set the crews to level them</h2>
     <p style="margin:-4px 0 10px;color:var(--mute);font-size:12px">“Crews max” = how many crews can work on this activity at the same time. The leveled plan never goes above it: the peaks are spread over the following days and the finish date moves if needed. “Suggested” = average crews needed over the activity's period: the peaks are flattened, the finish can move by a few days — check “Finish leveled”. Click a row to see that activity alone in the chart.</p>
     <div class="tbwrap"><table class="tb"><thead><tr><th>Activity</th><th>Rooms to do</th><th>Crew-days</th><th>Peak ASAP</th><th>Average</th><th>Suggested</th><th>Crews max</th><th>Peak leveled</th><th>Finish ASAP</th><th>Finish leveled</th></tr></thead><tbody>
@@ -1388,6 +1433,14 @@ function plLoadView(A,L,P){
       <td>${isAdmin()?`<input type="number" min="0" step="1" style="width:64px" data-pact="crews|${x.a.id}" value="${+x.a.crews>0?+x.a.crews:''}" placeholder="∞">`:(+x.a.crews>0?+x.a.crews:'∞')}</td>
       <td>${+x.a.crews>0?x.peakL.m.toFixed(1):'—'}</td><td>${x.endA!=null?fmtN(x.endA):'—'}</td><td>${x.endL!=null?fmtN(x.endL)+(dl>0?` <small class="overdue">+${dl} d</small>`:''):'—'}</td></tr>`;}).join('')||'<tr><td colspan="10" class="empty">Nothing left to plan.</td></tr>'}
     </tbody></table></div>${isAdmin()&&stats.some(x=>+x.a.crews!==x.sug)?`<div class="row" style="margin-top:8px"><button class="btn" data-pg="capall|1">Use all suggested crews</button><button class="btn" data-pg="capnone|1">Remove all limits</button></div>`:''}</div>`;
+  const ss=subStats();
+  if(ss.length)h+=`<div class="card"><h2>Peaks by subcontractor</h2><p style="margin:-4px 0 10px;color:var(--mute);font-size:12px">All the activities of a subcontractor share its crews (assignment from the activity library, or room-specific). Its “Crews max” applies on top of the activity limits. Click a row to see its load in the chart.</p>
+    <div class="tbwrap"><table class="tb"><thead><tr><th>Subcontractor</th><th>Rooms</th><th>Crew-days</th><th>Peak ASAP</th><th>Average</th><th>Suggested</th><th>Crews max</th><th>Peak leveled</th><th>Finish ASAP</th><th>Finish leveled</th></tr></thead><tbody>
+    ${ss.sort((p,q)=>q.peakA.m-p.peakA.m).map(y=>{const dl=P.C.count(Math.min(y.endA,y.endL),Math.max(y.endA,y.endL))-1;
+      return `<tr class="click" data-pgsel-row="sub:${y.x.id}"><td><b>🏗 ${esc(y.x.name)}</b></td><td>${y.n}</td><td>${y.work.toFixed(1)}</td><td><b style="color:${+y.x.crews>0&&y.peakA.m>+y.x.crews+1e-6?'var(--blk)':'inherit'}">${y.peakA.m.toFixed(1)}</b>${y.peakA.at!=null?`<br><small style="color:var(--mute)">${fmtN(y.peakA.at)}</small>`:''}</td>
+      <td>${y.avg.toFixed(1)}</td><td>${isAdmin()&&+y.x.crews!==y.sug?`<button class="btn sm" data-pgsubcap="${y.x.id}|${y.sug}">${y.sug} ←</button>`:y.sug}</td>
+      <td>${isAdmin()?`<input type="number" min="0" step="1" style="width:64px" data-psub="${y.x.id}" value="${+y.x.crews>0?+y.x.crews:''}" placeholder="∞">`:(+y.x.crews>0?+y.x.crews:'∞')}</td>
+      <td>${+y.x.crews>0||hasCaps()?y.peakL.m.toFixed(1):'—'}</td><td>${fmtN(y.endA)}</td><td>${fmtN(y.endL)}${dl>0?` <small class="overdue">+${dl} d</small>`:''}</td></tr>`;}).join('')}</tbody></table></div></div>`;
   // floors
   h+=`<div class="card"><h2>Forecast by floor</h2><div class="tbwrap"><table class="tb"><thead><tr><th>Floor</th><th>Rooms</th><th>Finish ASAP</th><th>Finish leveled</th>${S.baseline&&S.baseline.fEnd?'<th>Baseline</th>':''}</tr></thead><tbody>${S.settings.floors.map(f=>{const n=Object.values(S.rooms).filter(r=>r.floor===f.id).length;if(!n)return '';const be=S.baseline&&S.baseline.fEnd&&S.baseline.fEnd[f.id];
     return `<tr><td><b>${esc(f.name)}</b>${f.start?`<br><small style="color:var(--mute)">start ${fmtD(f.start)}</small>`:''}</td><td>${n}</td><td>${A.fEnd[f.id]!=null?fmtN(A.fEnd[f.id]):'—'}</td><td>${L.fEnd[f.id]!=null?fmtN(L.fEnd[f.id]):'—'}</td>${S.baseline&&S.baseline.fEnd?`<td>${be!=null?fmtN(be)+(P.fEnd[f.id]>be?` <small class="overdue">late</small>`:''):'—'}</td>`:''}</tr>`;}).join('')}</tbody></table></div></div>`;
@@ -1450,7 +1503,8 @@ function planXls(){
 }
 function planSetActs(fn){saveS(s=>s.acts.forEach(fn));}
 document.addEventListener('click',e=>{
-  const b=e.target.closest&&e.target.closest('[data-pg],[data-pgcap],[data-pgsel-row]');if(!b)return;
+  const b=e.target.closest&&e.target.closest('[data-pg],[data-pgcap],[data-pgsubcap],[data-pgsel-row]');if(!b)return;
+  if(b.dataset.pgsubcap){const [id,v]=b.dataset.pgsubcap.split('|');saveS(s=>{const x=(s.subs||[]).find(y=>y.id===id);if(x)x.crews=+v;});return;}
   if(b.dataset.pgselRow!==undefined){if(e.target.closest('input,button'))return;F.plAct=F.plAct===b.dataset.pgselRow?'all':b.dataset.pgselRow;render();scrollTo(0,0);return;}
   if(b.dataset.pgcap){const [id,v]=b.dataset.pgcap.split('|');planSetActs(a=>{if(a.id===id)a.crews=+v;});return;}
   const [k,v]=b.dataset.pg.split('|');
@@ -1465,7 +1519,10 @@ document.addEventListener('click',e=>{
   F[k]=v;render();
 });
 document.addEventListener('change',e=>{
-  const t=e.target,d=t.dataset;if(!t.closest||!t.closest('#view'))return;
+  const t=e.target,d=t.dataset;
+  if(d.pdur){const [rid,id]=d.pdur.split('|'),v=parseFloat(t.value);store.patchRoom(rid,{['pdur.'+id]:v>0?v:0});return;}
+  if(!t.closest||!t.closest('#view'))return;
+  if(d.psub){const v=parseFloat(t.value);saveS(s=>{const x=(s.subs||[]).find(y=>y.id===d.psub);if(!x)return;if(v>0)x.crews=v;else delete x.crews;});return;}
   if(d.pgsel){F[d.pgsel]=t.value;render();return;}
   if(d.pact){const [k,id]=d.pact.split('|'),v=parseFloat(t.value);planSetActs(a=>{if(a.id!==id)return;if(v>0)a[k]=v;else delete a[k];});return;}
   if(d.pfstart){saveS(s=>{const f=s.floors.find(x=>x.id===d.pfstart);if(f){if(t.value)f.start=t.value;else delete f.start;}});return;}
@@ -1600,7 +1657,7 @@ function renderDrawer(){
   if(ae&&D.contains(ae)&&ae.matches('[data-hold]')){pending=true;return;}
   const sc=D.scrollTop;
   const s=S.settings,f=floorById(r.floor),t=typeById(r.type),n=nextStep(r),p=progress(r),bl=openBlk(r),acts=roomActs(r);
-  const PLR=(planOf(plMode()).byRoom[r.id])||{},BLR=S.baseline&&S.baseline.t?S.baseline.t[r.id]:null,pend=Object.values(PLR).length?Math.max(...Object.values(PLR).map(x=>x.e)):null;
+  const BX=new Set(hpBreach(r).map(x=>x.id)),PLR=(planOf(plMode()).byRoom[r.id])||{},BLR=S.baseline&&S.baseline.t?S.baseline.t[r.id]:null,pend=Object.values(PLR).length?Math.max(...Object.values(PLR).map(x=>x.e)):null;
   let h=`<div class="dh"><div class="row" style="flex-wrap:nowrap"><div style="flex:1;min-width:0"><div style="font-size:20px;font-weight:800">${esc(r.code)} <span style="font-weight:500">${esc(r.name)}</span></div><div style="color:var(--mute);font-size:12px">${esc(f?f.name:'')} · ${esc(t?t.name:'—')}${r.area?' · '+esc(r.area):''}${(()=>{const o=[...new Set(pinSheets(r).filter(m=>m.floor!==r.floor).map(m=>floorById(m.floor)?.name).filter(Boolean))];return o.length?` · <span class="tag" style="background:#e8f0fe;color:var(--hp)">⇕ double height, also on ${esc(o.join(', '))}</span>`:'';})()}${pinSheets(r).length?` · <a href="#" class="lnk" data-showpin="${r.id}">📐 Show on plan</a>`:''}</div></div><button class="btn" data-act="close">✕ Close</button></div>
     <div class="row" style="margin-top:8px"><div class="bar" style="max-width:none"><i style="width:${pc(p)}%"></i></div><b>${pc(p)}%</b></div>
     <div style="margin-top:6px;font-size:13px">${n?`Next step: <b>${esc(actById(n).name)}</b>`:'<b style="color:var(--done)">✓ All activities complete</b>'}${bl.length?` · <span style="color:var(--blk);font-weight:700">⚠ ${bl.length} open blocking point(s)</span>`:''}${n&&pend!=null?` · 📅 forecast finish <b>${fmtN(pend)}</b>`:''}</div></div><div class="db"><h3>Activities</h3>`;
@@ -1610,8 +1667,9 @@ function renderDrawer(){
     const dIn=k=>`<input type="date" class="dt" data-hold data-sdate="${r.id}|${id}|${k}" value="${o[k]||o.d||''}" title="Change date if the work was done on another day">`;
     const meta=sv===2?`${hp?'Released':'Done'} ${dIn('dd')}${o.by?' · '+esc(o.by):''}`:sv===1?`${hp?'Requested':'Started'} ${dIn('ds')}${o.by?' · '+esc(o.by):''}`:'';
     const words=hp?['Pending','Req.','Released']:['To do','WIP','Done'],pt=PLR[id],bt=BLR&&BLR[id];
+    const pdIn=!hp&&sv!==2&&!isRO()?` <input type="number" class="dt pdur" data-hold min="0" step="0.25" data-pdur="${r.id}|${id}" value="${+(r.pdur||{})[id]>0?+(r.pdur||{})[id]:''}" placeholder="${stepDur(r,id,true)} d" title="Duration in this room, in working days (empty = ${stepDur(r,id,true)} d from the activity library${roomArea(r)&&+a.rate>0?' and the room area':''})">`:'';
     const ptxt=pt&&sv!==2?` <span class="pdates" title="Planned (${plMode()==='lev'?'leveled':'as soon as possible'})${bt?' — baseline '+fmtN(bt[0])+' → '+fmtN(bt[1]):''}">📅 ${fmtN(pt.s)}${pt.e!==pt.s?'–'+fmtN(pt.e):''}${bt&&pt.e>bt[1]?` <b class="overdue">+${pt.e-bt[1]}d</b>`:''}</span>`:'';
-    h+=`<div class="arow ${hp?'hp':''} ${b.length?'blk':''}">${hp?'':`<span class="dot" style="background:${a.color}"></span>`}<div class="an">${hp?`<b><span class="hptag">◆ HP</span>Hold point – inspection</b>`:`<b>${esc(a.name)}</b>`}<small>${meta}${ptxt}${b.length?` <span style="color:var(--blk)">⚠ ${esc(b[0].title)}</span>`:''}</small>${(()=>{const g=asg(r,id);return hp?`<small>👷 Inspection by ${esc(g.resp||'—')}</small>`:`<small class="asgl" data-asg="${r.id}|${id}" title="Click to change for this room" style="cursor:pointer">🏗 ${esc(subName(g.sub)||'—')} · 👷 ${esc(g.resp||'—')}${g.ov?' <b style="color:var(--acc)">✎ room-specific</b>':''}</small>`;})()}</div>
+    h+=`<div class="arow ${hp?'hp':''} ${b.length?'blk':''}">${hp?'':`<span class="dot" style="background:${a.color}"></span>`}<div class="an">${hp?`<b><span class="hptag">◆ HP</span>Hold point – inspection</b>`:`<b>${esc(a.name)}</b>`}<small>${meta}${ptxt}${pdIn}${BX.has(id)?' <span class="hpxtag">⚠ before HP release</span>':''}${b.length?` <span style="color:var(--blk)">⚠ ${esc(b[0].title)}</span>`:''}</small>${(()=>{const g=asg(r,id);return hp?`<small>👷 Inspection by ${esc(g.resp||'—')}</small>`:`<small class="asgl" data-asg="${r.id}|${id}" title="Click to change for this room" style="cursor:pointer">🏗 ${esc(subName(g.sub)||'—')} · 👷 ${esc(g.resp||'—')}${g.ov?' <b style="color:var(--acc)">✎ room-specific</b>':''}</small>`;})()}</div>
       <div class="seg">${[0,1,2].map(k=>`<button class="${sv===k?'on'+k:''} ${hp?'hpb':''}" data-set="${r.id}|${id}|${k}">${words[k]}</button>`).join('')}</div>
       <button class="btn sm blkbtn" title="Raise a blocking point on this activity" data-newblk="${r.id}|${id}">⚠ Block</button></div>`;
   });
@@ -2411,7 +2469,7 @@ Object.assign(ACT,{
 (async function boot(){
   if(USE_FB){
     $('#sync').textContent='● Connecting…';
-    try{await initFB();$('#sync').textContent='🟢 Live · shared';}
+    try{await initFB();setSync();}
     catch(err){$('#sync').textContent='🔴 Offline';$('#view').innerHTML=`<div class="card"><h2>Connection problem</h2><p>${esc(err.message)}</p><p>Check in the Firebase console: Firestore database created · Authentication → Anonymous sign-in enabled · Firestore rules published.</p></div>`;return;}
   }else{
     let d={};try{d=JSON.parse(lsGet(LSK,'{}'))||{};}catch(e){}
