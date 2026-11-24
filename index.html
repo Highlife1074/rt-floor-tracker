@@ -258,7 +258,40 @@ details.tools .tmenu .btn{text-align:left}
 .smenu button:hover{background:#f3f5f9}.smenu button.on{background:var(--acc);color:#fff}.smenu button.on small{background:rgba(255,255,255,.22);color:#fff}
 .sbody{min-width:0}.stitle{font-size:20px;margin:2px 0 12px}
 @media (max-width:800px){.setup{grid-template-columns:1fr}.smenu{position:static;flex-direction:row;overflow-x:auto}.smenu button{white-space:nowrap}}
-@media print{.fab{display:none!important}}
+/* planning */
+.gwrap{overflow:auto;max-height:calc(100vh - 250px);background:#fff;border:1px solid var(--line);border-radius:var(--rad)}
+.gin{position:relative}
+.ghead{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid var(--line);display:flex;height:34px}.ghead .glab{z-index:6}
+.grow{display:flex;height:24px;border-bottom:1px solid #f0f2f5}
+.glab{position:sticky;left:0;z-index:3;background:#fff;width:var(--lw);flex:none;padding:4px 8px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-right:1px solid var(--line)}
+.glab span{color:var(--mute)}.glab a{color:var(--acc);text-decoration:none}
+.gtr{position:relative;flex:1}
+.gfl{background:var(--acc2);height:28px}.gfl .glab{background:var(--acc2);font-weight:700;padding-top:6px}.gfl .glab small{font-weight:400;color:var(--mute)}
+.gsum{position:absolute;top:10px;height:8px;background:var(--acc);border-radius:4px;opacity:.55}
+.gbar{position:absolute;top:4px;height:15px;border-radius:3px;background:var(--c);opacity:.4;cursor:pointer;font:700 9px/15px system-ui,sans-serif;color:#fff;overflow:hidden;padding-left:2px;z-index:1}
+.gbar.g2{opacity:1}.gbar.g1{opacity:1;background:repeating-linear-gradient(45deg,var(--c),var(--c) 3px,#fff 3px,#fff 6px);box-shadow:inset 0 0 0 1px var(--c)}
+.gbar.ghp{top:7px;height:9px}
+.gbar:hover{opacity:1;outline:2px solid var(--ink);z-index:2}
+.gbl{position:absolute;bottom:1px;height:3px;background:#a9b2bf;border-radius:2px}
+.gbody{position:relative}.ggrid{position:absolute;top:0;bottom:0;pointer-events:none}.ggrid i{position:absolute;top:0;bottom:0;border-left:1px solid #eef0f4}
+.ggrid i.gtoday{border-left:2px solid var(--blk);z-index:2}
+.gm{position:absolute;top:2px;font-size:11px;font-weight:700;padding-left:3px;border-left:1px solid var(--line);white-space:nowrap}
+.gw{position:absolute;top:18px;font-size:10px;color:var(--mute);padding-left:2px;white-space:nowrap}
+.pdates{color:var(--acc);white-space:nowrap}
+.plchart text{font-family:inherit}
+@media print{.fab{display:none!important}.gwrap{max-height:none;overflow:visible}}
+.mx td.c.hpx{box-shadow:inset 0 0 0 3px #f97316}
+.hpxtag{color:#b45309;background:#fff1e0;border-radius:5px;padding:0 5px;font-weight:700;white-space:nowrap}
+input.dt.pdur{width:64px;border-style:solid;color:var(--ink)}
+@media (max-width:640px){
+  #drawer .arow{flex-wrap:wrap;row-gap:6px}
+  #drawer .arow .an{flex:1 1 calc(100% - 24px)}
+  #drawer .arow .seg{margin-left:18px}
+  #drawer .arow.hp .seg{margin-left:0}
+  #drawer .arow .seg button{padding:8px 12px}
+  #drawer input.dt{min-width:118px}#drawer input.dt.pdur{min-width:0}
+  .dh{padding:12px}.db{padding:6px 12px 30px}
+}
 @media print{.sticky,.noprint,#drawer,#scrim,#modal{display:none!important}.printonly{display:block}body{background:#fff}main{padding:0;max-width:none}.tile{break-inside:avoid}.mxwrap,.tbwrap{max-height:none;overflow:visible;border:0}.tb tr{break-inside:avoid}.planwrap{max-height:none;overflow:visible;border:0}.planin{width:100%!important}}
 @media (max-width:640px){.grid2{grid-template-columns:1fr}.tiles{grid-template-columns:repeat(auto-fill,minmax(145px,1fr))}main{padding:10px}.seg button{padding:7px 7px}}
 </style>
@@ -275,6 +308,7 @@ details.tools .tmenu .btn{text-align:left}
     <button id="navback" class="navback" data-act="navback" title="Back to the previous screen" hidden>← Back</button>
     <button data-view="cockpit">📊 Cockpit</button>
     <button data-view="rooms">🏠 Rooms</button>
+    <button data-view="planning">📅 Planning</button>
     <button data-view="blockers">⚠ Blocking points<span class="nb" id="nbk"></span></button>
     <button data-view="setup" id="navsetup">⚙ Setup</button>
   </nav>
@@ -378,9 +412,23 @@ function sortSettings(s){if(!s)return;(s.types||[]).sort(byNm);(s.subs||[]).sort
 const normName=s=>(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z ]/g,' ').split(/\s+/).filter(Boolean).sort().join(' ');
 function simpleHash(str){let h=0;for(let i=0;i<str.length;i++){h=((h<<5)-h)+str.charCodeAt(i);h|=0;}return Math.abs(h).toString(36);}
 const isOwner=n=>normName(n)===normName(APP_ADMIN);
+/* Person key: the normalised name ("HORN, Philippe" → "horn_philippe"). Used as document id for PINs and sessions,
+   and in settings.roles — the role map the Firestore rules read (firestore.rules hard-codes the owner's key). */
+const pkey=n=>normName(n).replace(/ /g,'_');
+const rolesOf=s=>{const o={};peopleOf(s).forEach(p=>{o[pkey(p.name)]=isOwner(p.name)?'admin':(p.role||'edit');});return o;};
+/* PIN hash: SHA-256 of key + PIN. Stored in ft_pins/<key>, which nobody can read: the Firestore rules compare it
+   when a session is opened. (Legacy PINs used simpleHash(name+PIN); they are accepted once and upgraded.) */
+async function pinHash(name,pin){const t='rtft|'+pkey(name)+'|'+pin;
+  if(!(window.crypto&&crypto.subtle))return 'x'+simpleHash(t);
+  const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');}
+const hasPin=n=>USE_FB?!!S.pinset[pkey(n)]:!!(S.pins[pkey(n)]||S.pins[n]);
 function peopleOf(s){const l=((s&&s.people)||[]).map(p=>({...p}));if(!l.some(p=>isOwner(p.name)))l.unshift({name:APP_ADMIN,role:'admin'});return l;}
 const people=()=>peopleOf(S.settings).sort(byNm);
-function me(){const n=lsGet(LSU,'');if(!n||!S.settings)return null;return people().find(p=>normName(p.name)===normName(n))||null;}
+/* Who is signed in. Shared mode: ONLY the session document ft_sess/<auth uid>, which the Firestore rules let a
+   browser create only with the right PIN — editing localStorage no longer makes anyone admin.
+   Local mode (data in this browser only): the name remembered on this device. */
+function myKey(){if(USE_FB)return S.sess&&S.sess.k||null;const n=lsGet(LSU,'');return n?pkey(n):null;}
+function me(){const k=myKey();if(!k||!S.settings)return null;return people().find(p=>pkey(p.name)===k)||null;}
 const isAdmin=()=>{const m=me();return !!m&&(isOwner(m.name)||m.role==='admin');};
 const isRO=()=>{const m=me();return !!m&&!isOwner(m.name)&&m.role==='view';};
 const ROLES=[['admin','Admin'],['edit','Editor'],['view','Read only']];
@@ -389,7 +437,8 @@ const user=()=>{const m=me();return m?m.name:'auto';};
 function roBlock(){if(isRO()){alert('Your account is read only.\n\nYou can view, print and export everything, but not change it. Ask '+APP_ADMIN+' if you need to edit.');return true;}return false;}
 
 /* ===================== STATE ===================== */
-let S={settings:null,rooms:{},blockers:{},log:[],snaps:[],pins:{},plans:{}};
+let S={settings:null,rooms:{},blockers:{},log:[],snaps:[],pins:{},pinset:{},sess:null,plans:{},baseline:null};
+let DATA_OK=!USE_FB;   // shared mode: rooms / blockers / snapshots received (they are only readable once signed in)
 let F={view:'cockpit',ss:'team',rv:'overview',ck:'live',more:false,mx:'act',sub:'all',resp:'all',floor:'all',next:'all',type:'all',q:'',blk:'all',colorBy:'next',quick:false,bStatus:'open',bFloor:'all',bCat:'all',bOwner:'all',bGroup:'none',bq:''};
 try{Object.assign(F,JSON.parse(lsGet(LSF,'{}')));}catch(e){}
 let drawerRoom=null;
@@ -538,7 +587,7 @@ const dref=(c,id)=>fb.doc(db,P+c,id);
 function setPath(o,path,v){const k=path.split('.');for(let i=0;i<k.length-1;i++){o[k[i]]=o[k[i]]||{};o=o[k[i]];}o[k[k.length-1]]=v;}
 function persist(){lsSet(LSK,JSON.stringify(S));render();}
 async function runOps(ops){for(let i=0;i<ops.length;i+=400){const b=fb.writeBatch(db);ops.slice(i,i+400).forEach(([k,c,id,v])=>k==='del'?b.delete(dref(c,id)):k==='upd'?b.update(dref(c,id),v):b.set(dref(c,id),v));await b.commit();}}
-const fail=e=>{console.error(e);alert('Save failed: '+e.message);};
+const fail=e=>{console.error(e);alert(e&&e.code==='permission-denied'?'Not saved: your account does not have the rights for this change.\n\nIf your role was just changed, or your PIN was reset, log out and log in again.':'Save failed: '+e.message);};
 const store={
   saveSettings(s){if(roBlock())return;if(USE_FB)return fb.setDoc(dref('settings','main'),s).catch(fail);S.settings=s;persist();},
   setRoom(r){if(roBlock())return;if(USE_FB)return fb.setDoc(dref('rooms',r.id),r).catch(fail);S.rooms[r.id]=r;persist();},
@@ -550,10 +599,28 @@ const store={
   savePhotos(list){if(roBlock())return;if(USE_FB)return Promise.all(list.map(p=>fb.setDoc(dref('blkphotos',p.id),p))).catch(fail);S.bphotos=S.bphotos||{};list.forEach(p=>S.bphotos[p.id]=p);persist();},
   async getPhoto(id){if(USE_FB){const d=await fb.getDoc(dref('blkphotos',id));return d.exists()?d.data().d:'';}return ((S.bphotos||{})[id]||{}).d||'';},
   delPhotos(ids){if(roBlock())return;if(USE_FB)return runOps(ids.map(id=>['del','blkphotos',id])).catch(e=>console.error(e));ids.forEach(id=>delete (S.bphotos||{})[id]);persist();},
+  saveBaseline(b){if(roBlock())return;if(JSON.stringify(b).length>900000)return alert('The plan is too big to be saved as a baseline (over 900 kB).');
+    if(USE_FB)return fb.setDoc(dref('baseline','main'),b).catch(fail);S.baseline=b;persist();},
+  delBaseline(){if(roBlock())return;if(USE_FB)return fb.deleteDoc(dref('baseline','main')).catch(fail);S.baseline=null;persist();},
   delBlocker(id){if(roBlock())return;if(USE_FB)return fb.deleteDoc(dref('blockers',id)).catch(fail);delete S.blockers[id];persist();},
   addLog(e){if(USE_FB)return fb.addDoc(fb.collection(db,P+'log'),e).catch(()=>{});S.log.unshift(e);S.log=S.log.slice(0,1500);},
-  savePin(name,hash){if(USE_FB)return fb.setDoc(dref('auth','pins'),{[name]:hash},{merge:true});S.pins[name]=hash;persist();return Promise.resolve();},
-  resetPin(name){if(USE_FB)return fb.setDoc(dref('auth','pins'),{[name]:fb.deleteField()},{merge:true}).catch(fail);delete S.pins[name];persist();},
+  /* first login: store the PIN hash (+ a public "PIN set" flag), then open the session */
+  async setFirstPin(name,pin){const k=pkey(name),h=await pinHash(name,pin);
+    if(USE_FB){const b=fb.writeBatch(db);b.set(dref('pins',k),{h});b.set(dref('pinflag',k),{at:Date.now()});await b.commit();return this.login(name,pin);}
+    S.pins[k]=h;delete S.pins[name];lsSet(LSU,name);persist();return true;},
+  /* true = signed in, false = wrong PIN. Shared mode: the Firestore rules accept the session only with the right hash. */
+  async login(name,pin){const k=pkey(name),h=await pinHash(name,pin),lh=simpleHash(name+pin);
+    if(!USE_FB){const ok=S.pins[k]===h||(!!S.pins[name]&&S.pins[name]===lh);if(!ok)return false;if(S.pins[name]){S.pins[k]=h;delete S.pins[name];}lsSet(LSU,name);persist();return true;}
+    // while the previous (open) rules are still published the PIN document is readable: check it here as well
+    try{const d=await fb.getDoc(dref('pins',k));if(!d.exists())return false;const p=d.data();if(!(p.h===h||(p.lh&&p.lh===lh)))return false;}
+    catch(e){if(e.code!=='permission-denied')throw e;}
+    try{await fb.setDoc(dref('sess',AUTH_UID),{k,h,lh,at:Date.now()});}catch(e){if(e.code==='permission-denied')return false;throw e;}
+    if(!S.sess||S.sess.k!==k)onSess({k,h,lh});   // don't wait for the listener
+    fb.setDoc(dref('pins',k),{h}).catch(()=>{});   // upgrade a legacy hash
+    lsSet(LSU,name);return true;},
+  logout(){lsSet(LSU,'');if(USE_FB)return fb.deleteDoc(dref('sess',AUTH_UID)).catch(e=>console.error(e));return Promise.resolve();},
+  resetPin(name){const k=pkey(name);if(USE_FB){const b=fb.writeBatch(db);b.delete(dref('pins',k));b.delete(dref('pinflag',k));return b.commit().catch(fail);}
+    delete S.pins[k];delete S.pins[name];persist();},
   saveSnaps(list){if(!list.length)return;if(USE_FB)return runOps(list.map(x=>['set','snapshots',x.id,x])).catch(e=>console.error(e));list.forEach(x=>{S.snaps=S.snaps.filter(y=>y.id!==x.id);S.snaps.push(x);});persist();},
   async savePlan(fid,meta,str,prog){if(roBlock())return;const old=S.plans[fid];
     if(USE_FB){for(let i=0;i<meta.chunks;i++){prog&&prog(i+1,meta.chunks);await fb.setDoc(dref('planchunks',`${fid}_${meta.ver}_${i}`),{d:str.slice(i*CHUNK,(i+1)*CHUNK)});}
@@ -572,7 +639,7 @@ const store={
     delete PLAN.mem[fid];try{localStorage.removeItem('rtft_plan_'+fid);}catch(e){}delete S.plans[fid];persist();},
   async addRooms(rooms){if(roBlock())return;if(USE_FB)return runOps(rooms.map(r=>['set','rooms',r.id,r])).catch(fail);rooms.forEach(r=>S.rooms[r.id]=r);persist();},
   async delRooms(roomIds,blkIds){if(roBlock())return;if(USE_FB)return runOps([...roomIds.map(id=>['del','rooms',id]),...blkIds.map(id=>['del','blockers',id])]).catch(fail);roomIds.forEach(id=>delete S.rooms[id]);blkIds.forEach(id=>delete S.blockers[id]);persist();},
-  async replaceAll(d){if(roBlock())return;
+  async replaceAll(d){if(roBlock())return;if(d.settings)d.settings.roles=rolesOf(d.settings);
     const rooms=Array.isArray(d.rooms)?d.rooms:Object.values(d.rooms||{});
     const blks=Array.isArray(d.blockers)?d.blockers:Object.values(d.blockers||{});
     if(USE_FB){
@@ -582,28 +649,66 @@ const store={
     S.settings=d.settings;S.rooms={};rooms.forEach(r=>S.rooms[r.id]=r);S.blockers={};blks.forEach(b=>S.blockers[b.id]=b);persist();
   }
 };
+let AUTH_UID=null;
+const SYNC={cache:false,pend:false};
+function setSync(){const el=$('#sync');if(!el||!USE_FB)return;const off=!navigator.onLine||SYNC.cache;
+  el.textContent=off?(SYNC.pend?'🟠 Offline · changes kept on this device':'🟠 Offline · showing saved data'):SYNC.pend?'⏳ Sending…':'🟢 Live · shared';
+  el.title=off?'No connection: you can keep working, your changes are sent automatically when the network is back.':'';}
+addEventListener('online',setSync);addEventListener('offline',setSync);
 async function initFB(){
   const base='https://www.gstatic.com/firebasejs/10.12.2/';
   const [app,fs,au]=await Promise.all([import(base+'firebase-app.js'),import(base+'firebase-firestore.js'),import(base+'firebase-auth.js')]);
-  const a=app.initializeApp(FIREBASE_CONFIG);db=fs.getFirestore(a);fb=fs;
-  await au.signInAnonymously(au.getAuth(a));
-  const got={s:0,r:0,b:0,n:0,p:0};let booted=false;
+  const a=app.initializeApp(FIREBASE_CONFIG);
+  // offline: data cached on the device (IndexedDB); changes made without network are sent when it comes back
+  try{db=fs.initializeFirestore(a,{localCache:fs.persistentLocalCache({tabManager:fs.persistentMultipleTabManager()})});}catch(e){console.warn('No offline cache',e);db=fs.getFirestore(a);}
+  fb=fs;
+  const AU=au.getAuth(a);try{await AU.authStateReady();}catch(e){}
+  AUTH_UID=AU.currentUser?AU.currentUser.uid:(await au.signInAnonymously(AU)).user.uid;   // signed in before = works offline
+  migrateLegacyPins();
+  /* Phase 1 (readable before login): settings (team list), "PIN set" flags, this browser's session */
+  const got={s:0,p:0,u:0};let booted=false;
   return new Promise((res,rej)=>{
-    const ready=()=>{if(got.s&&got.r&&got.b&&got.n&&got.p){if(!booted){booted=true;res();}else render();}};
-    fs.onSnapshot(dref('auth','pins'),d=>{S.pins=d.exists()?d.data():{};got.p=1;ready();},rej);
-    fs.onSnapshot(fs.collection(db,P+'snapshots'),q=>{S.snaps=q.docs.map(d=>d.data());got.n=1;ready();},rej);
+    const ready=()=>{if(got.s&&got.p&&got.u){if(!booted){booted=true;res();}else render();}};
+    fs.onSnapshot(fs.collection(db,P+'pinflag'),q=>{const o={};q.forEach(d=>o[d.id]=1);S.pinset=o;got.p=1;ready();},rej);
     fs.onSnapshot(dref('settings','main'),d=>{S.settings=d.exists()?d.data():null;got.s=1;ready();},rej);
-    fs.onSnapshot(fs.collection(db,P+'rooms'),q=>{S.rooms={};q.forEach(d=>S.rooms[d.id]=d.data());got.r=1;ready();},rej);
-    fs.onSnapshot(fs.collection(db,P+'blockers'),q=>{S.blockers={};q.forEach(d=>S.blockers[d.id]=d.data());got.b=1;ready();},rej);
-    fs.onSnapshot(fs.collection(db,P+'plans'),q=>{S.plans={};q.forEach(d=>S.plans[d.id]=d.data());if(booted)render();},e=>console.error(e));
-    fs.onSnapshot(fs.query(fs.collection(db,P+'log'),fs.orderBy('ts','desc'),fs.limit(400)),q=>{S.log=q.docs.map(d=>d.data());if(booted)render();},()=>{});
+    // pending (not yet confirmed) writes are ignored: a session refused by the rules (wrong PIN) must never show up
+    fs.onSnapshot(dref('sess',AUTH_UID),d=>{if(d.metadata.hasPendingWrites)return;onSess(d.exists()?d.data():null);got.u=1;ready();},rej);
   });
+}
+/* Phase 2: the project data, subscribed once a session exists (the rules refuse it before) */
+let UNSUB=[],SESSK=null;
+function onSess(v){
+  S.sess=v;const k=v&&v.k||null;if(k===SESSK)return;SESSK=k;
+  UNSUB.forEach(u=>u());UNSUB=[];DATA_OK=false;Object.assign(S,{rooms:{},blockers:{},snaps:[],plans:{},log:[],baseline:null});
+  if(!k){render();return;}
+  const fs=fb,got={r:0,b:0,n:0},on=(q,f,flag)=>UNSUB.push(fs.onSnapshot(q,x=>{f(x);if(flag){got[flag]=1;DATA_OK=got.r&&got.b&&got.n;}render();},e=>{console.error(e);if(flag){got[flag]=1;DATA_OK=got.r&&got.b&&got.n;render();}}));
+  // rooms: also follows the sync state (cache / pending writes) for the indicator in the header
+  let firstR=true;UNSUB.push(fs.onSnapshot(fs.collection(db,P+'rooms'),{includeMetadataChanges:true},q=>{SYNC.cache=q.metadata.fromCache;SYNC.pend=q.metadata.hasPendingWrites;setSync();
+    if(!firstR&&!q.docChanges().length)return;firstR=false;S.rooms={};q.forEach(d=>S.rooms[d.id]=d.data());got.r=1;DATA_OK=got.r&&got.b&&got.n;render();},e=>{console.error(e);got.r=1;DATA_OK=got.r&&got.b&&got.n;render();}));
+  on(fs.collection(db,P+'blockers'),q=>{S.blockers={};q.forEach(d=>S.blockers[d.id]=d.data());},'b');
+  on(fs.collection(db,P+'snapshots'),q=>{S.snaps=q.docs.map(d=>d.data());},'n');
+  on(fs.collection(db,P+'plans'),q=>{S.plans={};q.forEach(d=>S.plans[d.id]=d.data());});
+  on(dref('baseline','main'),d=>{S.baseline=d.exists()?d.data():null;});
+  on(fs.query(fs.collection(db,P+'log'),fs.orderBy('ts','desc'),fs.limit(400)),q=>{S.log=q.docs.map(d=>d.data());});
+}
+/* One-off move of the old PIN list (ft_auth/pins: name → weak hash, readable by everyone) to ft_pins/<key>.
+   Only possible while the previous open rules are still published; with the new rules ft_auth is unreadable. */
+async function migrateLegacyPins(){
+  try{const d=await fb.getDoc(dref('auth','pins'));if(!d.exists())return;const old=d.data(),b=fb.writeBatch(db);
+    for(const [name,lh] of Object.entries(old)){const k=pkey(name);if(!k||!lh)continue;const e=await fb.getDoc(dref('pins',k));if(e.exists())continue;
+      b.set(dref('pins',k),{lh});b.set(dref('pinflag',k),{at:Date.now()});}
+    b.delete(dref('auth','pins'));await b.commit();console.info('PINs moved to ft_pins');
+  }catch(e){if(e.code!=='permission-denied'&&e.code!=='unavailable')console.error(e);}
 }
 
 /* ===================== ACTIONS ===================== */
-function setStatus(rid,aid,s,day){
+/* Hold points: a step started / done while an earlier hold point of the room is not released yet */
+function hpOpenBefore(r,aid){const l=roomActs(r),i=l.indexOf(aid);for(let k=0;k<i;k++)if(isHP(l[k])&&st(r,l[k])<2)return l[k];return null;}
+function hpBreach(r){const o=[];let open=null;roomActs(r).forEach(id=>{if(isHP(id)){if(!open&&st(r,id)<2)open=id;return;}if(open&&st(r,id)>0)o.push({id,hp:open});});return o;}
+function setStatus(rid,aid,s,day,force){
   if(roBlock())return;
   const r=S.rooms[rid];if(!r)return;const prev=st(r,aid);if(prev===s)return;
+  if(!force&&s>prev&&!isHP(aid)){const h=hpOpenBefore(r,aid);if(h&&!confirm(`⚠ Hold point not released in ${r.code}:\n${actById(h).name} is “${lbl(h,st(r,h))}”.\n\nWork after a hold point should wait for its release.\nSet “${actById(aid).name}” to “${lbl(aid,s)}” anyway?`))return;}
   const dt=day||today(),cur=(r.st&&r.st[aid])||{};const v={s,by:user(),d:dt};
   if(s>=1)v.ds=cur.ds||dt;if(s===2)v.dd=dt;
   store.addLog({ts:Date.now(),by:user(),roomId:rid,code:r.code,actId:aid,from:prev,to:s});
@@ -626,6 +731,7 @@ const ralList=()=>`<datalist id="ralList">${Object.entries(RAL).map(([c,r])=>`<o
 function saveS(mut){const s=JSON.parse(JSON.stringify(S.settings));mut(s);
   // never drop a level that still has rooms or plans (protects against saving an out-of-date copy of the settings)
   missingFloors(s).forEach(f=>s.floors.push({id:f.id,name:f.name}));
+  s.roles=rolesOf(s);   // read by the Firestore rules
   store.saveSettings(s);}
 function floorRepairBanner(){
   if(!isAdmin())return '';const m=missingFloors();if(!m.length)return '';
@@ -651,7 +757,7 @@ function renderLogin(){
   const pinsOk=USE_FB?!!fb:true;
   if(LG.step==='pick'){
     const list=people().map(p=>p.name);
-    h+=`<div class="lg-title">Who are you?</div><div class="lg-sub">Select your name to continue</div><div class="lg-list">${list.map(n=>`<button class="lg-p" data-lgpick="${esc(n)}"><span class="lg-av">${esc(n[0]||'?')}</span><span>${esc(n)}</span><span style="margin-left:auto;font-size:10px;${S.pins[n]?'color:#aaa':'color:#c9a84c;font-weight:700'}">${S.pins[n]?'🔒 PIN set':'new'}</span></button>`).join('')}</div>${pinsOk?'':'<div class="lg-sub">Connecting…</div>'}`;
+    h+=`<div class="lg-title">Who are you?</div><div class="lg-sub">Select your name to continue</div><div class="lg-list">${list.map(n=>`<button class="lg-p" data-lgpick="${esc(n)}"><span class="lg-av">${esc(n[0]||'?')}</span><span>${esc(n)}</span><span style="margin-left:auto;font-size:10px;${hasPin(n)?'color:#aaa':'color:#c9a84c;font-weight:700'}">${hasPin(n)?'🔒 PIN set':'new'}</span></button>`).join('')}</div>${pinsOk?'':'<div class="lg-sub">Connecting…</div>'}`;
   }else if(LG.step==='pin'){
     h+=`<div class="lg-title">Hello, ${esc(LG.name.split(',').slice(-1)[0].trim()||LG.name)}</div><div class="lg-sub">Enter your 4-digit PIN</div>${LG.err?`<div class="lg-err">${esc(LG.err)}</div>`:''}
       <div class="pinbox">${[0,1,2,3].map(i=>`<div class="${LG.pin.length>i?'f':''}">${LG.pin[i]?'●':''}</div>`).join('')}</div>
@@ -666,25 +772,27 @@ function renderLogin(){
       <button class="btn pri" data-lgset="1" style="width:100%;padding:10px">Set PIN &amp; Continue</button></div>
       <button class="lg-link" data-lgback="1">← Back</button>`;
   }
-  $('#login').innerHTML=h+`</div><div style="margin-top:12px;font-size:11px;color:#9fb3c8;text-align:center">PINs are stored hashed in the shared database.<br>Only you know your PIN.</div>`;
+  $('#login').innerHTML=h+`</div><div style="margin-top:12px;font-size:11px;color:#9fb3c8;text-align:center">PINs are stored hashed and can't be read back.<br>Only you know your PIN.</div>`;
   if(LG.step==='new')setTimeout(()=>{const e=$('#lg_p1'),ae=document.activeElement;if(e&&!(ae&&ae.tagName==='INPUT'&&$('#login').contains(ae)))e.focus();},30);
 }
-function loginOk(n){lsSet(LSU,n);$('#login').classList.remove('open');$('#login').innerHTML='';render();}
+function loginOk(){$('#login').classList.remove('open');$('#login').innerHTML='';render();}
+const loginErr=e=>{console.error(e);LG.busy=false;LG.pin='';LG.err='No connection to the server. Try again.';renderLogin();};
 function pinKey(k){
   if(k==='del'){LG.pin=LG.pin.slice(0,-1);LG.err='';renderLogin();return;}
-  if(LG.pin.length>=4)return;LG.pin+=k;renderLogin();
-  if(LG.pin.length===4)setTimeout(()=>{if(simpleHash(LG.name+LG.pin)===S.pins[LG.name])loginOk(LG.name);else{LG.err='Wrong PIN. Try again.';LG.pin='';renderLogin();}},120);
+  if(LG.busy||LG.pin.length>=4)return;LG.pin+=k;renderLogin();
+  if(LG.pin.length===4){LG.busy=true;store.login(LG.name,LG.pin).then(ok=>{LG.busy=false;if(ok)loginOk();else{LG.err='Wrong PIN. Try again.';LG.pin='';renderLogin();}}).catch(loginErr);}
 }
 function loginClick(d){
-  if(d.lgpick!==undefined){if(USE_FB&&!fb){alert('Still connecting to the server, try again in a second.');return;}LG={step:S.pins[d.lgpick]?'pin':'new',name:d.lgpick,pin:'',err:''};renderLogin();return;}
+  if(d.lgpick!==undefined){if(USE_FB&&!fb){alert('Still connecting to the server, try again in a second.');return;}LG={step:hasPin(d.lgpick)?'pin':'new',name:d.lgpick,pin:'',err:''};renderLogin();return;}
   if(d.lgback!==undefined){LG={step:'pick',name:'',pin:'',err:''};renderLogin();return;}
   if(d.lgk!==undefined){pinKey(d.lgk);return;}
   if(d.lgset!==undefined){
     const a=$('#lg_p1').value,b=$('#lg_p2').value;
     if(!/^\d{4}$/.test(a)){LG.err='PIN must be 4 digits.';renderLogin();return;}
     if(a!==b){LG.err='PINs do not match.';renderLogin();return;}
-    const name=LG.name;
-    Promise.resolve(store.savePin(name,simpleHash(name+a))).then(()=>loginOk(name)).catch(()=>{LG.err='The PIN could not be saved (no connection to the server). Try again.';renderLogin();});
+    if(LG.busy)return;LG.busy=true;
+    store.setFirstPin(LG.name,a).then(ok=>{LG.busy=false;if(ok)loginOk();else{LG.err='This PIN could not be set (it may have just been set from another device). Go back and log in with your PIN.';renderLogin();}})
+      .catch(e=>{LG.busy=false;console.error(e);LG.err=e.code==='permission-denied'?'Your name is not in the team list any more, or a PIN is already set. Ask '+APP_ADMIN+'.':'The PIN could not be saved (no connection to the server). Try again.';renderLogin();});
   }
 }
 document.addEventListener('keydown',e=>{
@@ -695,7 +803,7 @@ document.addEventListener('keydown',e=>{
 function editPeople(fn){saveS(s=>{const l=peopleOf(s);fn(l);s.people=l;});}
 
 /* ===================== RENDER ===================== */
-let pending=false,migrating=false;
+let pending=false,migrating=false,RSAVE=false;
 const OPEN=new Set();   // keys of <details data-dk> the user has unfolded
 document.addEventListener('toggle',e=>{const d=e.target;if(d.dataset&&d.dataset.dk){if(d.open)OPEN.add(d.dataset.dk);else OPEN.delete(d.dataset.dk);}},true);
 const reopen=root=>{root.querySelectorAll('details[data-dk]').forEach(d=>{if(OPEN.has(d.dataset.dk))d.open=true;});sqRestore(root);};
@@ -706,9 +814,14 @@ function render(){clearTimeout(rT);rT=setTimeout(doRender,25);}
 let LASTVIEW=null;
 function doRender(){
   if(!S.settings)return;
+  PLC=null;   // planning recomputed from the current data when needed
   sortSettings(S.settings);
   const m=me();
   if(!m){closeDrawer();if(!$('#login').classList.contains('open'))showLogin();else if(LG.step==='pick')renderLogin();return;}
+  if($('#login').classList.contains('open'))loginOk();
+  if(!DATA_OK){$('#view').innerHTML='<div class="empty">Loading…</div>';return;}
+  // keep settings.roles (read by the Firestore rules) in line with the team list
+  if(isAdmin()&&!RSAVE&&JSON.stringify(S.settings.roles||{})!==JSON.stringify(rolesOf(S.settings))){RSAVE=true;saveS(()=>{});setTimeout(()=>RSAVE=false,5000);}
   const ae=document.activeElement;
   if(ae&&ae.matches&&ae.matches('[data-hold]')){pending=true;return;}
   if(PLAN.drag||PLAN.box)return;   // a pin is being dragged: pointerup re-renders
@@ -730,7 +843,7 @@ function doRender(){
   const tab=ROOMV.includes(F.view)?'rooms':F.view;
   document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.view===tab));
   $('#fab').innerHTML=isRO()||F.view==='setup'?'':`<button class="f1" data-act="quickroom" title="Find a room and update its activities">✓ Update a room</button><button class="f2" data-newblk="|" title="Raise a new blocking point">＋ Blocking point</button>`;
-  const v={cockpit:vCockpit,overview:vOverview,matrix:vMatrix,plans:vPlans,blockers:vBlockers,setup:vSetup}[F.view]||vCockpit;
+  const v={cockpit:vCockpit,overview:vOverview,matrix:vMatrix,plans:vPlans,planning:vPlanning,blockers:vBlockers,setup:vSetup}[F.view]||vCockpit;
   const fid=ae&&ae.id,pos=ae&&ae.selectionStart;
   // keep the scroll position of the page and of the scrolling boxes (plan, matrix, tables) across the re-render
   const SCB='#planwrap,.mxwrap,.tbwrap',boxes=[...$('#view').querySelectorAll(SCB)].map(e=>[e.scrollLeft,e.scrollTop]),wy=scrollY,wx=scrollX,sv=F.view;
@@ -850,7 +963,9 @@ function mxApply(v,fromCell){
   const todo=rs.filter(r=>st(r,act.id)!==v);if(!todo.length)return alert(`All the selected rooms are already “${w[v]}” for ${act.name}.`);
   const day=MX.date&&MX.date<=today()?MX.date:today();
   if(!confirm(`${fromCell?'Multi-select is on: apply to all the selected rooms.\n\n':''}Set “${act.name}” to “${w[v]}” in ${todo.length} room(s)?${v?`\n\nDate: ${fmtLong(day)}`:''}${rs.length<MX.sel.size?`\n\n${MX.sel.size-rs.length} selected room(s) don't have this activity and are skipped.`:''}`))return;
-  todo.forEach(r=>setStatus(r.id,act.id,v,day));render();
+  const hpN=v&&!act.isHp?todo.filter(r=>hpOpenBefore(r,act.id)).length:0;
+  if(hpN&&!confirm(`⚠ In ${hpN} of these room(s) a hold point before “${act.name}” is not released yet.\n\nContinue anyway?`))return;
+  todo.forEach(r=>setStatus(r.id,act.id,v,day,true));render();
 }
 document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-mxset],[data-mxacth]');if(!b)return;
   if(b.dataset.mxset!==undefined){mxApply(+b.dataset.mxset);return;}
@@ -868,7 +983,7 @@ function vMatrix(){
   const s=S.settings,list=filtered(),seq=F.mx==='seq',tm=MX.tmode&&!isRO();
   let h=filterBar('matrix');
   if(!isRO())h+=mxTypeBar(list,tm);
-  const lg=`<span><i class="sq" style="background:var(--done);border:0"></i>Done</span><span><i class="sq" style="background:var(--wip);border:0"></i>In progress</span><span><i class="sq"></i>To do</span><span><i class="sq" style="background:var(--blk);border:0"></i>Blocked</span><span>◆ Hold point: <i class="sq" style="background:var(--hp);border:0"></i>requested · <i class="sq" style="background:var(--done);border:0"></i>released</span>`;
+  const lg=`<span><i class="sq" style="background:var(--done);border:0"></i>Done</span><span><i class="sq" style="background:var(--wip);border:0"></i>In progress</span><span><i class="sq"></i>To do</span><span><i class="sq" style="background:var(--blk);border:0"></i>Blocked</span><span>◆ Hold point: <i class="sq" style="background:var(--hp);border:0"></i>requested · <i class="sq" style="background:var(--done);border:0"></i>released</span><span><i class="sq" style="box-shadow:inset 0 0 0 2px #f97316;border:0"></i>done before the hold point release</span>`;
   h+=`<div class="legend noprint">${lg}${seq?'<span>Each row reads left → right in the room’s own sequence (activity short codes)</span>':`<span>Number = step of the activity in the room’s sequence</span><span><i class="sq" style="background:linear-gradient(225deg,#7e57c2 6px,#fff 6px)"></i>done in a different order than the columns</span><span>Columns: ${F.type!=='all'?'sequence of the “'+esc(typeById(F.type)?.name||'')+'” template':'dominant order of the rooms shown'}</span>`}<span><b>Click a cell</b> to set To do / WIP / Done</span></div>`;
   h+=`<div class="printonly"><h2>${esc(s.project)} — Status matrix (${seq?'by sequence':'by activity'}) — ${fmtLong(today())}</h2></div>`;
   let cols=[],order=[],N=0;
@@ -884,10 +999,10 @@ function vMatrix(){
     rs.forEach((r,ri)=>{
       if(!ri||rs[ri-1].type!==r.type){const g=rs.filter(x=>x.type===r.type),tn=(typeById(r.type)||{}).name||'No type';
         h+=`<tr class="tg"><td class="rh">${tm?`<input type="checkbox" class="mxck" data-mxfl="${f.id}|${r.type||''}" ${g.every(x=>MX.sel.has(x.id))?'checked':''} title="Select the rooms of this type on this floor">`:''}<i class="sq" style="background:${typeCol(r.type)};border:0"></i> ${esc(tn)} <small>(${g.length})</small></td><td colspan="${nCols+2}"></td></tr>`;}
-      const bl=openBlk(r),ra=roomActs(r),q=cleanSeq(r.acts);
+      const bl=openBlk(r),ra=roomActs(r),q=cleanSeq(r.acts),bx=new Set(hpBreach(r).map(x=>x.id));
       h+=`<tr class="${tm&&MX.sel.has(r.id)?'msel':''}"><td class="rh">${tm?`<input type="checkbox" class="mxck" data-mxsel="${r.id}" ${MX.sel.has(r.id)?'checked':''}>`:''}<a href="#" tabindex="-1" data-room="${r.id}"><b>${esc(r.code)}</b></a> <span style="color:var(--mute)">${esc(r.name)}</span>${tm?` <span class="tytag" style="background:${typeCol(r.type)}">${esc((typeById(r.type)||{}).name||'No type')}</span>`:''}${bl.length?` <span class="badge red">⚠${bl.length}</span>`:''}</td><td class="cmt"><input data-hold data-rnote="${r.id}" value="${esc((r.note||'').replace(/\n/g,' · '))}" placeholder="${isRO()?'':'Add a comment…'}" title="${esc(r.note||'')}" ${isRO()?'readonly':''}></td>`;
       const cell=(a,extra,inner,tipStep)=>{const sv=st(r,a.id),b=bl.some(x=>x.actId===a.id),g=asg(r,a.id);
-        return `<td class="c s${sv} ${a.isHp?'hp':''} ${b?'b':''} ${F.next===a.id?'hl':''} ${extra}" data-cell="${r.id}|${a.id}" title="${esc(r.code+' · '+tipStep+a.name+' · '+(b?'BLOCKED':lbl(a.id,sv))+(g.sub&&!a.isHp?' · '+subName(g.sub):'')+(g.resp?' · '+g.resp:''))}">${b?'!':inner}</td>`;};
+        return `<td class="c s${sv} ${a.isHp?'hp':''} ${b?'b':''} ${bx.has(a.id)?'hpx':''} ${F.next===a.id?'hl':''} ${extra}" data-cell="${r.id}|${a.id}" title="${esc(r.code+' · '+tipStep+a.name+' · '+(b?'BLOCKED':lbl(a.id,sv))+(bx.has(a.id)?' · ⚠ before HP release':'')+(g.sub&&!a.isHp?' · '+subName(g.sub):'')+(g.resp?' · '+g.resp:''))}">${b?'!':inner}</td>`;};
       if(seq){
         for(let i=0;i<N;i++){const id=ra[i];if(!id){h+=`<td class="empty"></td>`;continue;}const a=actById(id);
           h+=cell(a,'cq',a.isHp?'◆':`<span style="${st(r,id)===0?'border-bottom:3px solid '+a.color:''}">${esc(a.short||a.name.slice(0,3))}</span>`,`step ${i+1} · `);}
@@ -1065,10 +1180,14 @@ function vCockpit(){
   h+=`<div class="kpis">
     <div class="kpi"><b>${pc(overall)}%</b><span>Overall progress</span>${dl}</div>
     <div class="kpi"><b style="color:var(--done)">${complete}<span style="font-size:15px;color:var(--mute)"> / ${rooms.length}</span></b><span>Rooms complete</span></div>
+    ${(()=>{const P=planOf(plMode()),B=S.baseline;if(P.end==null)return '';const late=B&&B.end!=null&&P.end>B.end;
+      return `<div class="kpi flrow" data-view="planning" title="Open the planning"><b style="font-size:20px;white-space:nowrap;${late?'color:var(--blk)':''}">${fmtN(P.end)} <span style="font-size:13px;color:var(--mute)">${dstr(P.end).slice(0,4)}</span></b><span>Forecast finish</span><small style="color:${late?'var(--blk)':'var(--mute)'}">${B&&B.end!=null?(late?'+'+(P.end-B.end)+' d vs baseline':'on baseline'):'📅 see Planning'}</small></div>`;})()}
     <div class="kpi lnk" style="text-decoration:none;color:inherit" data-view="blockers"><b style="color:var(--blk)">${new Set(open.map(b=>b.grp||b.id)).size}</b><span>Open blocking points${over.length?` · <span class="overdue">${new Set(over.map(b=>b.grp||b.id)).size} overdue</span>`:''}</span><small style="color:var(--mute)">${roomsB} room(s) blocked</small></div>
     <div class="kpi"><b style="color:var(--hp)">${hpWait.length}</b><span>◆ Rooms waiting for a hold point</span><small style="color:var(--mute)">${hpReq} inspection(s) requested</small></div>
     <div class="kpi"><b>${doneWk}</b><span>Activities completed (last 7 days)</span></div></div>`;
   // progress by floor (click = see the rooms of that floor)
+  {const hb=rooms.map(r=>({r,l:hpBreach(r)})).filter(x=>x.l.length).sort((a,b)=>floorIdx(a.r.floor)-floorIdx(b.r.floor)||byCode(a.r,b.r));
+   if(hb.length)h+=`<div class="card" style="border-color:#f3b37a"><h2 style="color:#b45309">⚠ Work past an unreleased hold point <small style="font-weight:400;color:var(--mute)">${hb.length} room(s)</small></h2><div class="row">${hb.slice(0,40).map(x=>`<button class="chip" data-room="${x.r.id}" title="${esc(x.l.map(y=>actById(y.id).name+' (after '+actById(y.hp).name+')').join('\n'))}"><b>${esc(x.r.code)}</b> <small>${x.l.length} step(s)</small></button>`).join('')}${hb.length>40?`<small>+${hb.length-40} more</small>`:''}</div></div>`;}
   h+=`<div class="grid2"><div class="card"><h2>Progress by floor</h2>`;
   s.floors.forEach(f=>{const rs=rooms.filter(r=>r.floor===f.id);if(!rs.length)return;const p=avg(rs.map(progress)),bk=new Set(open.filter(b=>S.rooms[b.roomId]?.floor===f.id).map(b=>b.roomId)).size;
     h+=`<div class="row flrow" data-gofloor="${f.id}" title="Show the rooms of ${esc(f.name)}" style="margin:8px 0"><b style="width:90px">${esc(f.name)}</b><div class="bar" style="max-width:none;height:14px"><i style="width:${pc(p)}%"></i></div><b style="width:42px;text-align:right">${pc(p)}%</b><small style="color:var(--mute);width:150px">${rs.filter(r=>!nextStep(r)).length}/${rs.length} rooms done${bk?` · <span style="color:var(--blk);font-weight:700">${bk} blocked</span>`:''}</small></div>`;});
@@ -1110,7 +1229,7 @@ function vSetup(){
   if(!isAdmin())return `<div class="card">Setup is reserved for admins.</div>`;
   const MK=[];let h='';MK.push(['team',0]);
   h+=`<div class="card"><h2>👥 Team & access</h2><p style="margin:0 0 10px;color:var(--mute);font-size:12px">Only the people in this list can open the app. On their first login they pick their name and choose a 4-digit PIN; next time, name + PIN. <b>Admin</b>: everything including Setup · <b>Editor</b>: statuses, hold points, blocking points, notes · <b>Read only</b>: view, print and export.</p>
-    <div class="tbwrap"><table class="tb"><thead><tr><th>Name</th><th>Role</th><th>PIN</th><th></th></tr></thead><tbody>${people().map(p=>{const own=isOwner(p.name);return `<tr><td><b>${esc(p.name)}</b>${own?' <span class="tag">owner</span>':''}</td><td>${own?'Admin':`<select data-prole="${esc(p.name)}">${ROLES.map(([v,l])=>`<option value="${v}" ${(p.role||'edit')===v?'selected':''}>${l}</option>`).join('')}</select>`}</td><td>${S.pins[p.name]?'🔒 set':'<span style="color:#b57800;font-weight:700">not yet</span>'}</td><td style="white-space:nowrap;text-align:right">${S.pins[p.name]?`<button class="btn sm" data-preset="${esc(p.name)}">Reset PIN</button> `:''}${own?'':`<button class="btn sm red" data-pdel="${esc(p.name)}">Remove</button>`}</td></tr>`;}).join('')}</tbody></table></div>
+    <div class="tbwrap"><table class="tb"><thead><tr><th>Name</th><th>Role</th><th>PIN</th><th></th></tr></thead><tbody>${people().map(p=>{const own=isOwner(p.name);return `<tr><td><b>${esc(p.name)}</b>${own?' <span class="tag">owner</span>':''}</td><td>${own?'Admin':`<select data-prole="${esc(p.name)}">${ROLES.map(([v,l])=>`<option value="${v}" ${(p.role||'edit')===v?'selected':''}>${l}</option>`).join('')}</select>`}</td><td>${hasPin(p.name)?'🔒 set':'<span style="color:#b57800;font-weight:700">not yet</span>'}</td><td style="white-space:nowrap;text-align:right">${hasPin(p.name)?`<button class="btn sm" data-preset="${esc(p.name)}">Reset PIN</button> `:''}${own?'':`<button class="btn sm red" data-pdel="${esc(p.name)}">Remove</button>`}</td></tr>`;}).join('')}</tbody></table></div>
     <div class="row" style="margin-top:10px"><textarea id="np_name" rows="2" placeholder="LASTNAME, Firstname (one per line)" style="flex:1;min-width:200px"></textarea><select id="np_role">${ROLES.map(([v,l])=>`<option value="${v}" ${v==='edit'?'selected':''}>${l}</option>`).join('')}</select><button class="btn pri" data-act="addperson">+ Add person</button></div>
     <p style="margin:8px 0 0;color:var(--mute);font-size:11px">Tip: paste several names at once, one per line. Use the same spelling as in MOM Tracker (e.g. “HORN, Philippe”).</p></div>`;
   MK.push(['general',h.length]);
@@ -1142,6 +1261,276 @@ function vSetup(){
   const cur=sec[F.ss]?F.ss:'team';
   return `<div class="setup"><nav class="smenu noprint">${menu.map(([k,i,l,n])=>`<button class="${k===cur?'on':''}" data-f="ss" data-v="${k}"><span>${i}</span>${l}${n!==''?`<small>${n}</small>`:''}</button>`).join('')}</nav><div class="sbody">${sec[cur]}</div></div>`;
 }
+/* ===================== PLANNING =====================
+   Durations: library activity a.dur = working days per room (decimals allowed: 0.5 = half a day), or a.rate = m² per
+   day for one crew (used when the room has an area, e.g. read from the plans); per-room override r.pdur[stepId].
+   Crews: a.crews = max crews working on this activity at the same time on the project (empty = no limit).
+   Load = crews busy per working day (a 0.5-day step uses half a crew on its day).
+   Calendar: settings.planCfg = {start, wd:[1..5] (0 = Sunday), hol:['YYYY-MM-DD'…], hp: days for a hold-point
+   inspection}; floor.start and room.pstart = earliest start of their works.
+   Forecast: each room follows its own sequence; Done / In-progress steps keep their real dates, the remaining ones
+   start at the earliest on today, the project / floor / room start, and the next working day after the previous step.
+   Leveled plan: same, but an activity never uses more than a.crews per day — steps are pushed later (rooms taken in
+   order of earliest start, then floor, then code). As-soon-as-possible plan = no crew limit (shows the raw peaks).
+   Baseline: ft_baseline/main = {at, by, mode, end, t:{roomId:{stepId:[start,end]}}} — days since 1970-01-01. */
+const dn=s=>Math.round(Date.UTC(+s.slice(0,4),+s.slice(5,7)-1,+s.slice(8,10))/864e5);
+const dstr=n=>new Date(n*864e5).toISOString().slice(0,10);
+const dowN=n=>(n+4)%7;   // 1970-01-01 was a Thursday
+const fmtN=n=>fmtD(dstr(n));
+const pcfg=()=>{const c=(S.settings&&S.settings.planCfg)||{};return {start:c.start||'',wd:Array.isArray(c.wd)&&c.wd.length?c.wd:[1,2,3,4,5],hol:c.hol||[],hp:c.hp===undefined||c.hp===''?1:+c.hp};};
+function calendar(){
+  const c=pcfg(),wd=new Set(c.wd.map(Number)),hol=new Set(c.hol.filter(x=>/^\d{4}-\d\d-\d\d$/.test(x)).map(dn));
+  const isW=n=>wd.has(dowN(n))&&!hol.has(n);
+  const next=n=>{for(let k=0;k<800&&!isW(n);k++)n++;return n;};            // first working day ≥ n
+  const add=(n,k)=>{n=next(n);while(k-->0)n=next(n+1);return n;};             // working day number k after n
+  const count=(a,b)=>{let k=0;for(let n=a;n<=b;n++)if(isW(n))k++;return k;};
+  return {isW,next,add,count};
+}
+const roomArea=r=>{const v=parseFloat(String(r.area||'').replace(',','.'));return v>0?v:0;};
+function stepDur(r,id,noOv){
+  if(isHP(id))return Math.max(0,pcfg().hp);
+  const ov=!noOv&&r.pdur&&+r.pdur[id];if(ov>0)return ov;
+  const a=S.settings.acts.find(x=>x.id===baseOf(id));if(!a)return 1;
+  const ar=roomArea(r);if(+a.rate>0&&ar)return Math.max(.25,Math.round(ar/a.rate*4)/4);
+  return +a.dur>0?+a.dur:1;
+}
+let PLC=null;   // cache {asap, lev}, cleared at every render (data may have changed)
+function planOf(mode){PLC=PLC||{};return PLC[mode]=PLC[mode]||planCompute(mode==='lev');}
+const plMode=()=>F.plMode==='asap'?'asap':'lev';
+const hasCaps=()=>S.settings.acts.some(a=>+a.crews>0)||(S.settings.subs||[]).some(x=>+x.crews>0);
+function planCompute(level){
+  const c=pcfg(),C=calendar(),T=dn(today()),P0=c.start?dn(c.start):T,use={},useS={},caps={},capsS={},tasks=[],byRoom={};
+  S.settings.acts.forEach(a=>caps[a.id]=+a.crews>0?+a.crews:0);(S.settings.subs||[]).forEach(x=>capsS[x.id]=+x.crews>0?+x.crews:0);
+  // load per activity (use) and per subcontractor (useS)
+  const addUse=t=>{if(!t.ld)return;const u=use[t.b]=use[t.b]||{},v=t.sub?(useS[t.sub]=useS[t.sub]||{}):null;
+    for(let n=t.s;n<=t.e;n++)if(C.isW(n)){u[n]=(u[n]||0)+t.ld;if(v)v[n]=(v[n]||0)+t.ld;}};
+  const fits=(t,s,cap,capS)=>{const u=use[t.b]||{},v=(t.sub&&useS[t.sub])||{};let n=s;
+    for(let k=0;k<t.D;k++){if(cap&&(u[n]||0)+t.ld>cap+1e-6)return false;if(capS&&(v[n]||0)+t.ld>capS+1e-6)return false;n=C.next(n+1);}return true;};
+  const pend=[];
+  roomsList().forEach(r=>{
+    const f=floorById(r.floor),base=C.next(Math.max(T,P0,f&&f.start?dn(f.start):0,r.pstart?dn(r.pstart):0)),q=[];let prev=-1e9;
+    byRoom[r.id]={};
+    roomActs(r).forEach(id=>{
+      const o=(r.st||{})[id]||{},sv=o.s||0,d=stepDur(r,id),D=Math.ceil(d-1e-9),ld=isHP(id)||!D?0:d/D,t={rid:r.id,id,b:baseOf(id),d,D,ld,sv,sub:isHP(id)?'':asg(r,id).sub||''};
+      if(sv===2){t.e=dn(o.dd||o.d||today());t.s=Math.min(t.e,dn(o.ds||o.dd||o.d||today()));}
+      else if(sv===1){t.s=dn(o.ds||o.d||today());t.e=D?C.add(t.s,D-1):t.s;if(t.e<T)t.e=C.next(T);}
+      else{q.push(t);return;}
+      // real dates: the crew-days of the step are spread over the working days it actually took
+      if(t.ld){const k=C.count(t.s,t.e);t.ld=k?Math.min(1,t.d/k):t.ld;}
+      addUse(t);prev=Math.max(prev,t.e);tasks.push(t);byRoom[r.id][id]=t;
+    });
+    if(q.length)pend.push({r,q,prev,base,fi:floorIdx(r.floor)});
+  });
+  const esOf=p=>Math.max(p.base,C.next(p.prev+1));
+  pend.forEach(p=>p.es=esOf(p));
+  let act=pend.slice();
+  while(act.length){
+    let bi=0;for(let i=1;i<act.length;i++){const a=act[i],b=act[bi];if(a.es<b.es||(a.es===b.es&&(a.fi<b.fi||(a.fi===b.fi&&byCode(a.r,b.r)<0))))bi=i;}
+    const p=act[bi],t=p.q.shift();let s=p.es;
+    if(!t.D){t.s=t.e=Math.max(p.prev,p.base);}
+    else{const cap=level?caps[t.b]:0,capS=level&&t.sub?capsS[t.sub]:0;
+      if(cap||capS){const cp=cap?Math.max(cap,t.ld):0,cs=capS?Math.max(capS,t.ld):0;for(let g=0;g<3000&&!fits(t,s,cp,cs);g++)s=C.next(s+1);}
+      t.s=s;t.e=C.add(s,t.D-1);addUse(t);}
+    p.prev=Math.max(p.prev,t.e);tasks.push(t);byRoom[p.r.id][t.id]=t;
+    if(p.q.length)p.es=esOf(p);else act.splice(bi,1);
+  }
+  let end=-1e9,start=1e9;const fEnd={},rEnd={};
+  tasks.forEach(t=>{end=Math.max(end,t.e);start=Math.min(start,t.s);const r=S.rooms[t.rid];rEnd[t.rid]=Math.max(rEnd[t.rid]||-1e9,t.e);fEnd[r.floor]=Math.max(fEnd[r.floor]||-1e9,t.e);});
+  return {tasks,byRoom,use,useS,end:tasks.length?end:null,start:tasks.length?start:null,fEnd,rEnd,T,C,level};
+}
+/* daily load of an activity (or all) as [{n, v, by:{base:load}}] between a and b */
+const isSubSel=x=>String(x||'').startsWith('sub:');
+const planLoad=(pl,a,b,only)=>{const sub=isSubSel(only),src=sub?{[only]:pl.useS[only.slice(4)]||{}}:pl.use,out=[];
+  for(let n=a;n<=b;n++){if(!pl.C.isW(n))continue;const by={};let v=0;
+    for(const k in src){if(!sub&&only&&only!=='all'&&k!==only)continue;const x=src[k][n];if(x){by[k]=x;v+=x;}}out.push({n,v,by});}return out;};
+/* Per-subcontractor figures (load of all its activities together) */
+function subStats(){
+  const A=planOf('asap'),L=planOf('lev'),T=A.T,pk=u=>{let m=0,at=null;for(const n in u){if(+n<T)continue;if(u[n]>m+1e-9){m=u[n];at=+n;}}return {m,at};};
+  return (S.settings.subs||[]).map(x=>{const ts=A.tasks.filter(t=>t.sub===x.id&&!t.sv),tl=L.tasks.filter(t=>t.sub===x.id&&!t.sv);if(!ts.length)return null;
+    const work=ts.reduce((a,t)=>a+t.d,0),s0=Math.min(...ts.map(t=>t.s)),ea=Math.max(...ts.map(t=>t.e)),el=Math.max(...tl.map(t=>t.e)),wd=A.C.count(s0,ea),avgC=wd?work/wd:0;
+    return {x,n:new Set(ts.map(t=>t.rid)).size,work,peakA:pk(A.useS[x.id]||{}),peakL:pk(L.useS[x.id]||{}),avg:avgC,sug:Math.max(1,Math.ceil(avgC-1e-6)),endA:ea,endL:el};}).filter(Boolean);
+}
+/* Per-activity figures for the peaks table */
+function planStats(){
+  const A=planOf('asap'),L=planOf('lev'),T=A.T,res=[];
+  S.settings.acts.forEach(a=>{
+    const ts=A.tasks.filter(t=>t.b===a.id&&!t.sv),tl=L.tasks.filter(t=>t.b===a.id&&!t.sv);if(!ts.length&&!(A.use[a.id]))return;
+    const pk=u=>{let m=0,at=null;for(const n in u){if(+n<T)continue;if(u[n]>m+1e-9){m=u[n];at=+n;}}return {m,at};};
+    const pa=pk(A.use[a.id]||{}),pl=pk(L.use[a.id]||{});
+    const work=ts.reduce((x,t)=>x+t.d,0);   // crew-days remaining (not started)
+    const s0=ts.length?Math.min(...ts.map(t=>t.s)):null,ea=ts.length?Math.max(...ts.map(t=>t.e)):null,el=tl.length?Math.max(...tl.map(t=>t.e)):null;
+    const wdays=s0!=null?A.C.count(s0,ea):0,avgC=wdays?work/wdays:0;
+    res.push({a,n:ts.length,work,peakA:pa,peakL:pl,avg:avgC,s0,endA:ea,endL:el,sug:Math.max(1,Math.ceil(avgC-1e-6))});
+  });
+  return res;
+}
+/* ---- view ---- */
+const PLW={w:5,d:22};   // px per day
+function plSwitch(){
+  const v=F.plv==='gantt'?'gantt':'load',m=plMode();
+  return `<div class="filters noprint"><div class="vswitch">${[['load','📊 Load & peaks'],['gantt','📅 Gantt']].map(([k,l])=>`<button class="${v===k?'on':''}" data-pg="plv|${k}">${l}</button>`).join('')}</div>
+    <div class="vswitch" title="Which plan is shown">${[['lev','⚖ Leveled (crew limits)'],['asap','⚡ As soon as possible']].map(([k,l])=>`<button class="${m===k?'on':''}" data-pg="plMode|${k}">${l}</button>`).join('')}</div>
+    <select data-pgsel="floor"><option value="all">All floors</option>${S.settings.floors.map(f=>`<option value="${f.id}" ${F.floor===f.id?'selected':''}>${esc(f.name)}</option>`).join('')}</select>
+    <span class="sp"></span><button class="btn sm" data-pg="xls|1">⬇ Excel</button><button class="btn sm" data-act="print">🖨 Print</button></div>`;
+}
+function vPlanning(){
+  const s=S.settings;let h=`<div class="printonly"><h2>${esc(s.project)} — Planning — ${fmtLong(today())}</h2></div>`+plSwitch();
+  if(!Object.keys(S.rooms).length)return h+`<div class="card">No rooms yet.</div>`;
+  const A=planOf('asap'),L=planOf('lev'),P=plMode()==='lev'?L:A,B=S.baseline&&S.baseline.t?S.baseline:null;
+  if(P.end==null)return h+`<div class="card">No activity in the rooms' sequences yet.</div>`;
+  // key figures
+  const totLoad=pl=>{let m=0,at=null;const days={};for(const k in pl.use)for(const n in pl.use[k]){if(+n<pl.T)continue;days[n]=(days[n]||0)+pl.use[k][n];}for(const n in days)if(days[n]>m+1e-9){m=days[n];at=+n;}return {m,at};};
+  const ta=totLoad(A),tl=totLoad(L),slip=B&&B.end!=null?P.C.count(Math.min(B.end,P.end),Math.max(B.end,P.end))-1:0;
+  let late=0;if(B)P.tasks.forEach(t=>{const b=(B.t[t.rid]||{})[t.id];if(b&&!t.sv&&b[0]<P.T)late++;});
+  h+=`<div class="kpis">
+    <div class="kpi"><b>${fmtLong(dstr(P.end))}</b><span>Forecast finish (${plMode()==='lev'?'leveled':'as soon as possible'})</span>${hasCaps()?`<small style="color:var(--mute)">${plMode()==='lev'?'ASAP: '+fmtN(A.end):'Leveled: '+fmtN(L.end)}</small>`:''}</div>
+    <div class="kpi"><b>${ta.m.toFixed(1)}</b><span>Peak crews, as soon as possible</span><small style="color:var(--mute)">${ta.at!=null?'on '+fmtN(ta.at):''}</small></div>
+    <div class="kpi"><b style="color:${hasCaps()?'var(--done)':'var(--mute)'}">${tl.m.toFixed(1)}</b><span>Peak crews, leveled</span><small style="color:var(--mute)">${hasCaps()?(tl.at!=null?'on '+fmtN(tl.at):''):'set crew limits below'}</small></div>
+    ${B?`<div class="kpi"><b style="color:${P.end>B.end?'var(--blk)':'var(--done)'}">${P.end>B.end?'+':P.end<B.end?'−':''}${slip} d</b><span>vs baseline (${fmtN(B.end)})</span><small style="color:${late?'var(--blk)':'var(--mute)'}">${late} step(s) should have started</small></div>`
+      :`<div class="kpi"><b style="color:var(--mute)">—</b><span>No baseline yet</span><small style="color:var(--mute)">${isAdmin()?'save one below to follow the drift':'an admin can save one'}</small></div>`}
+  </div>`;
+  h+=F.plv==='gantt'?plGantt(P,B):plLoadView(A,L,P);
+  h+=plParams();
+  return h;
+}
+function plLoadView(A,L,P){
+  const only=F.plAct&&F.plAct!=='all'&&(S.settings.acts.some(a=>a.id===F.plAct)||(isSubSel(F.plAct)&&(S.settings.subs||[]).some(x=>'sub:'+x.id===F.plAct)))?F.plAct:'all';
+  const onlySub=isSubSel(only)?(S.settings.subs||[]).find(x=>'sub:'+x.id===only):null;
+  const a0=Math.min(A.T,P.start),a1=Math.max(A.end,L.end),days=a1-a0+1,week=F.plGran==='d'?false:F.plGran==='w'?true:days>100;
+  const actC=id=>isSubSel(id)?'#3d6a99':(S.settings.acts.find(a=>a.id===id)||{}).color||'#999';
+  // buckets
+  const mk=pl=>{const d=planLoad(pl,a0,a1,only);if(!week)return d.map(x=>({n:x.n,v:x.v,by:x.by,k:1}));
+    const o=[];d.forEach(x=>{const wk=x.n-((dowN(x.n)+6)%7);let b=o[o.length-1];if(!b||b.n!==wk){b={n:wk,v:0,by:{},k:0};o.push(b);}b.k++;b.v+=x.v;for(const k in x.by)b.by[k]=(b.by[k]||0)+x.by[k];});
+    o.forEach(b=>{b.v/=b.k;for(const k in b.by)b.by[k]/=b.k;});return o;};
+  const bp=mk(P),bo=mk(P===L?A:L),cap=onlySub?+onlySub.crews||0:only!=='all'?+(S.settings.acts.find(a=>a.id===only)||{}).crews||0:0;
+  const max=Math.max(1,...bp.map(b=>b.v),...(only!=='all'?bo.map(b=>b.v):[]),cap)*1.1,W=Math.max(10,Math.min(28,Math.floor(1100/Math.max(1,bp.length)))),H=220,X=40;
+  const y=v=>H-v/max*H;
+  let svg=`<svg viewBox="0 0 ${X+bp.length*W+10} ${H+34}" style="width:100%;min-width:${Math.min(1200,X+bp.length*W)}px;height:auto" class="plchart">`;
+  const step=max>20?5:max>8?2:1;for(let v=0;v<=max;v+=step)svg+=`<line x1="${X}" x2="${X+bp.length*W}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${X-6}" y="${y(v)+4}" text-anchor="end" font-size="10" fill="var(--mute)">${v}</text>`;
+  bp.forEach((b,i)=>{const x=X+i*W;let acc=0;
+    if(only==='all')Object.keys(b.by).sort((p,q)=>libOrd(p)-libOrd(q)).forEach(k=>{const v=b.by[k];svg+=`<rect x="${x+1}" y="${y(acc+v)}" width="${W-2}" height="${Math.max(0,y(acc)-y(acc+v))}" fill="${actC(k)}"><title>${esc((S.settings.acts.find(a=>a.id===k)||{}).name||k)}: ${v.toFixed(1)} crews</title></rect>`;acc+=v;});
+    else svg+=`<rect x="${x+1}" y="${y(b.v)}" width="${W-2}" height="${H-y(b.v)}" fill="${actC(only)}"><title>${b.v.toFixed(1)} crews</title></rect>`;
+    if(only!=='all'){const o=bo[i];if(o&&o.v)svg+=`<rect x="${x+1}" y="${y(o.v)}" width="${W-2}" height="${H-y(o.v)}" fill="none" stroke="var(--ink)" stroke-dasharray="3 2" opacity=".55"/>`;}
+    if(b.n<=P.T&&(!bp[i+1]||bp[i+1].n>P.T))svg+=`<line x1="${x+W}" x2="${x+W}" y1="0" y2="${H}" stroke="var(--blk)" stroke-width="1.5"/><text x="${x+W+3}" y="10" font-size="10" fill="var(--blk)">today</text>`;
+    const lab=week?((i%Math.ceil(36/W)===0)?fmtN(b.n):''):(i%Math.ceil(30/W)===0?fmtN(b.n):'');if(lab)svg+=`<text x="${x+W/2}" y="${H+14}" font-size="10" text-anchor="middle" fill="var(--mute)">${lab}</text>`;
+  });
+  svg+=`<title>${week?'average crews per working day, by week':'crews per working day'}</title>`;
+  if(cap)svg+=`<line x1="${X}" x2="${X+bp.length*W}" y1="${y(cap)}" y2="${y(cap)}" stroke="var(--blk)" stroke-width="2" stroke-dasharray="6 3"/><text x="${X+4}" y="${y(cap)-4}" font-size="11" font-weight="700" fill="var(--blk)">limit ${cap} crews</text>`;
+  svg+='</svg>';
+  const stats=planStats().sort((p,q)=>q.peakA.m-p.peakA.m);
+  let h=`<div class="card"><div class="row" style="margin-bottom:8px"><h2 style="margin:0">Workload — crews needed${week?' (weekly average per working day)':' per working day'}</h2><span class="sp"></span>
+    <select data-pgsel="plAct"><option value="all">All activities (stacked)</option><optgroup label="Activity">${[...S.settings.acts].sort(byNm).map(a=>`<option value="${a.id}" ${only===a.id?'selected':''}>${esc(a.name)}</option>`).join('')}</optgroup>${(S.settings.subs||[]).length?`<optgroup label="Subcontractor (all its activities)">${[...S.settings.subs].sort(byNm).map(x=>`<option value="sub:${x.id}" ${only==='sub:'+x.id?'selected':''}>🏗 ${esc(x.name)}</option>`).join('')}</optgroup>`:''}</select>
+    <div class="seg">${[['auto','Auto'],['d','Days'],['w','Weeks']].map(([k,l])=>`<button class="${(F.plGran||'auto')===k?'on0':''}" data-pg="plGran|${k}">${l}</button>`).join('')}</div></div>
+    <div style="overflow-x:auto">${svg}</div>
+    <div class="legend" style="margin:6px 0 0">${only==='all'?[...new Set(Object.keys(P.use))].sort((p,q)=>libOrd(p)-libOrd(q)).map(k=>`<span><i class="sq" style="background:${actC(k)};border:0"></i>${esc((S.settings.acts.find(a=>a.id===k)||{}).name||k)}</span>`).join(''):`<span><i class="sq" style="background:${actC(only)};border:0"></i>${onlySub?'🏗 '+esc(onlySub.name)+' — ':''}${plMode()==='lev'?'Leveled':'As soon as possible'}</span><span><i class="sq" style="border:1px dashed var(--ink)"></i>${plMode()==='lev'?'As soon as possible':'Leveled'}</span>${cap?'<span style="color:var(--blk)">– – crew limit</span>':''}`}</div></div>`;
+  h+=`<div class="card"><h2>Peaks by activity — set the crews to level them</h2>
+    <p style="margin:-4px 0 10px;color:var(--mute);font-size:12px">“Crews max” = how many crews can work on this activity at the same time. The leveled plan never goes above it: the peaks are spread over the following days and the finish date moves if needed. “Suggested” = average crews needed over the activity's period: the peaks are flattened, the finish can move by a few days — check “Finish leveled”. Click a row to see that activity alone in the chart.</p>
+    <div class="tbwrap"><table class="tb"><thead><tr><th>Activity</th><th>Rooms to do</th><th>Crew-days</th><th>Peak ASAP</th><th>Average</th><th>Suggested</th><th>Crews max</th><th>Peak leveled</th><th>Finish ASAP</th><th>Finish leveled</th></tr></thead><tbody>
+    ${stats.map(x=>{const dl=x.endL!=null&&x.endA!=null?P.C.count(Math.min(x.endA,x.endL),Math.max(x.endA,x.endL))-1:0;
+      return `<tr class="click" data-pgsel-row="${x.a.id}"><td><span class="dot" style="background:${x.a.color};margin-right:6px"></span><b>${esc(x.a.name)}</b>${x.a.sub?`<br><small style="color:var(--mute)">🏗 ${esc(subName(x.a.sub))}</small>`:''}</td><td>${x.n}</td><td>${x.work.toFixed(1)}</td>
+      <td><b style="color:${+x.a.crews>0&&x.peakA.m>+x.a.crews+1e-6?'var(--blk)':'inherit'}">${x.peakA.m.toFixed(1)}</b>${x.peakA.at!=null?`<br><small style="color:var(--mute)">${fmtN(x.peakA.at)}</small>`:''}</td>
+      <td>${x.avg.toFixed(1)}</td><td>${isAdmin()&&+x.a.crews!==x.sug?`<button class="btn sm" data-pgcap="${x.a.id}|${x.sug}" title="Use ${x.sug} as crews max">${x.sug} ←</button>`:x.sug}</td>
+      <td>${isAdmin()?`<input type="number" min="0" step="1" style="width:64px" data-pact="crews|${x.a.id}" value="${+x.a.crews>0?+x.a.crews:''}" placeholder="∞">`:(+x.a.crews>0?+x.a.crews:'∞')}</td>
+      <td>${+x.a.crews>0?x.peakL.m.toFixed(1):'—'}</td><td>${x.endA!=null?fmtN(x.endA):'—'}</td><td>${x.endL!=null?fmtN(x.endL)+(dl>0?` <small class="overdue">+${dl} d</small>`:''):'—'}</td></tr>`;}).join('')||'<tr><td colspan="10" class="empty">Nothing left to plan.</td></tr>'}
+    </tbody></table></div>${isAdmin()&&stats.some(x=>+x.a.crews!==x.sug)?`<div class="row" style="margin-top:8px"><button class="btn" data-pg="capall|1">Use all suggested crews</button><button class="btn" data-pg="capnone|1">Remove all limits</button></div>`:''}</div>`;
+  const ss=subStats();
+  if(ss.length)h+=`<div class="card"><h2>Peaks by subcontractor</h2><p style="margin:-4px 0 10px;color:var(--mute);font-size:12px">All the activities of a subcontractor share its crews (assignment from the activity library, or room-specific). Its “Crews max” applies on top of the activity limits. Click a row to see its load in the chart.</p>
+    <div class="tbwrap"><table class="tb"><thead><tr><th>Subcontractor</th><th>Rooms</th><th>Crew-days</th><th>Peak ASAP</th><th>Average</th><th>Suggested</th><th>Crews max</th><th>Peak leveled</th><th>Finish ASAP</th><th>Finish leveled</th></tr></thead><tbody>
+    ${ss.sort((p,q)=>q.peakA.m-p.peakA.m).map(y=>{const dl=P.C.count(Math.min(y.endA,y.endL),Math.max(y.endA,y.endL))-1;
+      return `<tr class="click" data-pgsel-row="sub:${y.x.id}"><td><b>🏗 ${esc(y.x.name)}</b></td><td>${y.n}</td><td>${y.work.toFixed(1)}</td><td><b style="color:${+y.x.crews>0&&y.peakA.m>+y.x.crews+1e-6?'var(--blk)':'inherit'}">${y.peakA.m.toFixed(1)}</b>${y.peakA.at!=null?`<br><small style="color:var(--mute)">${fmtN(y.peakA.at)}</small>`:''}</td>
+      <td>${y.avg.toFixed(1)}</td><td>${isAdmin()&&+y.x.crews!==y.sug?`<button class="btn sm" data-pgsubcap="${y.x.id}|${y.sug}">${y.sug} ←</button>`:y.sug}</td>
+      <td>${isAdmin()?`<input type="number" min="0" step="1" style="width:64px" data-psub="${y.x.id}" value="${+y.x.crews>0?+y.x.crews:''}" placeholder="∞">`:(+y.x.crews>0?+y.x.crews:'∞')}</td>
+      <td>${+y.x.crews>0||hasCaps()?y.peakL.m.toFixed(1):'—'}</td><td>${fmtN(y.endA)}</td><td>${fmtN(y.endL)}${dl>0?` <small class="overdue">+${dl} d</small>`:''}</td></tr>`;}).join('')}</tbody></table></div></div>`;
+  // floors
+  h+=`<div class="card"><h2>Forecast by floor</h2><div class="tbwrap"><table class="tb"><thead><tr><th>Floor</th><th>Rooms</th><th>Finish ASAP</th><th>Finish leveled</th>${S.baseline&&S.baseline.fEnd?'<th>Baseline</th>':''}</tr></thead><tbody>${S.settings.floors.map(f=>{const n=Object.values(S.rooms).filter(r=>r.floor===f.id).length;if(!n)return '';const be=S.baseline&&S.baseline.fEnd&&S.baseline.fEnd[f.id];
+    return `<tr><td><b>${esc(f.name)}</b>${f.start?`<br><small style="color:var(--mute)">start ${fmtD(f.start)}</small>`:''}</td><td>${n}</td><td>${A.fEnd[f.id]!=null?fmtN(A.fEnd[f.id]):'—'}</td><td>${L.fEnd[f.id]!=null?fmtN(L.fEnd[f.id]):'—'}</td>${S.baseline&&S.baseline.fEnd?`<td>${be!=null?fmtN(be)+(P.fEnd[f.id]>be?` <small class="overdue">late</small>`:''):'—'}</td>`:''}</tr>`;}).join('')}</tbody></table></div></div>`;
+  return h;
+}
+function plGantt(P,B){
+  const z=F.plZoom==='d'?'d':'w',px=PLW[z],LW=190,rows=filtered();
+  const tasks=P.tasks;let a0=Math.min(P.T,P.start),a1=P.end;
+  if(B)for(const r in B.t)for(const id in B.t[r]){a0=Math.min(a0,B.t[r][id][0]);a1=Math.max(a1,B.t[r][id][1]);}
+  a0-=((dowN(a0)+6)%7);a1+=7;const W=(a1-a0+1)*px,X=n=>(n-a0)*px;
+  let head='',grid='';
+  for(let n=a0;n<=a1;n++){const d=new Date(n*864e5);
+    if(d.getUTCDate()===1||n===a0)head+=`<div class="gm" style="left:${X(n)}px">${d.toLocaleDateString('en-GB',{month:'short',year:'2-digit',timeZone:'UTC'})}</div>`;
+    if(dowN(n)===1){head+=`<div class="gw" style="left:${X(n)}px">${z==='d'?fmtN(n):d.getUTCDate()}</div>`;grid+=`<i style="left:${X(n)}px"></i>`;}
+}
+  const bar=(t,r)=>{const a=actById(t.id)||{},hp=isHP(t.id),cl=t.sv===2?'g2':t.sv===1?'g1':'g0';
+    const tip=`${r.code} · ${a.name||t.id}\n${fmtN(t.s)}${t.e!==t.s?' → '+fmtN(t.e):''} · ${t.d} d${t.ld&&t.ld<1?' (part of a day)':''}\n${lbl(t.id,t.sv)}`;
+    return `<b class="gbar ${cl} ${hp?'ghp':''}" style="left:${X(t.s)}px;width:${Math.max(hp?6:3,(t.e-t.s+1)*px-1)}px;--c:${hp?'var(--hp)':a.color||'#999'}" title="${esc(tip)}" data-room="${r.id}">${z==='d'&&(t.e-t.s+1)*px>34?esc(a.short||''):''}</b>`;};
+  let body='';
+  S.settings.floors.forEach(f=>{
+    const rs=rows.filter(r=>r.floor===f.id);if(!rs.length)return;
+    const ft=tasks.filter(t=>S.rooms[t.rid]&&S.rooms[t.rid].floor===f.id);if(!ft.length)return;
+    const fs=Math.min(...ft.map(t=>t.s)),fe=Math.max(...ft.map(t=>t.e));
+    body+=`<div class="grow gfl"><div class="glab">${esc(f.name)} <small>${rs.length} rooms · ${fmtN(fs)} → ${fmtN(fe)}</small></div><div class="gtr"><b class="gsum" style="left:${X(fs)}px;width:${(fe-fs+1)*px}px"></b></div></div>`;
+    rs.forEach(r=>{const bt=B&&B.t[r.id],rt=Object.values(P.byRoom[r.id]||{});if(!rt.length)return;
+      const re=Math.max(...rt.map(t=>t.e)),be=bt?Math.max(...Object.values(bt).map(x=>x[1])):null;
+      body+=`<div class="grow"><div class="glab"><a href="#" data-room="${r.id}"><b>${esc(r.code)}</b></a> <span>${esc(r.name)}</span>${be!=null&&re>be?` <small class="overdue" title="Forecast finish ${fmtN(re)}, baseline ${fmtN(be)}">+${P.C.count(be,re)-1}d</small>`:''}</div><div class="gtr">${bt?Object.entries(bt).map(([id,x])=>`<i class="gbl" style="left:${X(x[0])}px;width:${(x[1]-x[0]+1)*px}px"></i>`).join(''):''}${rt.map(t=>bar(t,r)).join('')}</div></div>`;});
+  });
+  return `<div class="card noprint" style="padding:10px"><div class="row"><b>Zoom</b><div class="seg">${[['w','Weeks'],['d','Days']].map(([k,l])=>`<button class="${z===k?'on0':''}" data-pg="plZoom|${k}">${l}</button>`).join('')}</div>
+    <input data-fs="q" id="q" placeholder="🔍 Room…" value="${esc(F.q)}" style="width:140px">
+    <span class="legend" style="margin:0"><span><i class="sq" style="background:#7a8699;border:0"></i>Done</span><span><i class="sq" style="background:repeating-linear-gradient(45deg,#7a8699,#7a8699 3px,#b9c1cd 3px,#b9c1cd 6px);border:0"></i>In progress</span><span><i class="sq" style="background:#d4d9e1;border:0"></i>Planned</span>${B?'<span><i class="sq" style="background:#a9b2bf;height:4px;border:0"></i>Baseline</span>':''}<span style="color:var(--blk)">│ today</span></span></div></div>
+    <div class="gwrap" id="gwrap"><div class="gin" style="width:${LW+W}px;--lw:${LW}px"><div class="ghead"><div class="glab"></div><div class="gtr">${head}</div></div>
+    <div class="gbody"><div class="ggrid" style="left:${LW}px;width:${W}px">${grid}<i class="gtoday" style="left:${X(P.T)}px"></i></div>${body||'<div class="empty" style="padding:10px">No room matches.</div>'}</div></div></div>`;
+}
+function plParams(){
+  const c=pcfg(),adm=isAdmin(),dis=adm?'':'disabled',s=S.settings,B=S.baseline;
+  const wdn=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],nA=Object.values(S.rooms).filter(roomArea).length;
+  return `<details class="card" data-dk="plparams" ${adm&&!S.settings.planCfg?'open':''}><summary><b style="font-size:16px">⚙ Planning parameters</b> <small style="color:var(--mute)">durations, crews, calendar, baseline${adm?'':' — read only'}</small></summary>
+  <div class="row" style="margin:10px 0;align-items:flex-end">
+    <label class="form" style="display:grid;gap:4px;font-size:12px;color:var(--mute);font-weight:600">Start of works<input type="date" data-pc="start" value="${esc(c.start)}" ${dis}></label>
+    <label class="form" style="display:grid;gap:4px;font-size:12px;color:var(--mute);font-weight:600">Hold point inspection (days)<input type="number" min="0" step="0.5" style="width:90px" data-pc="hp" value="${c.hp}" ${dis}></label>
+    <div style="font-size:12px;color:var(--mute);font-weight:600">Working days<div class="row" style="gap:4px;margin-top:4px">${[1,2,3,4,5,6,0].map(d=>`<label class="chk" style="padding:0 4px"><input type="checkbox" data-pcwd="${d}" ${c.wd.map(Number).includes(d)?'checked':''} ${dis}>${wdn[d]}</label>`).join('')}</div></div></div>
+  <label style="display:grid;gap:4px;font-size:12px;color:var(--mute);font-weight:600">Holidays / site closed (dates, one per line or separated by commas)<textarea data-pc="hol" rows="2" style="width:100%" placeholder="2026-12-25, 2027-01-01" ${dis}>${esc(c.hol.join(', '))}</textarea></label>
+  <h3>Durations per room and crews</h3><p style="margin:0 0 8px;color:var(--mute);font-size:12px">Days per room = working days one crew needs for one room (0.5 = half a day). If m²/day is set, rooms with an area (${nA}/${Object.keys(S.rooms).length} rooms have one, read from the plans) use area ÷ m²/day instead.</p>
+  <div class="tbwrap"><table class="tb"><thead><tr><th>Activity</th><th>Days per room</th><th>or m² / day</th><th>Crews max</th><th>Subcontractor</th></tr></thead><tbody>
+  ${[...s.acts].sort(byNm).map(a=>`<tr><td><span class="dot" style="background:${a.color};margin-right:6px"></span>${esc(a.name)}</td><td><input type="number" min="0" step="0.25" style="width:80px" data-pact="dur|${a.id}" value="${+a.dur>0?+a.dur:''}" placeholder="1" ${dis}></td><td><input type="number" min="0" step="1" style="width:80px" data-pact="rate|${a.id}" value="${+a.rate>0?+a.rate:''}" placeholder="—" ${dis}></td><td><input type="number" min="0" step="1" style="width:70px" data-pact="crews|${a.id}" value="${+a.crews>0?+a.crews:''}" placeholder="∞" ${dis}></td><td>${esc(subName(a.sub)||'—')}</td></tr>`).join('')}</tbody></table></div>
+  <h3>Floor start dates</h3><div class="row">${s.floors.map(f=>`<label style="display:grid;gap:4px;font-size:12px;color:var(--mute);font-weight:600">${esc(f.name)}<input type="date" data-pfstart="${f.id}" value="${esc(f.start||'')}" ${dis}></label>`).join('')}</div>
+  <h3>Baseline</h3><div class="row">${B&&B.t?`Saved ${fmtLong(ymd(new Date(B.at)))} by ${esc(B.by||'')} (${B.mode==='lev'?'leveled':'as soon as possible'} plan, finish ${fmtN(B.end)})`:'No baseline: save the plan once it is agreed, to see the drift (late rooms, late steps) afterwards.'}
+    ${adm?`<button class="btn sm pri" data-pg="basesave|1">📌 Save the ${plMode()==='lev'?'leveled':'ASAP'} plan as baseline</button>${B&&B.t?'<button class="btn sm red" data-pg="basedel|1">Remove baseline</button>':''}`:''}</div>
+  </details>`;
+}
+function planXls(){
+  const X=xls();if(!X)return;const P=planOf(plMode()),B=S.baseline&&S.baseline.t?S.baseline:null;
+  const rows=P.tasks.map(t=>{const r=S.rooms[t.rid],a=actById(t.id)||{},b=B&&(B.t[t.rid]||{})[t.id];return {Floor:(floorById(r.floor)||{}).name||'',Room:r.code,Name:r.name,Activity:a.name||t.id,Subcontractor:isHP(t.id)?'':subName(asg(r,t.id).sub),Status:lbl(t.id,t.sv),'Duration (d)':t.d,Start:dstr(t.s),Finish:dstr(t.e),...(B?{'Baseline start':b?dstr(b[0]):'','Baseline finish':b?dstr(b[1]):''}:{})};})
+    .sort((x,y)=>x.Floor.localeCompare(y.Floor)||x.Room.localeCompare(y.Room,undefined,{numeric:true})||x.Start.localeCompare(y.Start));
+  const wb=X.utils.book_new();X.utils.book_append_sheet(wb,X.utils.json_to_sheet(rows),'Plan');
+  const st=planStats().map(x=>({Activity:x.a.name,'Rooms to do':x.n,'Crew-days':+x.work.toFixed(2),'Peak ASAP':+x.peakA.m.toFixed(2),'Peak date':x.peakA.at!=null?dstr(x.peakA.at):'','Average crews':+x.avg.toFixed(2),'Crews max':+x.a.crews||'','Peak leveled':+x.peakL.m.toFixed(2),'Finish ASAP':x.endA!=null?dstr(x.endA):'','Finish leveled':x.endL!=null?dstr(x.endL):''}));
+  X.utils.book_append_sheet(wb,X.utils.json_to_sheet(st),'Peaks');
+  X.writeFile(wb,`RT_Planning_${plMode()}_${today()}.xlsx`);
+}
+function planSetActs(fn){saveS(s=>s.acts.forEach(fn));}
+document.addEventListener('click',e=>{
+  const b=e.target.closest&&e.target.closest('[data-pg],[data-pgcap],[data-pgsubcap],[data-pgsel-row]');if(!b)return;
+  if(b.dataset.pgsubcap){const [id,v]=b.dataset.pgsubcap.split('|');saveS(s=>{const x=(s.subs||[]).find(y=>y.id===id);if(x)x.crews=+v;});return;}
+  if(b.dataset.pgselRow!==undefined){if(e.target.closest('input,button'))return;F.plAct=F.plAct===b.dataset.pgselRow?'all':b.dataset.pgselRow;render();scrollTo(0,0);return;}
+  if(b.dataset.pgcap){const [id,v]=b.dataset.pgcap.split('|');planSetActs(a=>{if(a.id===id)a.crews=+v;});return;}
+  const [k,v]=b.dataset.pg.split('|');
+  if(k==='xls')return planXls();
+  if(k==='capall'){const st=planStats();if(!confirm(`Set “Crews max” of ${st.length} activities to the suggested value (average crews needed)?`))return;const m={};st.forEach(x=>m[x.a.id]=x.sug);planSetActs(a=>{if(m[a.id])a.crews=m[a.id];});return;}
+  if(k==='capnone'){if(!confirm('Remove the crew limit of all activities?'))return;planSetActs(a=>{delete a.crews;});return;}
+  if(k==='basesave'){const P=planOf(plMode()),t={};P.tasks.forEach(x=>{(t[x.rid]=t[x.rid]||{})[x.id]=[x.s,x.e];});
+    const fEnd={};Object.entries(P.fEnd).forEach(([f,n])=>fEnd[f]=n);
+    if(S.baseline&&S.baseline.t&&!confirm('Replace the current baseline with today\'s plan?'))return;
+    store.saveBaseline({at:Date.now(),by:user(),mode:plMode(),end:P.end,fEnd,t});return;}
+  if(k==='basedel'){if(confirm('Remove the baseline?'))store.delBaseline();return;}
+  F[k]=v;render();
+});
+document.addEventListener('change',e=>{
+  const t=e.target,d=t.dataset;
+  if(d.pdur){const [rid,id]=d.pdur.split('|'),v=parseFloat(t.value);store.patchRoom(rid,{['pdur.'+id]:v>0?v:0});return;}
+  if(!t.closest||!t.closest('#view'))return;
+  if(d.psub){const v=parseFloat(t.value);saveS(s=>{const x=(s.subs||[]).find(y=>y.id===d.psub);if(!x)return;if(v>0)x.crews=v;else delete x.crews;});return;}
+  if(d.pgsel){F[d.pgsel]=t.value;render();return;}
+  if(d.pact){const [k,id]=d.pact.split('|'),v=parseFloat(t.value);planSetActs(a=>{if(a.id!==id)return;if(v>0)a[k]=v;else delete a[k];});return;}
+  if(d.pfstart){saveS(s=>{const f=s.floors.find(x=>x.id===d.pfstart);if(f){if(t.value)f.start=t.value;else delete f.start;}});return;}
+  if(d.pcwd!==undefined){const l=[...document.querySelectorAll('[data-pcwd]')].filter(x=>x.checked).map(x=>+x.dataset.pcwd);if(!l.length){alert('Keep at least one working day.');t.checked=true;return;}saveS(s=>{s.planCfg={...(s.planCfg||{}),wd:l};});return;}
+  if(d.pc){let v=t.value.trim();if(d.pc==='hol'){const bad=[];v=v.split(/[\s,;]+/).filter(Boolean).filter(x=>/^\d{4}-\d\d-\d\d$/.test(x)||(bad.push(x),false));if(bad.length)alert('Ignored (use YYYY-MM-DD): '+bad.join(', '));}
+    if(d.pc==='hp')v=Math.max(0,parseFloat(v)||0);saveS(s=>{s.planCfg={...(s.planCfg||{}),[d.pc]:v};});return;}
+});
+
 /* ===================== WEEKLY SNAPSHOTS =====================
    Every Saturday (end of day) the status of every room is frozen in ft_snapshots/<YYYY-MM-DD>.
    No server needed: the first person who opens the app after Saturday creates it. The status
@@ -1163,7 +1552,7 @@ function makeSnapshot(date){
 }
 let snapDone='';
 function ensureSnapshots(){
-  if(!S.settings||!Object.keys(S.rooms).length)return;
+  if(!S.settings||!DATA_OK||!me()||!Object.keys(S.rooms).length)return;
   const last=lastSaturday(),have=new Set(S.snaps.map(x=>x.id));
   if(have.has(last)||snapDone===last)return;
   const limit=addDays(last,-77);let first;
@@ -1268,16 +1657,19 @@ function renderDrawer(){
   if(ae&&D.contains(ae)&&ae.matches('[data-hold]')){pending=true;return;}
   const sc=D.scrollTop;
   const s=S.settings,f=floorById(r.floor),t=typeById(r.type),n=nextStep(r),p=progress(r),bl=openBlk(r),acts=roomActs(r);
+  const BX=new Set(hpBreach(r).map(x=>x.id)),PLR=(planOf(plMode()).byRoom[r.id])||{},BLR=S.baseline&&S.baseline.t?S.baseline.t[r.id]:null,pend=Object.values(PLR).length?Math.max(...Object.values(PLR).map(x=>x.e)):null;
   let h=`<div class="dh"><div class="row" style="flex-wrap:nowrap"><div style="flex:1;min-width:0"><div style="font-size:20px;font-weight:800">${esc(r.code)} <span style="font-weight:500">${esc(r.name)}</span></div><div style="color:var(--mute);font-size:12px">${esc(f?f.name:'')} · ${esc(t?t.name:'—')}${r.area?' · '+esc(r.area):''}${(()=>{const o=[...new Set(pinSheets(r).filter(m=>m.floor!==r.floor).map(m=>floorById(m.floor)?.name).filter(Boolean))];return o.length?` · <span class="tag" style="background:#e8f0fe;color:var(--hp)">⇕ double height, also on ${esc(o.join(', '))}</span>`:'';})()}${pinSheets(r).length?` · <a href="#" class="lnk" data-showpin="${r.id}">📐 Show on plan</a>`:''}</div></div><button class="btn" data-act="close">✕ Close</button></div>
     <div class="row" style="margin-top:8px"><div class="bar" style="max-width:none"><i style="width:${pc(p)}%"></i></div><b>${pc(p)}%</b></div>
-    <div style="margin-top:6px;font-size:13px">${n?`Next step: <b>${esc(actById(n).name)}</b>`:'<b style="color:var(--done)">✓ All activities complete</b>'}${bl.length?` · <span style="color:var(--blk);font-weight:700">⚠ ${bl.length} open blocking point(s)</span>`:''}</div></div><div class="db"><h3>Activities</h3>`;
+    <div style="margin-top:6px;font-size:13px">${n?`Next step: <b>${esc(actById(n).name)}</b>`:'<b style="color:var(--done)">✓ All activities complete</b>'}${bl.length?` · <span style="color:var(--blk);font-weight:700">⚠ ${bl.length} open blocking point(s)</span>`:''}${n&&pend!=null?` · 📅 forecast finish <b>${fmtN(pend)}</b>`:''}</div></div><div class="db"><h3>Activities</h3>`;
   if(!acts.length)h+=`<div class="empty">No activity assigned. Open “Customize activities” below.</div>`;
   acts.forEach(id=>{
     const a=actById(id),hp=!!a.isHp,o=(r.st||{})[id]||{},sv=o.s||0,b=bl.filter(x=>x.actId===id);
     const dIn=k=>`<input type="date" class="dt" data-hold data-sdate="${r.id}|${id}|${k}" value="${o[k]||o.d||''}" title="Change date if the work was done on another day">`;
     const meta=sv===2?`${hp?'Released':'Done'} ${dIn('dd')}${o.by?' · '+esc(o.by):''}`:sv===1?`${hp?'Requested':'Started'} ${dIn('ds')}${o.by?' · '+esc(o.by):''}`:'';
-    const words=hp?['Pending','Req.','Released']:['To do','WIP','Done'];
-    h+=`<div class="arow ${hp?'hp':''} ${b.length?'blk':''}">${hp?'':`<span class="dot" style="background:${a.color}"></span>`}<div class="an">${hp?`<b><span class="hptag">◆ HP</span>Hold point – inspection</b>`:`<b>${esc(a.name)}</b>`}<small>${meta}${b.length?` <span style="color:var(--blk)">⚠ ${esc(b[0].title)}</span>`:''}</small>${(()=>{const g=asg(r,id);return hp?`<small>👷 Inspection by ${esc(g.resp||'—')}</small>`:`<small class="asgl" data-asg="${r.id}|${id}" title="Click to change for this room" style="cursor:pointer">🏗 ${esc(subName(g.sub)||'—')} · 👷 ${esc(g.resp||'—')}${g.ov?' <b style="color:var(--acc)">✎ room-specific</b>':''}</small>`;})()}</div>
+    const words=hp?['Pending','Req.','Released']:['To do','WIP','Done'],pt=PLR[id],bt=BLR&&BLR[id];
+    const pdIn=!hp&&sv!==2&&!isRO()?` <input type="number" class="dt pdur" data-hold min="0" step="0.25" data-pdur="${r.id}|${id}" value="${+(r.pdur||{})[id]>0?+(r.pdur||{})[id]:''}" placeholder="${stepDur(r,id,true)} d" title="Duration in this room, in working days (empty = ${stepDur(r,id,true)} d from the activity library${roomArea(r)&&+a.rate>0?' and the room area':''})">`:'';
+    const ptxt=pt&&sv!==2?` <span class="pdates" title="Planned (${plMode()==='lev'?'leveled':'as soon as possible'})${bt?' — baseline '+fmtN(bt[0])+' → '+fmtN(bt[1]):''}">📅 ${fmtN(pt.s)}${pt.e!==pt.s?'–'+fmtN(pt.e):''}${bt&&pt.e>bt[1]?` <b class="overdue">+${pt.e-bt[1]}d</b>`:''}</span>`:'';
+    h+=`<div class="arow ${hp?'hp':''} ${b.length?'blk':''}">${hp?'':`<span class="dot" style="background:${a.color}"></span>`}<div class="an">${hp?`<b><span class="hptag">◆ HP</span>Hold point – inspection</b>`:`<b>${esc(a.name)}</b>`}<small>${meta}${ptxt}${pdIn}${BX.has(id)?' <span class="hpxtag">⚠ before HP release</span>':''}${b.length?` <span style="color:var(--blk)">⚠ ${esc(b[0].title)}</span>`:''}</small>${(()=>{const g=asg(r,id);return hp?`<small>👷 Inspection by ${esc(g.resp||'—')}</small>`:`<small class="asgl" data-asg="${r.id}|${id}" title="Click to change for this room" style="cursor:pointer">🏗 ${esc(subName(g.sub)||'—')} · 👷 ${esc(g.resp||'—')}${g.ov?' <b style="color:var(--acc)">✎ room-specific</b>':''}</small>`;})()}</div>
       <div class="seg">${[0,1,2].map(k=>`<button class="${sv===k?'on'+k:''} ${hp?'hpb':''}" data-set="${r.id}|${id}|${k}">${words[k]}</button>`).join('')}</div>
       <button class="btn sm blkbtn" title="Raise a blocking point on this activity" data-newblk="${r.id}|${id}">⚠ Block</button></div>`;
   });
@@ -1287,7 +1679,7 @@ function renderDrawer(){
   h+=`<button class="btn" data-newblk="${r.id}|">+ Raise blocking point</button>`;
   h+=`<h3>Notes</h3><textarea data-hold data-rnote="${r.id}" ${isRO()?'readonly':''} rows="3" style="width:100%" placeholder="Site remarks, access, materials…">${esc(r.note||'')}</textarea>`;
   h+=`<details data-dk="room_cust" class="rwonly" style="margin-top:14px"><summary><b>Customize sequence</b> <small style="color:var(--mute)">(${cleanSeq(r.acts).length} activities)</small></summary><div class="row" style="margin:8px 0">Reset from template: <select id="tplsel">${s.types.map(x=>`<option value="${x.id}" ${x.id===r.type?'selected':''}>${esc(x.name)}</option>`).join('')}</select><button class="btn sm" data-act="applytpl">Apply</button></div>${seqEditor('room',r.id,r.acts)}</details>`;
-  h+=`<details data-dk="room_det" class="rwonly" style="margin-top:6px"><summary><b>Room details</b></summary><div class="form" style="margin-top:8px"><div class="row"><label>Code<input data-hold id="rd_code" value="${esc(r.code)}"></label><label>Floor<select id="rd_floor">${s.floors.map(x=>`<option value="${x.id}" ${x.id===r.floor?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label></div><label>Name<input data-hold id="rd_name" value="${esc(r.name)}"></label><label>Type<select id="rd_type">${s.types.map(x=>`<option value="${x.id}" ${x.id===r.type?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label><div class="row"><button class="btn pri" data-act="saveroom">Save details</button><span class="sp"></span><button class="btn red" data-act="delroom">Delete room</button></div></div></details></div>`;
+  h+=`<details data-dk="room_det" class="rwonly" style="margin-top:6px"><summary><b>Room details</b></summary><div class="form" style="margin-top:8px"><div class="row"><label>Code<input data-hold id="rd_code" value="${esc(r.code)}"></label><label>Floor<select id="rd_floor">${s.floors.map(x=>`<option value="${x.id}" ${x.id===r.floor?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label></div><label>Name<input data-hold id="rd_name" value="${esc(r.name)}"></label><label>Type<select id="rd_type">${s.types.map(x=>`<option value="${x.id}" ${x.id===r.type?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label><div class="row"><label>Area (m²)<input data-hold id="rd_area" value="${esc(r.area||'')}" placeholder="e.g. 24.5 m²"></label><label>Earliest start (planning)<input type="date" id="rd_pstart" value="${esc(r.pstart||'')}"></label></div><div class="row"><button class="btn pri" data-act="saveroom">Save details</button><span class="sp"></span><button class="btn red" data-act="delroom">Delete room</button></div></div></details></div>`;
   D.innerHTML=h;
   reopen(D);D.scrollTop=sc;
 }
@@ -1442,7 +1834,7 @@ const ACT={
   clearfilters:()=>{Object.assign(F,{type:'all',sub:'all',resp:'all',blk:'all',q:'',next:'all'});if(F.view!=='plans')F.floor='all';render();},
   quickroom:quickRoom,
   close:closeDrawer,
-  user:()=>{if(!confirm('Log out of the Floor Tracker on this device?'))return;lsSet(LSU,'');closeDrawer();showLogin();},
+  user:()=>{if(!confirm('Log out of the Floor Tracker on this device?'))return;closeDrawer();store.logout().then(()=>{if(USE_FB)onSess(null);showLogin();});},
   addsub:()=>{const lines=$('#ns_name').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);if(!lines.length)return;saveS(s=>{s.subs=s.subs||[];lines.forEach(n=>{if(!s.subs.some(y=>y.name.toLowerCase()===n.toLowerCase()))s.subs.push({id:uid('s'),name:n});});});},
   addperson:()=>{const lines=$('#np_name').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean),role=$('#np_role').value;if(!lines.length)return;
     const have=people().map(p=>normName(p.name));const add=lines.filter((n,i)=>!have.includes(normName(n))&&lines.findIndex(x=>normName(x)===normName(n))===i);
@@ -1473,7 +1865,7 @@ const ACT={
   deldemo:()=>{const ids=Object.values(S.rooms).filter(r=>r.demo).map(r=>r.id);if(!confirm(`Delete ${ids.length} demo rooms and their blocking points?`))return;store.delRooms(ids,Object.values(S.blockers).filter(b=>ids.includes(b.roomId)).map(b=>b.id));},
   delall:()=>{if(prompt('This deletes ALL rooms and blocking points. Type DELETE to confirm:')!=='DELETE')return;store.delRooms(Object.keys(S.rooms),Object.keys(S.blockers));},
   applytpl:()=>{const r=S.rooms[drawerRoom],t=typeById($('#tplsel').value);if(!t||!confirm(`Replace this room's sequence with the “${t.name}” template? Statuses already entered are kept.`))return;store.patchRoom(r.id,{acts:[...t.acts],type:t.id});},
-  saveroom:()=>{const r=S.rooms[drawerRoom],code=$('#rd_code').value.trim();if(!code)return alert('Code is required.');document.activeElement.blur();const type=$('#rd_type').value,p={code,name:$('#rd_name').value.trim(),floor:$('#rd_floor').value,type};
+  saveroom:()=>{const r=S.rooms[drawerRoom],code=$('#rd_code').value.trim();if(!code)return alert('Code is required.');document.activeElement.blur();const type=$('#rd_type').value,p={code,name:$('#rd_name').value.trim(),floor:$('#rd_floor').value,type,area:$('#rd_area').value.trim(),pstart:$('#rd_pstart').value};
     const t=type!==r.type?typeById(type):null;if(t&&confirm(`Type changed to “${t.name}”.\n\nAlso replace this room's sequence with the template of this type? (Statuses already entered are kept.)`))p.acts=cleanSeq(t.acts);
     store.patchRoom(r.id,p);},
   delroom:()=>{const r=S.rooms[drawerRoom];if(!confirm(`Delete room ${r.code} and its blocking points?`))return;const id=r.id;closeDrawer();store.delRooms([id],Object.values(S.blockers).filter(b=>b.roomId===id).map(b=>b.id));},
@@ -1486,7 +1878,7 @@ document.addEventListener('click',e=>{
   const t=e.target.closest('[data-view],[data-f],[data-closeblk],[data-editblk],[data-newblk],[data-set],[data-cell],[data-room],[data-act],[data-gofloor],[data-actup],[data-actdown],[data-actdel],[data-typedel],[data-delfloor],[data-gonext],[data-preset],[data-pdel],[data-sqmv],[data-sqrm],[data-sqnew],[data-sqsort],[data-typecopy],[data-typeren],[data-typesync],[data-asg],[data-subdel]');
   if(!t)return;const d=t.dataset;if(inPop&&d.keep===undefined)setTimeout(closePop,0);
   if(d.preset){if(confirm(`Reset the PIN of ${d.preset}?\n\nThey will choose a new PIN at their next login.`))store.resetPin(d.preset);return;}
-  if(d.pdel){if(!confirm(`Remove ${d.pdel} from the team?\n\nThey will no longer be able to log in. Their past updates stay in the history.`))return;const n=d.pdel;editPeople(l=>{const i=l.findIndex(p=>p.name===n);if(i>=0)l.splice(i,1);});if(S.pins[n])store.resetPin(n);return;}
+  if(d.pdel){if(!confirm(`Remove ${d.pdel} from the team?\n\nThey will no longer be able to log in. Their past updates stay in the history.`))return;const n=d.pdel;editPeople(l=>{const i=l.findIndex(p=>p.name===n);if(i>=0)l.splice(i,1);});if(hasPin(n))store.resetPin(n);return;}
   if(d.asg){if(roBlock())return;const [rid,aid]=d.asg.split('|');asgModal(rid,aid);return;}
   if(d.subdel){const x=(S.settings.subs||[]).find(y=>y.id===d.subdel);if(!confirm(`Delete subcontractor “${x?x.name:''}”? Activities assigned to it become unassigned.`))return;saveS(s=>{s.subs=(s.subs||[]).filter(y=>y.id!==d.subdel);s.acts.forEach(a=>{if(a.sub===d.subdel)a.sub='';});});return;}
   if(d.sqmv){const [k,id,i,dir]=d.sqmv.split('|');setSeq(k,id,l=>{const a=+i,b=a+(+dir);if(b<0||b>=l.length)return l;[l[a],l[b]]=[l[b],l[a]];return l;});return;}
@@ -2077,11 +2469,11 @@ Object.assign(ACT,{
 (async function boot(){
   if(USE_FB){
     $('#sync').textContent='● Connecting…';
-    try{await initFB();$('#sync').textContent='🟢 Live · shared';}
+    try{await initFB();setSync();}
     catch(err){$('#sync').textContent='🔴 Offline';$('#view').innerHTML=`<div class="card"><h2>Connection problem</h2><p>${esc(err.message)}</p><p>Check in the Firebase console: Firestore database created · Authentication → Anonymous sign-in enabled · Firestore rules published.</p></div>`;return;}
   }else{
     let d={};try{d=JSON.parse(lsGet(LSK,'{}'))||{};}catch(e){}
-    S={settings:d.settings||null,bphotos:d.bphotos||{},rooms:d.rooms||{},blockers:d.blockers||{},log:d.log||[],snaps:d.snaps||[],pins:d.pins||{},plans:d.plans||{}};
+    S={settings:d.settings||null,baseline:d.baseline||null,bphotos:d.bphotos||{},rooms:d.rooms||{},blockers:d.blockers||{},log:d.log||[],snaps:d.snaps||[],pins:d.pins||{},plans:d.plans||{}};
     $('#sync').textContent='🟡 Local mode';
   }
   // Monday: first opening of the day shows the weekly progress of last week
