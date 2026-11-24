@@ -201,6 +201,7 @@ body.ro [data-set],body.ro [data-newblk],body.ro [data-closeblk],body.ro .rwonly
 .tg-s .pbadge{top:-8px;right:-8px;min-width:14px;height:14px;font-size:9px;line-height:11px;padding:0 3px;border-width:1px}
 .tg-m .pin{font-size:10px;padding:2px 5px;border-radius:7px}.tg-m .pin .pn{font-size:9px;max-width:95px}
 .tg-m .pbadge{min-width:16px;height:16px;font-size:10px;line-height:13px;top:-9px;right:-9px}
+.pin.ptodo{color:#5b6472;text-shadow:none;border-color:#9aa3b0}.pin.pwait{color:#33404f;text-shadow:none}.pin.pdone{opacity:.75}
 .pin:hover{z-index:4;transform:translate(-50%,-50%) scale(1.15)}
 .pin.blk{box-shadow:0 0 0 3px var(--blk),0 1px 4px rgba(0,0,0,.35);z-index:3}
 .pbadge{position:absolute;top:-10px;right:-10px;min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:var(--blk);color:#fff;border:2px solid #fff;font:800 11px/16px system-ui,sans-serif;font-style:normal;text-align:center;text-shadow:none;box-shadow:0 1px 4px rgba(0,0,0,.4)}
@@ -1367,8 +1368,8 @@ function planStats(){
 /* ---- view ---- */
 const PLW={w:5,d:22};   // px per day
 function plSwitch(){
-  const v=F.plv==='gantt'?'gantt':'load',m=plMode();
-  return `<div class="filters noprint"><div class="vswitch">${[['load','📊 Load & peaks'],['gantt','📅 Gantt']].map(([k,l])=>`<button class="${v===k?'on':''}" data-pg="plv|${k}">${l}</button>`).join('')}</div>
+  const v=['gantt','map'].includes(F.plv)?F.plv:'load',m=plMode();
+  return `<div class="filters noprint"><div class="vswitch">${[['load','📊 Load & peaks'],['gantt','📅 Gantt'],['map','🗺 On the plan']].map(([k,l])=>`<button class="${v===k?'on':''}" data-pg="plv|${k}">${l}</button>`).join('')}</div>
     <div class="vswitch" title="Which plan is shown">${[['lev','⚖ Leveled (crew limits)'],['asap','⚡ As soon as possible']].map(([k,l])=>`<button class="${m===k?'on':''}" data-pg="plMode|${k}">${l}</button>`).join('')}</div>
     <select data-pgsel="floor"><option value="all">All floors</option>${S.settings.floors.map(f=>`<option value="${f.id}" ${F.floor===f.id?'selected':''}>${esc(f.name)}</option>`).join('')}</select>
     <span class="sp"></span><button class="btn sm" data-pg="xls|1">⬇ Excel</button><button class="btn sm" data-act="print">🖨 Print</button></div>`;
@@ -1389,7 +1390,7 @@ function vPlanning(){
     ${B?`<div class="kpi"><b style="color:${P.end>B.end?'var(--blk)':'var(--done)'}">${P.end>B.end?'+':P.end<B.end?'−':''}${slip} d</b><span>vs baseline (${fmtN(B.end)})</span><small style="color:${late?'var(--blk)':'var(--mute)'}">${late} step(s) should have started</small></div>`
       :`<div class="kpi"><b style="color:var(--mute)">—</b><span>No baseline yet</span><small style="color:var(--mute)">${isAdmin()?'save one below to follow the drift':'an admin can save one'}</small></div>`}
   </div>`;
-  h+=F.plv==='gantt'?plGantt(P,B):plLoadView(A,L,P);
+  h+=F.plv==='gantt'?plGantt(P,B):F.plv==='map'?plMap(P):plLoadView(A,L,P);
   h+=plParams();
   return h;
 }
@@ -1475,6 +1476,48 @@ function plGantt(P,B){
     <div class="gwrap" id="gwrap"><div class="gin" style="width:${LW+W}px;--lw:${LW}px"><div class="ghead"><div class="glab"></div><div class="gtr">${head}</div></div>
     <div class="gbody"><div class="ggrid" style="left:${LW}px;width:${W}px">${grid}<i class="gtoday" style="left:${X(P.T)}px"></i></div>${body||'<div class="empty" style="padding:10px">No room matches.</div>'}</div></div></div>`;
 }
+/* Planning on the floor plan: every room tag shows what is scheduled in it on the chosen day */
+function plMap(P){
+  const s=S.settings,C=P.C;
+  let fid=F.plfloor&&floorById(F.plfloor)?F.plfloor:F.floor!=='all'&&floorById(F.floor)?F.floor:(s.floors.find(f=>sheetsOf(f.id).length)||s.floors[0]||{}).id;
+  const sheets=sheetsOf(fid);let pid=F.plsheet;if(!sheets.some(m=>m.id===pid))pid=sheets[0]&&sheets[0].id;
+  const a0=Math.min(P.T,P.start),a1=P.end;let n=+F.pldate;if(!(n>=a0&&n<=a1))n=Math.min(Math.max(P.T,a0),a1);
+  const prevW=k=>{let x=n;for(let i=0;i<k;i++){x--;while(x>a0&&!C.isW(x))x--;}return Math.max(a0,x);},nextW=k=>{let x=n;for(let i=0;i<k;i++)x=C.next(x+1);return Math.min(a1,x);};
+  let h=`<div class="chips noprint">${s.floors.map(f=>{const k=sheetsOf(f.id).length;return `<button class="chip ${f.id===fid?'on':''}" data-pg="plfloor|${f.id}">${esc(f.name)}${k?` <span class="n">📐${k>1?' '+k:''}</span>`:''}</button>`;}).join('')}</div>`;
+  if(sheets.length>1)h+=`<div class="chips noprint" style="align-items:center"><small style="color:var(--mute)">Sheets:</small>${sheets.map(x=>`<button class="chip ${x.id===pid?'on':''}" data-pg="plsheet|${x.id}">📄 ${esc(x.sheet||'Sheet')}</button>`).join('')}</div>`;
+  const z=ZOOMS.includes(+F.pzoom)?+F.pzoom:1,zi=ZOOMS.indexOf(z);
+  h+=`<div class="card noprint" style="padding:10px"><div class="row" style="align-items:center">
+    <div class="seg"><button data-pg="pldate|${prevW(5)}" title="1 week earlier">◀◀</button><button data-pg="pldate|${prevW(1)}" title="Previous working day">◀</button></div>
+    <input type="date" data-pgsel="pldate" data-pldn value="${dstr(n)}" min="${dstr(a0)}" max="${dstr(a1)}">
+    <div class="seg"><button data-pg="pldate|${nextW(1)}" title="Next working day">▶</button><button data-pg="pldate|${nextW(5)}" title="1 week later">▶▶</button></div>
+    <button class="btn sm" data-pg="pldate|${Math.min(Math.max(P.T,a0),a1)}">Today</button>
+    <b id="plrlab">${fmtLong(dstr(n))}</b>${C.isW(n)?'':' <small style="color:var(--mute)">(not a working day)</small>'}
+    <span class="sp"></span><div class="seg" title="Size of the room tags"><button disabled style="cursor:default">Tags</button>${[['s','S'],['m','M'],['l','L']].map(([v,l])=>`<button data-f="psz" data-v="${v}" class="${(F.psz||'s')===v?'on0':''}">${l}</button>`).join('')}</div><div class="seg"><button data-pzoom="${ZOOMS[Math.max(0,zi-1)]}" ${zi?'':'disabled'}>−</button><button data-pzoom="1" class="${z===1?'on0':''}">Fit</button><button data-pzoom="${ZOOMS[Math.min(ZOOMS.length-1,zi+1)]}" ${zi<ZOOMS.length-1?'':'disabled'}>+</button></div></div>
+    <input type="range" data-plrange min="${a0}" max="${a1}" value="${n}" style="width:100%;margin-top:8px"><div class="row" style="font-size:11px;color:var(--mute)"><span>${fmtN(a0)}</span><span class="sp"></span><span>${fmtN(a1)} (forecast finish)</span></div></div>`;
+  h+=`<div class="printonly"><h2>${esc(s.project)} — ${esc(floorById(fid)?.name||'')} — Planning on ${fmtLong(dstr(n))}</h2></div>`;
+  const m=pid&&S.plans[pid];
+  if(!m)return h+`<div class="card">No plan uploaded for ${esc(floorById(fid)?.name||'this floor')} — upload it in the 📐 Plans tab.</div>`;
+  const im=PLAN.img[planKey(pid)];
+  if(!im){planImage(pid);return h+`<div class="planwrap" id="planwrap"><div class="empty" style="padding:30px;text-align:center">Loading the plan…</div></div>`;}
+  if(im.err)return h+`<div class="card"><b>The plan could not be displayed:</b> ${esc(im.err)}</div>`;
+  const pins=m.pins||{},here=Object.values(S.rooms).filter(r=>pins[r.id]),cnt={},st={act:0,wait:0,todo:0,done:0};
+  let pinsH='';
+  here.forEach(r=>{const ts=Object.values(P.byRoom[r.id]||{}).sort((x,y)=>x.s-y.s||x.e-y.e),p=pins[r.id];
+    const on=ts.filter(t=>t.s<=n&&t.e>=n),main=on.find(t=>!isHP(t.id))||on[0];
+    let c,lab,cls='',k;
+    if(main){const a=actById(main.id)||{};c=isHP(main.id)?'var(--hp)':a.color||'#999';lab=isHP(main.id)?'◆ HP':(a.short||a.name||'');k=isHP(main.id)?'__hp':baseOf(main.id);cnt[k]=(cnt[k]||0)+1;st.act++;}
+    else if(!ts.length||ts.every(t=>t.e<n)){c='var(--done)';lab='✓';cls='pdone';st.done++;}
+    else if(ts.every(t=>t.s>n)){c='#fff';lab='';cls='ptodo';st.todo++;}
+    else{c='#b9c1cd';lab='…';cls='pwait';st.wait++;}
+    const nx=ts.find(t=>t.s>n),na=nx&&actById(nx.id);
+    const tip=`${r.code} ${r.name}\n${on.length?on.map(t=>`▶ ${(actById(t.id)||{}).name||t.id}: ${fmtN(t.s)} → ${fmtN(t.e)}`).join('\n'):cls==='pdone'?'All steps finished':cls==='ptodo'?'Not started yet':'Waiting between two steps'}${nx?`\nNext: ${na?na.name:nx.id} from ${fmtN(nx.s)}`:''}\n— click to open the room —`;
+    pinsH+=`<button class="pin ${cls}" data-room="${r.id}" style="left:${p.x*100}%;top:${p.y*100}%;--c:${c}" title="${esc(tip)}"><b>${esc(r.code)}</b>${lab?`<span class="pn">${esc(lab)}</span>`:''}</button>`;});
+  const keys=Object.keys(cnt).sort((p,q)=>libOrd(p)-libOrd(q));
+  h+=`<div class="legend" style="margin:0 0 8px">${keys.map(k=>k==='__hp'?`<span><i class="sq" style="background:var(--hp);border:0"></i>Hold point (${cnt[k]})</span>`:`<span><i class="sq" style="background:${(actById(k)||{}).color||'#999'};border:0"></i>${esc((actById(k)||{}).name||k)} (${cnt[k]})</span>`).join('')}
+    <span><i class="sq" style="background:#b9c1cd;border:0"></i>Waiting (${st.wait})</span><span><i class="sq" style="background:#fff;border:1px solid #9aa3b0"></i>Not started (${st.todo})</span><span><i class="sq" style="background:var(--done);border:0"></i>Finished (${st.done})</span></div>`;
+  h+=`<div class="planwrap" id="planwrap"><div class="planin tg-${F.psz||'s'}" id="plmapin" style="width:${z*100}%"><img src="${im.url}" alt="" draggable="false">${pinsH}</div></div>`;
+  return h;
+}
 function plParams(){
   const c=pcfg(),adm=isAdmin(),dis=adm?'':'disabled',s=S.settings,B=S.baseline;
   const wdn=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],nA=Object.values(S.rooms).filter(roomArea).length;
@@ -1518,12 +1561,14 @@ document.addEventListener('click',e=>{
   if(k==='basedel'){if(confirm('Remove the baseline?'))store.delBaseline();return;}
   F[k]=v;render();
 });
+document.addEventListener('input',e=>{const t=e.target;if(t.dataset&&t.dataset.plrange!==undefined){const l=document.getElementById('plrlab');if(l)l.textContent=fmtLong(dstr(+t.value));}});
 document.addEventListener('change',e=>{
   const t=e.target,d=t.dataset;
   if(d.pdur){const [rid,id]=d.pdur.split('|'),v=parseFloat(t.value);store.patchRoom(rid,{['pdur.'+id]:v>0?v:0});return;}
   if(!t.closest||!t.closest('#view'))return;
   if(d.psub){const v=parseFloat(t.value);saveS(s=>{const x=(s.subs||[]).find(y=>y.id===d.psub);if(!x)return;if(v>0)x.crews=v;else delete x.crews;});return;}
-  if(d.pgsel){F[d.pgsel]=t.value;render();return;}
+  if(d.plrange!==undefined){F.pldate=+t.value;render();return;}
+  if(d.pgsel){F[d.pgsel]=d.pldn!==undefined?(t.value?dn(t.value):''):t.value;render();return;}
   if(d.pact){const [k,id]=d.pact.split('|'),v=parseFloat(t.value);planSetActs(a=>{if(a.id!==id)return;if(v>0)a[k]=v;else delete a[k];});return;}
   if(d.pfstart){saveS(s=>{const f=s.floors.find(x=>x.id===d.pfstart);if(f){if(t.value)f.start=t.value;else delete f.start;}});return;}
   if(d.pcwd!==undefined){const l=[...document.querySelectorAll('[data-pcwd]')].filter(x=>x.checked).map(x=>+x.dataset.pcwd);if(!l.length){alert('Keep at least one working day.');t.checked=true;return;}saveS(s=>{s.planCfg={...(s.planCfg||{}),wd:l};});return;}
