@@ -258,7 +258,28 @@ details.tools .tmenu .btn{text-align:left}
 .smenu button:hover{background:#f3f5f9}.smenu button.on{background:var(--acc);color:#fff}.smenu button.on small{background:rgba(255,255,255,.22);color:#fff}
 .sbody{min-width:0}.stitle{font-size:20px;margin:2px 0 12px}
 @media (max-width:800px){.setup{grid-template-columns:1fr}.smenu{position:static;flex-direction:row;overflow-x:auto}.smenu button{white-space:nowrap}}
-@media print{.fab{display:none!important}}
+/* planning */
+.gwrap{overflow:auto;max-height:calc(100vh - 250px);background:#fff;border:1px solid var(--line);border-radius:var(--rad)}
+.gin{position:relative}
+.ghead{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid var(--line);display:flex;height:34px}.ghead .glab{z-index:6}
+.grow{display:flex;height:24px;border-bottom:1px solid #f0f2f5}
+.glab{position:sticky;left:0;z-index:3;background:#fff;width:var(--lw);flex:none;padding:4px 8px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-right:1px solid var(--line)}
+.glab span{color:var(--mute)}.glab a{color:var(--acc);text-decoration:none}
+.gtr{position:relative;flex:1}
+.gfl{background:var(--acc2);height:28px}.gfl .glab{background:var(--acc2);font-weight:700;padding-top:6px}.gfl .glab small{font-weight:400;color:var(--mute)}
+.gsum{position:absolute;top:10px;height:8px;background:var(--acc);border-radius:4px;opacity:.55}
+.gbar{position:absolute;top:4px;height:15px;border-radius:3px;background:var(--c);opacity:.4;cursor:pointer;font:700 9px/15px system-ui,sans-serif;color:#fff;overflow:hidden;padding-left:2px;z-index:1}
+.gbar.g2{opacity:1}.gbar.g1{opacity:1;background:repeating-linear-gradient(45deg,var(--c),var(--c) 3px,#fff 3px,#fff 6px);box-shadow:inset 0 0 0 1px var(--c)}
+.gbar.ghp{top:7px;height:9px}
+.gbar:hover{opacity:1;outline:2px solid var(--ink);z-index:2}
+.gbl{position:absolute;bottom:1px;height:3px;background:#a9b2bf;border-radius:2px}
+.gbody{position:relative}.ggrid{position:absolute;top:0;bottom:0;pointer-events:none}.ggrid i{position:absolute;top:0;bottom:0;border-left:1px solid #eef0f4}
+.ggrid i.gtoday{border-left:2px solid var(--blk);z-index:2}
+.gm{position:absolute;top:2px;font-size:11px;font-weight:700;padding-left:3px;border-left:1px solid var(--line);white-space:nowrap}
+.gw{position:absolute;top:18px;font-size:10px;color:var(--mute);padding-left:2px;white-space:nowrap}
+.pdates{color:var(--acc);white-space:nowrap}
+.plchart text{font-family:inherit}
+@media print{.fab{display:none!important}.gwrap{max-height:none;overflow:visible}}
 @media print{.sticky,.noprint,#drawer,#scrim,#modal{display:none!important}.printonly{display:block}body{background:#fff}main{padding:0;max-width:none}.tile{break-inside:avoid}.mxwrap,.tbwrap{max-height:none;overflow:visible;border:0}.tb tr{break-inside:avoid}.planwrap{max-height:none;overflow:visible;border:0}.planin{width:100%!important}}
 @media (max-width:640px){.grid2{grid-template-columns:1fr}.tiles{grid-template-columns:repeat(auto-fill,minmax(145px,1fr))}main{padding:10px}.seg button{padding:7px 7px}}
 </style>
@@ -275,6 +296,7 @@ details.tools .tmenu .btn{text-align:left}
     <button id="navback" class="navback" data-act="navback" title="Back to the previous screen" hidden>← Back</button>
     <button data-view="cockpit">📊 Cockpit</button>
     <button data-view="rooms">🏠 Rooms</button>
+    <button data-view="planning">📅 Planning</button>
     <button data-view="blockers">⚠ Blocking points<span class="nb" id="nbk"></span></button>
     <button data-view="setup" id="navsetup">⚙ Setup</button>
   </nav>
@@ -403,7 +425,7 @@ const user=()=>{const m=me();return m?m.name:'auto';};
 function roBlock(){if(isRO()){alert('Your account is read only.\n\nYou can view, print and export everything, but not change it. Ask '+APP_ADMIN+' if you need to edit.');return true;}return false;}
 
 /* ===================== STATE ===================== */
-let S={settings:null,rooms:{},blockers:{},log:[],snaps:[],pins:{},pinset:{},sess:null,plans:{}};
+let S={settings:null,rooms:{},blockers:{},log:[],snaps:[],pins:{},pinset:{},sess:null,plans:{},baseline:null};
 let DATA_OK=!USE_FB;   // shared mode: rooms / blockers / snapshots received (they are only readable once signed in)
 let F={view:'cockpit',ss:'team',rv:'overview',ck:'live',more:false,mx:'act',sub:'all',resp:'all',floor:'all',next:'all',type:'all',q:'',blk:'all',colorBy:'next',quick:false,bStatus:'open',bFloor:'all',bCat:'all',bOwner:'all',bGroup:'none',bq:''};
 try{Object.assign(F,JSON.parse(lsGet(LSF,'{}')));}catch(e){}
@@ -565,6 +587,9 @@ const store={
   savePhotos(list){if(roBlock())return;if(USE_FB)return Promise.all(list.map(p=>fb.setDoc(dref('blkphotos',p.id),p))).catch(fail);S.bphotos=S.bphotos||{};list.forEach(p=>S.bphotos[p.id]=p);persist();},
   async getPhoto(id){if(USE_FB){const d=await fb.getDoc(dref('blkphotos',id));return d.exists()?d.data().d:'';}return ((S.bphotos||{})[id]||{}).d||'';},
   delPhotos(ids){if(roBlock())return;if(USE_FB)return runOps(ids.map(id=>['del','blkphotos',id])).catch(e=>console.error(e));ids.forEach(id=>delete (S.bphotos||{})[id]);persist();},
+  saveBaseline(b){if(roBlock())return;if(JSON.stringify(b).length>900000)return alert('The plan is too big to be saved as a baseline (over 900 kB).');
+    if(USE_FB)return fb.setDoc(dref('baseline','main'),b).catch(fail);S.baseline=b;persist();},
+  delBaseline(){if(roBlock())return;if(USE_FB)return fb.deleteDoc(dref('baseline','main')).catch(fail);S.baseline=null;persist();},
   delBlocker(id){if(roBlock())return;if(USE_FB)return fb.deleteDoc(dref('blockers',id)).catch(fail);delete S.blockers[id];persist();},
   addLog(e){if(USE_FB)return fb.addDoc(fb.collection(db,P+'log'),e).catch(()=>{});S.log.unshift(e);S.log=S.log.slice(0,1500);},
   /* first login: store the PIN hash (+ a public "PIN set" flag), then open the session */
@@ -633,13 +658,14 @@ async function initFB(){
 let UNSUB=[],SESSK=null;
 function onSess(v){
   S.sess=v;const k=v&&v.k||null;if(k===SESSK)return;SESSK=k;
-  UNSUB.forEach(u=>u());UNSUB=[];DATA_OK=false;Object.assign(S,{rooms:{},blockers:{},snaps:[],plans:{},log:[]});
+  UNSUB.forEach(u=>u());UNSUB=[];DATA_OK=false;Object.assign(S,{rooms:{},blockers:{},snaps:[],plans:{},log:[],baseline:null});
   if(!k){render();return;}
   const fs=fb,got={r:0,b:0,n:0},on=(q,f,flag)=>UNSUB.push(fs.onSnapshot(q,x=>{f(x);if(flag){got[flag]=1;DATA_OK=got.r&&got.b&&got.n;}render();},e=>{console.error(e);if(flag){got[flag]=1;DATA_OK=got.r&&got.b&&got.n;render();}}));
   on(fs.collection(db,P+'rooms'),q=>{S.rooms={};q.forEach(d=>S.rooms[d.id]=d.data());},'r');
   on(fs.collection(db,P+'blockers'),q=>{S.blockers={};q.forEach(d=>S.blockers[d.id]=d.data());},'b');
   on(fs.collection(db,P+'snapshots'),q=>{S.snaps=q.docs.map(d=>d.data());},'n');
   on(fs.collection(db,P+'plans'),q=>{S.plans={};q.forEach(d=>S.plans[d.id]=d.data());});
+  on(dref('baseline','main'),d=>{S.baseline=d.exists()?d.data():null;});
   on(fs.query(fs.collection(db,P+'log'),fs.orderBy('ts','desc'),fs.limit(400)),q=>{S.log=q.docs.map(d=>d.data());});
 }
 /* One-off move of the old PIN list (ft_auth/pins: name → weak hash, readable by everyone) to ft_pins/<key>.
@@ -761,6 +787,7 @@ function render(){clearTimeout(rT);rT=setTimeout(doRender,25);}
 let LASTVIEW=null;
 function doRender(){
   if(!S.settings)return;
+  PLC=null;   // planning recomputed from the current data when needed
   sortSettings(S.settings);
   const m=me();
   if(!m){closeDrawer();if(!$('#login').classList.contains('open'))showLogin();else if(LG.step==='pick')renderLogin();return;}
@@ -789,7 +816,7 @@ function doRender(){
   const tab=ROOMV.includes(F.view)?'rooms':F.view;
   document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.view===tab));
   $('#fab').innerHTML=isRO()||F.view==='setup'?'':`<button class="f1" data-act="quickroom" title="Find a room and update its activities">✓ Update a room</button><button class="f2" data-newblk="|" title="Raise a new blocking point">＋ Blocking point</button>`;
-  const v={cockpit:vCockpit,overview:vOverview,matrix:vMatrix,plans:vPlans,blockers:vBlockers,setup:vSetup}[F.view]||vCockpit;
+  const v={cockpit:vCockpit,overview:vOverview,matrix:vMatrix,plans:vPlans,planning:vPlanning,blockers:vBlockers,setup:vSetup}[F.view]||vCockpit;
   const fid=ae&&ae.id,pos=ae&&ae.selectionStart;
   // keep the scroll position of the page and of the scrolling boxes (plan, matrix, tables) across the re-render
   const SCB='#planwrap,.mxwrap,.tbwrap',boxes=[...$('#view').querySelectorAll(SCB)].map(e=>[e.scrollLeft,e.scrollTop]),wy=scrollY,wx=scrollX,sv=F.view;
@@ -1124,6 +1151,8 @@ function vCockpit(){
   h+=`<div class="kpis">
     <div class="kpi"><b>${pc(overall)}%</b><span>Overall progress</span>${dl}</div>
     <div class="kpi"><b style="color:var(--done)">${complete}<span style="font-size:15px;color:var(--mute)"> / ${rooms.length}</span></b><span>Rooms complete</span></div>
+    ${(()=>{const P=planOf(plMode()),B=S.baseline;if(P.end==null)return '';const late=B&&B.end!=null&&P.end>B.end;
+      return `<div class="kpi flrow" data-view="planning" title="Open the planning"><b style="font-size:20px;white-space:nowrap;${late?'color:var(--blk)':''}">${fmtN(P.end)} <span style="font-size:13px;color:var(--mute)">${dstr(P.end).slice(0,4)}</span></b><span>Forecast finish</span><small style="color:${late?'var(--blk)':'var(--mute)'}">${B&&B.end!=null?(late?'+'+(P.end-B.end)+' d vs baseline':'on baseline'):'📅 see Planning'}</small></div>`;})()}
     <div class="kpi lnk" style="text-decoration:none;color:inherit" data-view="blockers"><b style="color:var(--blk)">${new Set(open.map(b=>b.grp||b.id)).size}</b><span>Open blocking points${over.length?` · <span class="overdue">${new Set(over.map(b=>b.grp||b.id)).size} overdue</span>`:''}</span><small style="color:var(--mute)">${roomsB} room(s) blocked</small></div>
     <div class="kpi"><b style="color:var(--hp)">${hpWait.length}</b><span>◆ Rooms waiting for a hold point</span><small style="color:var(--mute)">${hpReq} inspection(s) requested</small></div>
     <div class="kpi"><b>${doneWk}</b><span>Activities completed (last 7 days)</span></div></div>`;
@@ -1201,6 +1230,250 @@ function vSetup(){
   const cur=sec[F.ss]?F.ss:'team';
   return `<div class="setup"><nav class="smenu noprint">${menu.map(([k,i,l,n])=>`<button class="${k===cur?'on':''}" data-f="ss" data-v="${k}"><span>${i}</span>${l}${n!==''?`<small>${n}</small>`:''}</button>`).join('')}</nav><div class="sbody">${sec[cur]}</div></div>`;
 }
+/* ===================== PLANNING =====================
+   Durations: library activity a.dur = working days per room (decimals allowed: 0.5 = half a day), or a.rate = m² per
+   day for one crew (used when the room has an area, e.g. read from the plans); per-room override r.pdur[stepId].
+   Crews: a.crews = max crews working on this activity at the same time on the project (empty = no limit).
+   Load = crews busy per working day (a 0.5-day step uses half a crew on its day).
+   Calendar: settings.planCfg = {start, wd:[1..5] (0 = Sunday), hol:['YYYY-MM-DD'…], hp: days for a hold-point
+   inspection}; floor.start and room.pstart = earliest start of their works.
+   Forecast: each room follows its own sequence; Done / In-progress steps keep their real dates, the remaining ones
+   start at the earliest on today, the project / floor / room start, and the next working day after the previous step.
+   Leveled plan: same, but an activity never uses more than a.crews per day — steps are pushed later (rooms taken in
+   order of earliest start, then floor, then code). As-soon-as-possible plan = no crew limit (shows the raw peaks).
+   Baseline: ft_baseline/main = {at, by, mode, end, t:{roomId:{stepId:[start,end]}}} — days since 1970-01-01. */
+const dn=s=>Math.round(Date.UTC(+s.slice(0,4),+s.slice(5,7)-1,+s.slice(8,10))/864e5);
+const dstr=n=>new Date(n*864e5).toISOString().slice(0,10);
+const dowN=n=>(n+4)%7;   // 1970-01-01 was a Thursday
+const fmtN=n=>fmtD(dstr(n));
+const pcfg=()=>{const c=(S.settings&&S.settings.planCfg)||{};return {start:c.start||'',wd:Array.isArray(c.wd)&&c.wd.length?c.wd:[1,2,3,4,5],hol:c.hol||[],hp:c.hp===undefined||c.hp===''?1:+c.hp};};
+function calendar(){
+  const c=pcfg(),wd=new Set(c.wd.map(Number)),hol=new Set(c.hol.filter(x=>/^\d{4}-\d\d-\d\d$/.test(x)).map(dn));
+  const isW=n=>wd.has(dowN(n))&&!hol.has(n);
+  const next=n=>{for(let k=0;k<800&&!isW(n);k++)n++;return n;};            // first working day ≥ n
+  const add=(n,k)=>{n=next(n);while(k-->0)n=next(n+1);return n;};             // working day number k after n
+  const count=(a,b)=>{let k=0;for(let n=a;n<=b;n++)if(isW(n))k++;return k;};
+  return {isW,next,add,count};
+}
+const roomArea=r=>{const v=parseFloat(String(r.area||'').replace(',','.'));return v>0?v:0;};
+function stepDur(r,id){
+  if(isHP(id))return Math.max(0,pcfg().hp);
+  const ov=r.pdur&&+r.pdur[id];if(ov>0)return ov;
+  const a=S.settings.acts.find(x=>x.id===baseOf(id));if(!a)return 1;
+  const ar=roomArea(r);if(+a.rate>0&&ar)return Math.max(.25,Math.round(ar/a.rate*4)/4);
+  return +a.dur>0?+a.dur:1;
+}
+let PLC=null;   // cache {asap, lev}, cleared at every render (data may have changed)
+function planOf(mode){PLC=PLC||{};return PLC[mode]=PLC[mode]||planCompute(mode==='lev');}
+const plMode=()=>F.plMode==='asap'?'asap':'lev';
+const hasCaps=()=>S.settings.acts.some(a=>+a.crews>0);
+function planCompute(level){
+  const c=pcfg(),C=calendar(),T=dn(today()),P0=c.start?dn(c.start):T,use={},caps={},tasks=[],byRoom={};
+  S.settings.acts.forEach(a=>caps[a.id]=+a.crews>0?+a.crews:0);
+  const addUse=(b,s,e,ld)=>{if(!ld)return;const u=use[b]=use[b]||{};for(let n=s;n<=e;n++)if(C.isW(n))u[n]=(u[n]||0)+ld;};
+  const fits=(b,s,D,ld,cap)=>{const u=use[b]||{};let n=s;for(let k=0;k<D;k++){if((u[n]||0)+ld>cap+1e-6)return false;n=C.next(n+1);}return true;};
+  const pend=[];
+  roomsList().forEach(r=>{
+    const f=floorById(r.floor),base=C.next(Math.max(T,P0,f&&f.start?dn(f.start):0,r.pstart?dn(r.pstart):0)),q=[];let prev=-1e9;
+    byRoom[r.id]={};
+    roomActs(r).forEach(id=>{
+      const o=(r.st||{})[id]||{},sv=o.s||0,d=stepDur(r,id),D=Math.ceil(d-1e-9),ld=isHP(id)||!D?0:d/D,t={rid:r.id,id,b:baseOf(id),d,D,ld,sv};
+      if(sv===2){t.e=dn(o.dd||o.d||today());t.s=Math.min(t.e,dn(o.ds||o.dd||o.d||today()));}
+      else if(sv===1){t.s=dn(o.ds||o.d||today());t.e=D?C.add(t.s,D-1):t.s;if(t.e<T)t.e=C.next(T);}
+      else{q.push(t);return;}
+      // real dates: the crew-days of the step are spread over the working days it actually took
+      if(t.ld){const k=C.count(t.s,t.e);t.ld=k?Math.min(1,t.d/k):t.ld;}
+      addUse(t.b,t.s,t.e,t.ld);prev=Math.max(prev,t.e);tasks.push(t);byRoom[r.id][id]=t;
+    });
+    if(q.length)pend.push({r,q,prev,base,fi:floorIdx(r.floor)});
+  });
+  const esOf=p=>Math.max(p.base,C.next(p.prev+1));
+  pend.forEach(p=>p.es=esOf(p));
+  let act=pend.slice();
+  while(act.length){
+    let bi=0;for(let i=1;i<act.length;i++){const a=act[i],b=act[bi];if(a.es<b.es||(a.es===b.es&&(a.fi<b.fi||(a.fi===b.fi&&byCode(a.r,b.r)<0))))bi=i;}
+    const p=act[bi],t=p.q.shift();let s=p.es;
+    if(!t.D){t.s=t.e=Math.max(p.prev,p.base);}
+    else{const cap=level?caps[t.b]:0;if(cap){const cp=Math.max(cap,t.ld);for(let g=0;g<3000&&!fits(t.b,s,t.D,t.ld,cp);g++)s=C.next(s+1);}
+      t.s=s;t.e=C.add(s,t.D-1);addUse(t.b,t.s,t.e,t.ld);}
+    p.prev=Math.max(p.prev,t.e);tasks.push(t);byRoom[p.r.id][t.id]=t;
+    if(p.q.length)p.es=esOf(p);else act.splice(bi,1);
+  }
+  let end=-1e9,start=1e9;const fEnd={},rEnd={};
+  tasks.forEach(t=>{end=Math.max(end,t.e);start=Math.min(start,t.s);const r=S.rooms[t.rid];rEnd[t.rid]=Math.max(rEnd[t.rid]||-1e9,t.e);fEnd[r.floor]=Math.max(fEnd[r.floor]||-1e9,t.e);});
+  return {tasks,byRoom,use,end:tasks.length?end:null,start:tasks.length?start:null,fEnd,rEnd,T,C,level};
+}
+/* daily load of an activity (or all) as [{n, v, by:{base:load}}] between a and b */
+const planLoad=(pl,a,b,only)=>{const out=[];for(let n=a;n<=b;n++){if(!pl.C.isW(n))continue;const by={};let v=0;
+  for(const k in pl.use){if(only&&only!=='all'&&k!==only)continue;const x=pl.use[k][n];if(x){by[k]=x;v+=x;}}out.push({n,v,by});}return out;};
+/* Per-activity figures for the peaks table */
+function planStats(){
+  const A=planOf('asap'),L=planOf('lev'),T=A.T,res=[];
+  S.settings.acts.forEach(a=>{
+    const ts=A.tasks.filter(t=>t.b===a.id&&!t.sv),tl=L.tasks.filter(t=>t.b===a.id&&!t.sv);if(!ts.length&&!(A.use[a.id]))return;
+    const pk=u=>{let m=0,at=null;for(const n in u){if(+n<T)continue;if(u[n]>m+1e-9){m=u[n];at=+n;}}return {m,at};};
+    const pa=pk(A.use[a.id]||{}),pl=pk(L.use[a.id]||{});
+    const work=ts.reduce((x,t)=>x+t.d,0);   // crew-days remaining (not started)
+    const s0=ts.length?Math.min(...ts.map(t=>t.s)):null,ea=ts.length?Math.max(...ts.map(t=>t.e)):null,el=tl.length?Math.max(...tl.map(t=>t.e)):null;
+    const wdays=s0!=null?A.C.count(s0,ea):0,avgC=wdays?work/wdays:0;
+    res.push({a,n:ts.length,work,peakA:pa,peakL:pl,avg:avgC,s0,endA:ea,endL:el,sug:Math.max(1,Math.ceil(avgC-1e-6))});
+  });
+  return res;
+}
+/* ---- view ---- */
+const PLW={w:5,d:22};   // px per day
+function plSwitch(){
+  const v=F.plv==='gantt'?'gantt':'load',m=plMode();
+  return `<div class="filters noprint"><div class="vswitch">${[['load','📊 Load & peaks'],['gantt','📅 Gantt']].map(([k,l])=>`<button class="${v===k?'on':''}" data-pg="plv|${k}">${l}</button>`).join('')}</div>
+    <div class="vswitch" title="Which plan is shown">${[['lev','⚖ Leveled (crew limits)'],['asap','⚡ As soon as possible']].map(([k,l])=>`<button class="${m===k?'on':''}" data-pg="plMode|${k}">${l}</button>`).join('')}</div>
+    <select data-pgsel="floor"><option value="all">All floors</option>${S.settings.floors.map(f=>`<option value="${f.id}" ${F.floor===f.id?'selected':''}>${esc(f.name)}</option>`).join('')}</select>
+    <span class="sp"></span><button class="btn sm" data-pg="xls|1">⬇ Excel</button><button class="btn sm" data-act="print">🖨 Print</button></div>`;
+}
+function vPlanning(){
+  const s=S.settings;let h=`<div class="printonly"><h2>${esc(s.project)} — Planning — ${fmtLong(today())}</h2></div>`+plSwitch();
+  if(!Object.keys(S.rooms).length)return h+`<div class="card">No rooms yet.</div>`;
+  const A=planOf('asap'),L=planOf('lev'),P=plMode()==='lev'?L:A,B=S.baseline&&S.baseline.t?S.baseline:null;
+  if(P.end==null)return h+`<div class="card">No activity in the rooms' sequences yet.</div>`;
+  // key figures
+  const totLoad=pl=>{let m=0,at=null;const days={};for(const k in pl.use)for(const n in pl.use[k]){if(+n<pl.T)continue;days[n]=(days[n]||0)+pl.use[k][n];}for(const n in days)if(days[n]>m+1e-9){m=days[n];at=+n;}return {m,at};};
+  const ta=totLoad(A),tl=totLoad(L),slip=B&&B.end!=null?P.C.count(Math.min(B.end,P.end),Math.max(B.end,P.end))-1:0;
+  let late=0;if(B)P.tasks.forEach(t=>{const b=(B.t[t.rid]||{})[t.id];if(b&&!t.sv&&b[0]<P.T)late++;});
+  h+=`<div class="kpis">
+    <div class="kpi"><b>${fmtLong(dstr(P.end))}</b><span>Forecast finish (${plMode()==='lev'?'leveled':'as soon as possible'})</span>${hasCaps()?`<small style="color:var(--mute)">${plMode()==='lev'?'ASAP: '+fmtN(A.end):'Leveled: '+fmtN(L.end)}</small>`:''}</div>
+    <div class="kpi"><b>${ta.m.toFixed(1)}</b><span>Peak crews, as soon as possible</span><small style="color:var(--mute)">${ta.at!=null?'on '+fmtN(ta.at):''}</small></div>
+    <div class="kpi"><b style="color:${hasCaps()?'var(--done)':'var(--mute)'}">${tl.m.toFixed(1)}</b><span>Peak crews, leveled</span><small style="color:var(--mute)">${hasCaps()?(tl.at!=null?'on '+fmtN(tl.at):''):'set crew limits below'}</small></div>
+    ${B?`<div class="kpi"><b style="color:${P.end>B.end?'var(--blk)':'var(--done)'}">${P.end>B.end?'+':P.end<B.end?'−':''}${slip} d</b><span>vs baseline (${fmtN(B.end)})</span><small style="color:${late?'var(--blk)':'var(--mute)'}">${late} step(s) should have started</small></div>`
+      :`<div class="kpi"><b style="color:var(--mute)">—</b><span>No baseline yet</span><small style="color:var(--mute)">${isAdmin()?'save one below to follow the drift':'an admin can save one'}</small></div>`}
+  </div>`;
+  h+=F.plv==='gantt'?plGantt(P,B):plLoadView(A,L,P);
+  h+=plParams();
+  return h;
+}
+function plLoadView(A,L,P){
+  const only=F.plAct&&F.plAct!=='all'&&S.settings.acts.some(a=>a.id===F.plAct)?F.plAct:'all';
+  const a0=Math.min(A.T,P.start),a1=Math.max(A.end,L.end),days=a1-a0+1,week=F.plGran==='d'?false:F.plGran==='w'?true:days>100;
+  const actC=id=>(S.settings.acts.find(a=>a.id===id)||{}).color||'#999';
+  // buckets
+  const mk=pl=>{const d=planLoad(pl,a0,a1,only);if(!week)return d.map(x=>({n:x.n,v:x.v,by:x.by,k:1}));
+    const o=[];d.forEach(x=>{const wk=x.n-((dowN(x.n)+6)%7);let b=o[o.length-1];if(!b||b.n!==wk){b={n:wk,v:0,by:{},k:0};o.push(b);}b.k++;b.v+=x.v;for(const k in x.by)b.by[k]=(b.by[k]||0)+x.by[k];});
+    o.forEach(b=>{b.v/=b.k;for(const k in b.by)b.by[k]/=b.k;});return o;};
+  const bp=mk(P),bo=mk(P===L?A:L),cap=only!=='all'?+(S.settings.acts.find(a=>a.id===only)||{}).crews||0:0;
+  const max=Math.max(1,...bp.map(b=>b.v),...(only!=='all'?bo.map(b=>b.v):[]),cap)*1.1,W=Math.max(10,Math.min(28,Math.floor(1100/Math.max(1,bp.length)))),H=220,X=40;
+  const y=v=>H-v/max*H;
+  let svg=`<svg viewBox="0 0 ${X+bp.length*W+10} ${H+34}" style="width:100%;min-width:${Math.min(1200,X+bp.length*W)}px;height:auto" class="plchart">`;
+  const step=max>20?5:max>8?2:1;for(let v=0;v<=max;v+=step)svg+=`<line x1="${X}" x2="${X+bp.length*W}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${X-6}" y="${y(v)+4}" text-anchor="end" font-size="10" fill="var(--mute)">${v}</text>`;
+  bp.forEach((b,i)=>{const x=X+i*W;let acc=0;
+    if(only==='all')Object.keys(b.by).sort((p,q)=>libOrd(p)-libOrd(q)).forEach(k=>{const v=b.by[k];svg+=`<rect x="${x+1}" y="${y(acc+v)}" width="${W-2}" height="${Math.max(0,y(acc)-y(acc+v))}" fill="${actC(k)}"><title>${esc((S.settings.acts.find(a=>a.id===k)||{}).name||k)}: ${v.toFixed(1)} crews</title></rect>`;acc+=v;});
+    else svg+=`<rect x="${x+1}" y="${y(b.v)}" width="${W-2}" height="${H-y(b.v)}" fill="${actC(only)}"><title>${b.v.toFixed(1)} crews</title></rect>`;
+    if(only!=='all'){const o=bo[i];if(o&&o.v)svg+=`<rect x="${x+1}" y="${y(o.v)}" width="${W-2}" height="${H-y(o.v)}" fill="none" stroke="var(--ink)" stroke-dasharray="3 2" opacity=".55"/>`;}
+    if(b.n<=P.T&&(!bp[i+1]||bp[i+1].n>P.T))svg+=`<line x1="${x+W}" x2="${x+W}" y1="0" y2="${H}" stroke="var(--blk)" stroke-width="1.5"/><text x="${x+W+3}" y="10" font-size="10" fill="var(--blk)">today</text>`;
+    const lab=week?((i%Math.ceil(36/W)===0)?fmtN(b.n):''):(i%Math.ceil(30/W)===0?fmtN(b.n):'');if(lab)svg+=`<text x="${x+W/2}" y="${H+14}" font-size="10" text-anchor="middle" fill="var(--mute)">${lab}</text>`;
+  });
+  svg+=`<title>${week?'average crews per working day, by week':'crews per working day'}</title>`;
+  if(cap)svg+=`<line x1="${X}" x2="${X+bp.length*W}" y1="${y(cap)}" y2="${y(cap)}" stroke="var(--blk)" stroke-width="2" stroke-dasharray="6 3"/><text x="${X+4}" y="${y(cap)-4}" font-size="11" font-weight="700" fill="var(--blk)">limit ${cap} crews</text>`;
+  svg+='</svg>';
+  const stats=planStats().sort((p,q)=>q.peakA.m-p.peakA.m);
+  let h=`<div class="card"><div class="row" style="margin-bottom:8px"><h2 style="margin:0">Workload — crews needed${week?' (weekly average per working day)':' per working day'}</h2><span class="sp"></span>
+    <select data-pgsel="plAct"><option value="all">All activities (stacked)</option>${[...S.settings.acts].sort(byNm).map(a=>`<option value="${a.id}" ${only===a.id?'selected':''}>${esc(a.name)}</option>`).join('')}</select>
+    <div class="seg">${[['auto','Auto'],['d','Days'],['w','Weeks']].map(([k,l])=>`<button class="${(F.plGran||'auto')===k?'on0':''}" data-pg="plGran|${k}">${l}</button>`).join('')}</div></div>
+    <div style="overflow-x:auto">${svg}</div>
+    <div class="legend" style="margin:6px 0 0">${only==='all'?[...new Set(Object.keys(P.use))].sort((p,q)=>libOrd(p)-libOrd(q)).map(k=>`<span><i class="sq" style="background:${actC(k)};border:0"></i>${esc((S.settings.acts.find(a=>a.id===k)||{}).name||k)}</span>`).join(''):`<span><i class="sq" style="background:${actC(only)};border:0"></i>${plMode()==='lev'?'Leveled':'As soon as possible'}</span><span><i class="sq" style="border:1px dashed var(--ink)"></i>${plMode()==='lev'?'As soon as possible':'Leveled'}</span>${cap?'<span style="color:var(--blk)">– – crew limit</span>':''}`}</div></div>`;
+  h+=`<div class="card"><h2>Peaks by activity — set the crews to level them</h2>
+    <p style="margin:-4px 0 10px;color:var(--mute);font-size:12px">“Crews max” = how many crews can work on this activity at the same time. The leveled plan never goes above it: the peaks are spread over the following days and the finish date moves if needed. “Suggested” = average crews needed over the activity's period: the peaks are flattened, the finish can move by a few days — check “Finish leveled”. Click a row to see that activity alone in the chart.</p>
+    <div class="tbwrap"><table class="tb"><thead><tr><th>Activity</th><th>Rooms to do</th><th>Crew-days</th><th>Peak ASAP</th><th>Average</th><th>Suggested</th><th>Crews max</th><th>Peak leveled</th><th>Finish ASAP</th><th>Finish leveled</th></tr></thead><tbody>
+    ${stats.map(x=>{const dl=x.endL!=null&&x.endA!=null?P.C.count(Math.min(x.endA,x.endL),Math.max(x.endA,x.endL))-1:0;
+      return `<tr class="click" data-pgsel-row="${x.a.id}"><td><span class="dot" style="background:${x.a.color};margin-right:6px"></span><b>${esc(x.a.name)}</b>${x.a.sub?`<br><small style="color:var(--mute)">🏗 ${esc(subName(x.a.sub))}</small>`:''}</td><td>${x.n}</td><td>${x.work.toFixed(1)}</td>
+      <td><b style="color:${+x.a.crews>0&&x.peakA.m>+x.a.crews+1e-6?'var(--blk)':'inherit'}">${x.peakA.m.toFixed(1)}</b>${x.peakA.at!=null?`<br><small style="color:var(--mute)">${fmtN(x.peakA.at)}</small>`:''}</td>
+      <td>${x.avg.toFixed(1)}</td><td>${isAdmin()&&+x.a.crews!==x.sug?`<button class="btn sm" data-pgcap="${x.a.id}|${x.sug}" title="Use ${x.sug} as crews max">${x.sug} ←</button>`:x.sug}</td>
+      <td>${isAdmin()?`<input type="number" min="0" step="1" style="width:64px" data-pact="crews|${x.a.id}" value="${+x.a.crews>0?+x.a.crews:''}" placeholder="∞">`:(+x.a.crews>0?+x.a.crews:'∞')}</td>
+      <td>${+x.a.crews>0?x.peakL.m.toFixed(1):'—'}</td><td>${x.endA!=null?fmtN(x.endA):'—'}</td><td>${x.endL!=null?fmtN(x.endL)+(dl>0?` <small class="overdue">+${dl} d</small>`:''):'—'}</td></tr>`;}).join('')||'<tr><td colspan="10" class="empty">Nothing left to plan.</td></tr>'}
+    </tbody></table></div>${isAdmin()&&stats.some(x=>+x.a.crews!==x.sug)?`<div class="row" style="margin-top:8px"><button class="btn" data-pg="capall|1">Use all suggested crews</button><button class="btn" data-pg="capnone|1">Remove all limits</button></div>`:''}</div>`;
+  // floors
+  h+=`<div class="card"><h2>Forecast by floor</h2><div class="tbwrap"><table class="tb"><thead><tr><th>Floor</th><th>Rooms</th><th>Finish ASAP</th><th>Finish leveled</th>${S.baseline&&S.baseline.fEnd?'<th>Baseline</th>':''}</tr></thead><tbody>${S.settings.floors.map(f=>{const n=Object.values(S.rooms).filter(r=>r.floor===f.id).length;if(!n)return '';const be=S.baseline&&S.baseline.fEnd&&S.baseline.fEnd[f.id];
+    return `<tr><td><b>${esc(f.name)}</b>${f.start?`<br><small style="color:var(--mute)">start ${fmtD(f.start)}</small>`:''}</td><td>${n}</td><td>${A.fEnd[f.id]!=null?fmtN(A.fEnd[f.id]):'—'}</td><td>${L.fEnd[f.id]!=null?fmtN(L.fEnd[f.id]):'—'}</td>${S.baseline&&S.baseline.fEnd?`<td>${be!=null?fmtN(be)+(P.fEnd[f.id]>be?` <small class="overdue">late</small>`:''):'—'}</td>`:''}</tr>`;}).join('')}</tbody></table></div></div>`;
+  return h;
+}
+function plGantt(P,B){
+  const z=F.plZoom==='d'?'d':'w',px=PLW[z],LW=190,rows=filtered();
+  const tasks=P.tasks;let a0=Math.min(P.T,P.start),a1=P.end;
+  if(B)for(const r in B.t)for(const id in B.t[r]){a0=Math.min(a0,B.t[r][id][0]);a1=Math.max(a1,B.t[r][id][1]);}
+  a0-=((dowN(a0)+6)%7);a1+=7;const W=(a1-a0+1)*px,X=n=>(n-a0)*px;
+  let head='',grid='';
+  for(let n=a0;n<=a1;n++){const d=new Date(n*864e5);
+    if(d.getUTCDate()===1||n===a0)head+=`<div class="gm" style="left:${X(n)}px">${d.toLocaleDateString('en-GB',{month:'short',year:'2-digit',timeZone:'UTC'})}</div>`;
+    if(dowN(n)===1){head+=`<div class="gw" style="left:${X(n)}px">${z==='d'?fmtN(n):d.getUTCDate()}</div>`;grid+=`<i style="left:${X(n)}px"></i>`;}
+}
+  const bar=(t,r)=>{const a=actById(t.id)||{},hp=isHP(t.id),cl=t.sv===2?'g2':t.sv===1?'g1':'g0';
+    const tip=`${r.code} · ${a.name||t.id}\n${fmtN(t.s)}${t.e!==t.s?' → '+fmtN(t.e):''} · ${t.d} d${t.ld&&t.ld<1?' (part of a day)':''}\n${lbl(t.id,t.sv)}`;
+    return `<b class="gbar ${cl} ${hp?'ghp':''}" style="left:${X(t.s)}px;width:${Math.max(hp?6:3,(t.e-t.s+1)*px-1)}px;--c:${hp?'var(--hp)':a.color||'#999'}" title="${esc(tip)}" data-room="${r.id}">${z==='d'&&(t.e-t.s+1)*px>34?esc(a.short||''):''}</b>`;};
+  let body='';
+  S.settings.floors.forEach(f=>{
+    const rs=rows.filter(r=>r.floor===f.id);if(!rs.length)return;
+    const ft=tasks.filter(t=>S.rooms[t.rid]&&S.rooms[t.rid].floor===f.id);if(!ft.length)return;
+    const fs=Math.min(...ft.map(t=>t.s)),fe=Math.max(...ft.map(t=>t.e));
+    body+=`<div class="grow gfl"><div class="glab">${esc(f.name)} <small>${rs.length} rooms · ${fmtN(fs)} → ${fmtN(fe)}</small></div><div class="gtr"><b class="gsum" style="left:${X(fs)}px;width:${(fe-fs+1)*px}px"></b></div></div>`;
+    rs.forEach(r=>{const bt=B&&B.t[r.id],rt=Object.values(P.byRoom[r.id]||{});if(!rt.length)return;
+      const re=Math.max(...rt.map(t=>t.e)),be=bt?Math.max(...Object.values(bt).map(x=>x[1])):null;
+      body+=`<div class="grow"><div class="glab"><a href="#" data-room="${r.id}"><b>${esc(r.code)}</b></a> <span>${esc(r.name)}</span>${be!=null&&re>be?` <small class="overdue" title="Forecast finish ${fmtN(re)}, baseline ${fmtN(be)}">+${P.C.count(be,re)-1}d</small>`:''}</div><div class="gtr">${bt?Object.entries(bt).map(([id,x])=>`<i class="gbl" style="left:${X(x[0])}px;width:${(x[1]-x[0]+1)*px}px"></i>`).join(''):''}${rt.map(t=>bar(t,r)).join('')}</div></div>`;});
+  });
+  return `<div class="card noprint" style="padding:10px"><div class="row"><b>Zoom</b><div class="seg">${[['w','Weeks'],['d','Days']].map(([k,l])=>`<button class="${z===k?'on0':''}" data-pg="plZoom|${k}">${l}</button>`).join('')}</div>
+    <input data-fs="q" id="q" placeholder="🔍 Room…" value="${esc(F.q)}" style="width:140px">
+    <span class="legend" style="margin:0"><span><i class="sq" style="background:#7a8699;border:0"></i>Done</span><span><i class="sq" style="background:repeating-linear-gradient(45deg,#7a8699,#7a8699 3px,#b9c1cd 3px,#b9c1cd 6px);border:0"></i>In progress</span><span><i class="sq" style="background:#d4d9e1;border:0"></i>Planned</span>${B?'<span><i class="sq" style="background:#a9b2bf;height:4px;border:0"></i>Baseline</span>':''}<span style="color:var(--blk)">│ today</span></span></div></div>
+    <div class="gwrap" id="gwrap"><div class="gin" style="width:${LW+W}px;--lw:${LW}px"><div class="ghead"><div class="glab"></div><div class="gtr">${head}</div></div>
+    <div class="gbody"><div class="ggrid" style="left:${LW}px;width:${W}px">${grid}<i class="gtoday" style="left:${X(P.T)}px"></i></div>${body||'<div class="empty" style="padding:10px">No room matches.</div>'}</div></div></div>`;
+}
+function plParams(){
+  const c=pcfg(),adm=isAdmin(),dis=adm?'':'disabled',s=S.settings,B=S.baseline;
+  const wdn=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],nA=Object.values(S.rooms).filter(roomArea).length;
+  return `<details class="card" data-dk="plparams" ${adm&&!S.settings.planCfg?'open':''}><summary><b style="font-size:16px">⚙ Planning parameters</b> <small style="color:var(--mute)">durations, crews, calendar, baseline${adm?'':' — read only'}</small></summary>
+  <div class="row" style="margin:10px 0;align-items:flex-end">
+    <label class="form" style="display:grid;gap:4px;font-size:12px;color:var(--mute);font-weight:600">Start of works<input type="date" data-pc="start" value="${esc(c.start)}" ${dis}></label>
+    <label class="form" style="display:grid;gap:4px;font-size:12px;color:var(--mute);font-weight:600">Hold point inspection (days)<input type="number" min="0" step="0.5" style="width:90px" data-pc="hp" value="${c.hp}" ${dis}></label>
+    <div style="font-size:12px;color:var(--mute);font-weight:600">Working days<div class="row" style="gap:4px;margin-top:4px">${[1,2,3,4,5,6,0].map(d=>`<label class="chk" style="padding:0 4px"><input type="checkbox" data-pcwd="${d}" ${c.wd.map(Number).includes(d)?'checked':''} ${dis}>${wdn[d]}</label>`).join('')}</div></div></div>
+  <label style="display:grid;gap:4px;font-size:12px;color:var(--mute);font-weight:600">Holidays / site closed (dates, one per line or separated by commas)<textarea data-pc="hol" rows="2" style="width:100%" placeholder="2026-12-25, 2027-01-01" ${dis}>${esc(c.hol.join(', '))}</textarea></label>
+  <h3>Durations per room and crews</h3><p style="margin:0 0 8px;color:var(--mute);font-size:12px">Days per room = working days one crew needs for one room (0.5 = half a day). If m²/day is set, rooms with an area (${nA}/${Object.keys(S.rooms).length} rooms have one, read from the plans) use area ÷ m²/day instead.</p>
+  <div class="tbwrap"><table class="tb"><thead><tr><th>Activity</th><th>Days per room</th><th>or m² / day</th><th>Crews max</th><th>Subcontractor</th></tr></thead><tbody>
+  ${[...s.acts].sort(byNm).map(a=>`<tr><td><span class="dot" style="background:${a.color};margin-right:6px"></span>${esc(a.name)}</td><td><input type="number" min="0" step="0.25" style="width:80px" data-pact="dur|${a.id}" value="${+a.dur>0?+a.dur:''}" placeholder="1" ${dis}></td><td><input type="number" min="0" step="1" style="width:80px" data-pact="rate|${a.id}" value="${+a.rate>0?+a.rate:''}" placeholder="—" ${dis}></td><td><input type="number" min="0" step="1" style="width:70px" data-pact="crews|${a.id}" value="${+a.crews>0?+a.crews:''}" placeholder="∞" ${dis}></td><td>${esc(subName(a.sub)||'—')}</td></tr>`).join('')}</tbody></table></div>
+  <h3>Floor start dates</h3><div class="row">${s.floors.map(f=>`<label style="display:grid;gap:4px;font-size:12px;color:var(--mute);font-weight:600">${esc(f.name)}<input type="date" data-pfstart="${f.id}" value="${esc(f.start||'')}" ${dis}></label>`).join('')}</div>
+  <h3>Baseline</h3><div class="row">${B&&B.t?`Saved ${fmtLong(ymd(new Date(B.at)))} by ${esc(B.by||'')} (${B.mode==='lev'?'leveled':'as soon as possible'} plan, finish ${fmtN(B.end)})`:'No baseline: save the plan once it is agreed, to see the drift (late rooms, late steps) afterwards.'}
+    ${adm?`<button class="btn sm pri" data-pg="basesave|1">📌 Save the ${plMode()==='lev'?'leveled':'ASAP'} plan as baseline</button>${B&&B.t?'<button class="btn sm red" data-pg="basedel|1">Remove baseline</button>':''}`:''}</div>
+  </details>`;
+}
+function planXls(){
+  const X=xls();if(!X)return;const P=planOf(plMode()),B=S.baseline&&S.baseline.t?S.baseline:null;
+  const rows=P.tasks.map(t=>{const r=S.rooms[t.rid],a=actById(t.id)||{},b=B&&(B.t[t.rid]||{})[t.id];return {Floor:(floorById(r.floor)||{}).name||'',Room:r.code,Name:r.name,Activity:a.name||t.id,Subcontractor:isHP(t.id)?'':subName(asg(r,t.id).sub),Status:lbl(t.id,t.sv),'Duration (d)':t.d,Start:dstr(t.s),Finish:dstr(t.e),...(B?{'Baseline start':b?dstr(b[0]):'','Baseline finish':b?dstr(b[1]):''}:{})};})
+    .sort((x,y)=>x.Floor.localeCompare(y.Floor)||x.Room.localeCompare(y.Room,undefined,{numeric:true})||x.Start.localeCompare(y.Start));
+  const wb=X.utils.book_new();X.utils.book_append_sheet(wb,X.utils.json_to_sheet(rows),'Plan');
+  const st=planStats().map(x=>({Activity:x.a.name,'Rooms to do':x.n,'Crew-days':+x.work.toFixed(2),'Peak ASAP':+x.peakA.m.toFixed(2),'Peak date':x.peakA.at!=null?dstr(x.peakA.at):'','Average crews':+x.avg.toFixed(2),'Crews max':+x.a.crews||'','Peak leveled':+x.peakL.m.toFixed(2),'Finish ASAP':x.endA!=null?dstr(x.endA):'','Finish leveled':x.endL!=null?dstr(x.endL):''}));
+  X.utils.book_append_sheet(wb,X.utils.json_to_sheet(st),'Peaks');
+  X.writeFile(wb,`RT_Planning_${plMode()}_${today()}.xlsx`);
+}
+function planSetActs(fn){saveS(s=>s.acts.forEach(fn));}
+document.addEventListener('click',e=>{
+  const b=e.target.closest&&e.target.closest('[data-pg],[data-pgcap],[data-pgsel-row]');if(!b)return;
+  if(b.dataset.pgselRow!==undefined){if(e.target.closest('input,button'))return;F.plAct=F.plAct===b.dataset.pgselRow?'all':b.dataset.pgselRow;render();scrollTo(0,0);return;}
+  if(b.dataset.pgcap){const [id,v]=b.dataset.pgcap.split('|');planSetActs(a=>{if(a.id===id)a.crews=+v;});return;}
+  const [k,v]=b.dataset.pg.split('|');
+  if(k==='xls')return planXls();
+  if(k==='capall'){const st=planStats();if(!confirm(`Set “Crews max” of ${st.length} activities to the suggested value (average crews needed)?`))return;const m={};st.forEach(x=>m[x.a.id]=x.sug);planSetActs(a=>{if(m[a.id])a.crews=m[a.id];});return;}
+  if(k==='capnone'){if(!confirm('Remove the crew limit of all activities?'))return;planSetActs(a=>{delete a.crews;});return;}
+  if(k==='basesave'){const P=planOf(plMode()),t={};P.tasks.forEach(x=>{(t[x.rid]=t[x.rid]||{})[x.id]=[x.s,x.e];});
+    const fEnd={};Object.entries(P.fEnd).forEach(([f,n])=>fEnd[f]=n);
+    if(S.baseline&&S.baseline.t&&!confirm('Replace the current baseline with today\'s plan?'))return;
+    store.saveBaseline({at:Date.now(),by:user(),mode:plMode(),end:P.end,fEnd,t});return;}
+  if(k==='basedel'){if(confirm('Remove the baseline?'))store.delBaseline();return;}
+  F[k]=v;render();
+});
+document.addEventListener('change',e=>{
+  const t=e.target,d=t.dataset;if(!t.closest||!t.closest('#view'))return;
+  if(d.pgsel){F[d.pgsel]=t.value;render();return;}
+  if(d.pact){const [k,id]=d.pact.split('|'),v=parseFloat(t.value);planSetActs(a=>{if(a.id!==id)return;if(v>0)a[k]=v;else delete a[k];});return;}
+  if(d.pfstart){saveS(s=>{const f=s.floors.find(x=>x.id===d.pfstart);if(f){if(t.value)f.start=t.value;else delete f.start;}});return;}
+  if(d.pcwd!==undefined){const l=[...document.querySelectorAll('[data-pcwd]')].filter(x=>x.checked).map(x=>+x.dataset.pcwd);if(!l.length){alert('Keep at least one working day.');t.checked=true;return;}saveS(s=>{s.planCfg={...(s.planCfg||{}),wd:l};});return;}
+  if(d.pc){let v=t.value.trim();if(d.pc==='hol'){const bad=[];v=v.split(/[\s,;]+/).filter(Boolean).filter(x=>/^\d{4}-\d\d-\d\d$/.test(x)||(bad.push(x),false));if(bad.length)alert('Ignored (use YYYY-MM-DD): '+bad.join(', '));}
+    if(d.pc==='hp')v=Math.max(0,parseFloat(v)||0);saveS(s=>{s.planCfg={...(s.planCfg||{}),[d.pc]:v};});return;}
+});
+
 /* ===================== WEEKLY SNAPSHOTS =====================
    Every Saturday (end of day) the status of every room is frozen in ft_snapshots/<YYYY-MM-DD>.
    No server needed: the first person who opens the app after Saturday creates it. The status
@@ -1327,16 +1600,18 @@ function renderDrawer(){
   if(ae&&D.contains(ae)&&ae.matches('[data-hold]')){pending=true;return;}
   const sc=D.scrollTop;
   const s=S.settings,f=floorById(r.floor),t=typeById(r.type),n=nextStep(r),p=progress(r),bl=openBlk(r),acts=roomActs(r);
+  const PLR=(planOf(plMode()).byRoom[r.id])||{},BLR=S.baseline&&S.baseline.t?S.baseline.t[r.id]:null,pend=Object.values(PLR).length?Math.max(...Object.values(PLR).map(x=>x.e)):null;
   let h=`<div class="dh"><div class="row" style="flex-wrap:nowrap"><div style="flex:1;min-width:0"><div style="font-size:20px;font-weight:800">${esc(r.code)} <span style="font-weight:500">${esc(r.name)}</span></div><div style="color:var(--mute);font-size:12px">${esc(f?f.name:'')} · ${esc(t?t.name:'—')}${r.area?' · '+esc(r.area):''}${(()=>{const o=[...new Set(pinSheets(r).filter(m=>m.floor!==r.floor).map(m=>floorById(m.floor)?.name).filter(Boolean))];return o.length?` · <span class="tag" style="background:#e8f0fe;color:var(--hp)">⇕ double height, also on ${esc(o.join(', '))}</span>`:'';})()}${pinSheets(r).length?` · <a href="#" class="lnk" data-showpin="${r.id}">📐 Show on plan</a>`:''}</div></div><button class="btn" data-act="close">✕ Close</button></div>
     <div class="row" style="margin-top:8px"><div class="bar" style="max-width:none"><i style="width:${pc(p)}%"></i></div><b>${pc(p)}%</b></div>
-    <div style="margin-top:6px;font-size:13px">${n?`Next step: <b>${esc(actById(n).name)}</b>`:'<b style="color:var(--done)">✓ All activities complete</b>'}${bl.length?` · <span style="color:var(--blk);font-weight:700">⚠ ${bl.length} open blocking point(s)</span>`:''}</div></div><div class="db"><h3>Activities</h3>`;
+    <div style="margin-top:6px;font-size:13px">${n?`Next step: <b>${esc(actById(n).name)}</b>`:'<b style="color:var(--done)">✓ All activities complete</b>'}${bl.length?` · <span style="color:var(--blk);font-weight:700">⚠ ${bl.length} open blocking point(s)</span>`:''}${n&&pend!=null?` · 📅 forecast finish <b>${fmtN(pend)}</b>`:''}</div></div><div class="db"><h3>Activities</h3>`;
   if(!acts.length)h+=`<div class="empty">No activity assigned. Open “Customize activities” below.</div>`;
   acts.forEach(id=>{
     const a=actById(id),hp=!!a.isHp,o=(r.st||{})[id]||{},sv=o.s||0,b=bl.filter(x=>x.actId===id);
     const dIn=k=>`<input type="date" class="dt" data-hold data-sdate="${r.id}|${id}|${k}" value="${o[k]||o.d||''}" title="Change date if the work was done on another day">`;
     const meta=sv===2?`${hp?'Released':'Done'} ${dIn('dd')}${o.by?' · '+esc(o.by):''}`:sv===1?`${hp?'Requested':'Started'} ${dIn('ds')}${o.by?' · '+esc(o.by):''}`:'';
-    const words=hp?['Pending','Req.','Released']:['To do','WIP','Done'];
-    h+=`<div class="arow ${hp?'hp':''} ${b.length?'blk':''}">${hp?'':`<span class="dot" style="background:${a.color}"></span>`}<div class="an">${hp?`<b><span class="hptag">◆ HP</span>Hold point – inspection</b>`:`<b>${esc(a.name)}</b>`}<small>${meta}${b.length?` <span style="color:var(--blk)">⚠ ${esc(b[0].title)}</span>`:''}</small>${(()=>{const g=asg(r,id);return hp?`<small>👷 Inspection by ${esc(g.resp||'—')}</small>`:`<small class="asgl" data-asg="${r.id}|${id}" title="Click to change for this room" style="cursor:pointer">🏗 ${esc(subName(g.sub)||'—')} · 👷 ${esc(g.resp||'—')}${g.ov?' <b style="color:var(--acc)">✎ room-specific</b>':''}</small>`;})()}</div>
+    const words=hp?['Pending','Req.','Released']:['To do','WIP','Done'],pt=PLR[id],bt=BLR&&BLR[id];
+    const ptxt=pt&&sv!==2?` <span class="pdates" title="Planned (${plMode()==='lev'?'leveled':'as soon as possible'})${bt?' — baseline '+fmtN(bt[0])+' → '+fmtN(bt[1]):''}">📅 ${fmtN(pt.s)}${pt.e!==pt.s?'–'+fmtN(pt.e):''}${bt&&pt.e>bt[1]?` <b class="overdue">+${pt.e-bt[1]}d</b>`:''}</span>`:'';
+    h+=`<div class="arow ${hp?'hp':''} ${b.length?'blk':''}">${hp?'':`<span class="dot" style="background:${a.color}"></span>`}<div class="an">${hp?`<b><span class="hptag">◆ HP</span>Hold point – inspection</b>`:`<b>${esc(a.name)}</b>`}<small>${meta}${ptxt}${b.length?` <span style="color:var(--blk)">⚠ ${esc(b[0].title)}</span>`:''}</small>${(()=>{const g=asg(r,id);return hp?`<small>👷 Inspection by ${esc(g.resp||'—')}</small>`:`<small class="asgl" data-asg="${r.id}|${id}" title="Click to change for this room" style="cursor:pointer">🏗 ${esc(subName(g.sub)||'—')} · 👷 ${esc(g.resp||'—')}${g.ov?' <b style="color:var(--acc)">✎ room-specific</b>':''}</small>`;})()}</div>
       <div class="seg">${[0,1,2].map(k=>`<button class="${sv===k?'on'+k:''} ${hp?'hpb':''}" data-set="${r.id}|${id}|${k}">${words[k]}</button>`).join('')}</div>
       <button class="btn sm blkbtn" title="Raise a blocking point on this activity" data-newblk="${r.id}|${id}">⚠ Block</button></div>`;
   });
@@ -1346,7 +1621,7 @@ function renderDrawer(){
   h+=`<button class="btn" data-newblk="${r.id}|">+ Raise blocking point</button>`;
   h+=`<h3>Notes</h3><textarea data-hold data-rnote="${r.id}" ${isRO()?'readonly':''} rows="3" style="width:100%" placeholder="Site remarks, access, materials…">${esc(r.note||'')}</textarea>`;
   h+=`<details data-dk="room_cust" class="rwonly" style="margin-top:14px"><summary><b>Customize sequence</b> <small style="color:var(--mute)">(${cleanSeq(r.acts).length} activities)</small></summary><div class="row" style="margin:8px 0">Reset from template: <select id="tplsel">${s.types.map(x=>`<option value="${x.id}" ${x.id===r.type?'selected':''}>${esc(x.name)}</option>`).join('')}</select><button class="btn sm" data-act="applytpl">Apply</button></div>${seqEditor('room',r.id,r.acts)}</details>`;
-  h+=`<details data-dk="room_det" class="rwonly" style="margin-top:6px"><summary><b>Room details</b></summary><div class="form" style="margin-top:8px"><div class="row"><label>Code<input data-hold id="rd_code" value="${esc(r.code)}"></label><label>Floor<select id="rd_floor">${s.floors.map(x=>`<option value="${x.id}" ${x.id===r.floor?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label></div><label>Name<input data-hold id="rd_name" value="${esc(r.name)}"></label><label>Type<select id="rd_type">${s.types.map(x=>`<option value="${x.id}" ${x.id===r.type?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label><div class="row"><button class="btn pri" data-act="saveroom">Save details</button><span class="sp"></span><button class="btn red" data-act="delroom">Delete room</button></div></div></details></div>`;
+  h+=`<details data-dk="room_det" class="rwonly" style="margin-top:6px"><summary><b>Room details</b></summary><div class="form" style="margin-top:8px"><div class="row"><label>Code<input data-hold id="rd_code" value="${esc(r.code)}"></label><label>Floor<select id="rd_floor">${s.floors.map(x=>`<option value="${x.id}" ${x.id===r.floor?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label></div><label>Name<input data-hold id="rd_name" value="${esc(r.name)}"></label><label>Type<select id="rd_type">${s.types.map(x=>`<option value="${x.id}" ${x.id===r.type?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label><div class="row"><label>Area (m²)<input data-hold id="rd_area" value="${esc(r.area||'')}" placeholder="e.g. 24.5 m²"></label><label>Earliest start (planning)<input type="date" id="rd_pstart" value="${esc(r.pstart||'')}"></label></div><div class="row"><button class="btn pri" data-act="saveroom">Save details</button><span class="sp"></span><button class="btn red" data-act="delroom">Delete room</button></div></div></details></div>`;
   D.innerHTML=h;
   reopen(D);D.scrollTop=sc;
 }
@@ -1532,7 +1807,7 @@ const ACT={
   deldemo:()=>{const ids=Object.values(S.rooms).filter(r=>r.demo).map(r=>r.id);if(!confirm(`Delete ${ids.length} demo rooms and their blocking points?`))return;store.delRooms(ids,Object.values(S.blockers).filter(b=>ids.includes(b.roomId)).map(b=>b.id));},
   delall:()=>{if(prompt('This deletes ALL rooms and blocking points. Type DELETE to confirm:')!=='DELETE')return;store.delRooms(Object.keys(S.rooms),Object.keys(S.blockers));},
   applytpl:()=>{const r=S.rooms[drawerRoom],t=typeById($('#tplsel').value);if(!t||!confirm(`Replace this room's sequence with the “${t.name}” template? Statuses already entered are kept.`))return;store.patchRoom(r.id,{acts:[...t.acts],type:t.id});},
-  saveroom:()=>{const r=S.rooms[drawerRoom],code=$('#rd_code').value.trim();if(!code)return alert('Code is required.');document.activeElement.blur();const type=$('#rd_type').value,p={code,name:$('#rd_name').value.trim(),floor:$('#rd_floor').value,type};
+  saveroom:()=>{const r=S.rooms[drawerRoom],code=$('#rd_code').value.trim();if(!code)return alert('Code is required.');document.activeElement.blur();const type=$('#rd_type').value,p={code,name:$('#rd_name').value.trim(),floor:$('#rd_floor').value,type,area:$('#rd_area').value.trim(),pstart:$('#rd_pstart').value};
     const t=type!==r.type?typeById(type):null;if(t&&confirm(`Type changed to “${t.name}”.\n\nAlso replace this room's sequence with the template of this type? (Statuses already entered are kept.)`))p.acts=cleanSeq(t.acts);
     store.patchRoom(r.id,p);},
   delroom:()=>{const r=S.rooms[drawerRoom];if(!confirm(`Delete room ${r.code} and its blocking points?`))return;const id=r.id;closeDrawer();store.delRooms([id],Object.values(S.blockers).filter(b=>b.roomId===id).map(b=>b.id));},
@@ -2140,7 +2415,7 @@ Object.assign(ACT,{
     catch(err){$('#sync').textContent='🔴 Offline';$('#view').innerHTML=`<div class="card"><h2>Connection problem</h2><p>${esc(err.message)}</p><p>Check in the Firebase console: Firestore database created · Authentication → Anonymous sign-in enabled · Firestore rules published.</p></div>`;return;}
   }else{
     let d={};try{d=JSON.parse(lsGet(LSK,'{}'))||{};}catch(e){}
-    S={settings:d.settings||null,bphotos:d.bphotos||{},rooms:d.rooms||{},blockers:d.blockers||{},log:d.log||[],snaps:d.snaps||[],pins:d.pins||{},plans:d.plans||{}};
+    S={settings:d.settings||null,baseline:d.baseline||null,bphotos:d.bphotos||{},rooms:d.rooms||{},blockers:d.blockers||{},log:d.log||[],snaps:d.snaps||[],pins:d.pins||{},plans:d.plans||{}};
     $('#sync').textContent='🟡 Local mode';
   }
   // Monday: first opening of the day shows the weekly progress of last week

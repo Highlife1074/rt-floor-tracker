@@ -39,6 +39,8 @@ await t('editor cannot change people',assertFails(updateDoc(doc(e,'ft_settings/m
 await t('editor cannot hijack session to owner',assertFails(setDoc(doc(e,'ft_sess/e'),{k:'horn_philippe',h:'EDNEWHASH'})));
 await t('editor writes log',assertSucceeds(setDoc(doc(e,'ft_log/l1'),{ts:1})));
 await t('editor cannot edit log',assertFails(setDoc(doc(e,'ft_log/l1'),{ts:2})));
+await t('editor cannot save baseline',assertFails(setDoc(doc(e,'ft_baseline/main'),{t:{}})));
+await t('editor reads baseline',assertSucceeds(getDoc(doc(e,'ft_baseline/main'))));
 await t('editor batch 400 room updates',assertSucceeds((async()=>{const b=writeBatch(e);for(let i=0;i<400;i++)b.set(doc(e,'ft_rooms/b'+i),{i});await b.commit();})()));
 // viewer
 const v=db('v');
@@ -51,6 +53,7 @@ await t('viewer cannot overwrite snapshot',assertFails(setDoc(doc(v,'ft_snapshot
 const a=db('a');
 await t('admin login',assertSucceeds(setDoc(doc(a,'ft_sess/a'),{k:'ad',h:'ADHASH00'})));
 await t('admin deletes room',assertSucceeds(deleteDoc(doc(a,'ft_rooms/b1'))));
+await t('admin saves baseline',assertSucceeds(setDoc(doc(a,'ft_baseline/main'),{t:{}})));
 await t('admin changes roles',assertSucceeds(updateDoc(doc(a,'ft_settings/main'),{'roles.vw':'edit'})));
 await t('admin resets pin',assertSucceeds((async()=>{const b=writeBatch(a);b.delete(doc(a,'ft_pins/vw'));b.delete(doc(a,'ft_pinflag/vw'));await b.commit();})()));
 // first PIN for a person with no PIN (now vw)

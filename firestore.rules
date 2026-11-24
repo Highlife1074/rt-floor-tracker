@@ -91,6 +91,10 @@ service cloud.firestore {
       allow create, update: if canEdit();
       allow delete: if isAdmin();
     }
+    match /ft_baseline/{id} {
+      allow read: if isMember();
+      allow write: if isAdmin();
+    }
     match /ft_planchunks/{id} {
       allow read: if isMember();
       allow create, update: if canEdit();

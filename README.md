@@ -25,6 +25,22 @@ priority, responsible, target date and photo changes are logged automatically), 
 points tab shows **Who has to act** (open points per responsible: in progress, high priority, overdue, oldest; click a
 row to filter); the Cockpit list is sorted overdue first, then priority, then age.
 
+## Planning (📅 tab)
+**Parameters** (admin, "⚙ Planning parameters"): start of works, working days, holidays, days for a hold-point
+inspection, start date per floor; per activity **days per room** (decimals allowed, 0.5 = half a day) or **m² / day**
+(used for rooms that have an area, read from the plans or typed in Room details), and **crews max** (how many crews
+can work on that activity at the same time). Room details also take an **earliest start** per room.
+**Forecast:** each room follows its own sequence; Done / In-progress steps keep their real dates, the remaining ones
+start at the earliest on today / start of works / floor start / room start, the working day after the previous step.
+Two plans: **⚡ As soon as possible** (no crew limit: shows the raw peaks) and **⚖ Leveled** (an activity never uses
+more than its crews max per day: steps are pushed later, rooms in order of earliest start, then floor, then code).
+**📊 Load & peaks:** crews needed per working day (or weekly average), stacked by activity or for one activity with
+both plans and its limit; table of peaks per activity (peak, average, suggested crews = average, finish ASAP vs
+leveled, delay caused) — edit "crews max" there or "Use all suggested crews"; finish per floor.
+**📅 Gantt:** rooms × days (week / day zoom), Done / In progress / Planned bars, today line, baseline under the bars.
+**Baseline** (admin): "📌 Save … as baseline" freezes the plan in `ft_baseline/main`; then the KPIs, Gantt, room
+panel and Cockpit show the drift (+n days). Excel export: plan (every step with dates) + peaks.
+
 Firebase config goes at the top of index.html (FIREBASE_CONFIG).
 Empty config = local mode (data in the browser only).
 
