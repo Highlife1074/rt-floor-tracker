@@ -395,8 +395,10 @@ const pad=n=>String(n).padStart(2,'0');
 const ymd=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
 const today=()=>ymd(new Date());
 const dMinus=n=>{const d=new Date();d.setDate(d.getDate()-n);return ymd(d);};
-const fmtD=s=>s?new Date(s+'T00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short'}):'';
-const fmtLong=s=>new Date(s+'T00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'});
+// date formats are cached: toLocaleDateString builds a new formatter on every call (very slow on big Gantts)
+const FMT_S=new Intl.DateTimeFormat('en-GB',{day:'2-digit',month:'short'}),FMT_L=new Intl.DateTimeFormat('en-GB',{day:'2-digit',month:'long',year:'numeric'}),FMC={},FMCL={};
+const fmtD=s=>s?(FMC[s]||(FMC[s]=FMT_S.format(new Date(s+'T00:00')))):'';
+const fmtLong=s=>FMCL[s]||(FMCL[s]=FMT_L.format(new Date(s+'T00:00')));
 const days=(a,b)=>Math.round((new Date(b+'T00:00')-new Date(a+'T00:00'))/864e5);
 const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:0;
 const pc=p=>Math.round(p*100);
@@ -575,7 +577,8 @@ const st=(r,a)=>(r.st&&r.st[a]&&r.st[a].s)||0;
 const openBlk=(r,a)=>Object.values(S.blockers).filter(b=>b.status==='open'&&b.roomId===r.id&&(a===undefined||b.actId===a));
 function progress(r){const ids=roomActs(r);if(!ids.length)return 0;return avg(ids.map(a=>{const s=st(r,a);return s===2?1:s===1?.5:0;}));}
 const nextStep=r=>roomActs(r).find(a=>st(r,a)!==2)||null;
-const roomsList=()=>Object.values(S.rooms).sort((a,b)=>floorIdx(a.floor)-floorIdx(b.floor)||String(a.code).localeCompare(String(b.code),undefined,{numeric:true}));
+const CODE_COLL=new Intl.Collator(undefined,{numeric:true});
+const roomsList=()=>{const fi={};S.settings.floors.forEach((f,i)=>fi[f.id]=i);const k=f=>f in fi?fi[f]:999;return Object.values(S.rooms).sort((a,b)=>k(a.floor)-k(b.floor)||CODE_COLL.compare(String(a.code),String(b.code)));};
 function passes(r,skipNext){
   if(F.floor!=='all'&&r.floor!==F.floor)return false;
   if(F.type!=='all'&&r.type!==F.type)return false;
@@ -1326,7 +1329,7 @@ function planCompute(level){
   const fits=(t,s,cap,capS)=>{const u=use[t.b]||{},v=(t.sub&&useS[t.sub])||{};let n=s;
     for(let k=0;k<t.D;k++){if(cap&&(u[n]||0)+t.ld>cap+1e-6)return false;if(capS&&(v[n]||0)+t.ld>capS+1e-6)return false;n=C.next(n+1);}return true;};
   const pend=[];
-  roomsList().forEach(r=>{
+  roomsList().forEach((r,ri)=>{
     const f=floorById(r.floor),base=C.next(Math.max(T,P0,f&&okDate(f.start)?dn(f.start):0,okDate(r.pstart)?dn(r.pstart):0)),q=[];let prev=-1e9;
     byRoom[r.id]={};
     roomActs(r).forEach(id=>{
@@ -1338,20 +1341,23 @@ function planCompute(level){
       if(t.ld){const k=C.count(t.s,t.e);t.ld=k?Math.min(1,t.d/k):t.ld;}
       addUse(t);prev=Math.max(prev,t.e);tasks.push(t);byRoom[r.id][id]=t;
     });
-    if(q.length)pend.push({r,q,prev,base,fi:floorIdx(r.floor)});
+    if(q.length)pend.push({r,q,prev,base,ri});   // ri = rank in roomsList (level, then code)
   });
   const esOf=p=>Math.max(p.base,C.next(p.prev+1),p.q.length&&p.q[0].ms?C.next(p.q[0].ms):0);
   pend.forEach(p=>p.es=esOf(p));
-  let act=pend.slice();
-  while(act.length){
-    let bi=0;for(let i=1;i<act.length;i++){const a=act[i],b=act[bi];if(a.es<b.es||(a.es===b.es&&(a.fi<b.fi||(a.fi===b.fi&&byCode(a.r,b.r)<0))))bi=i;}
-    const p=act[bi],t=p.q.shift();let s=p.es;
+  // priority queue on (earliest start, level/code rank): the room that can start first is scheduled first
+  const H=[],lt=(a,b)=>a.es<b.es||(a.es===b.es&&a.ri<b.ri);
+  const push=x=>{H.push(x);let i=H.length-1;while(i){const j=(i-1)>>1;if(!lt(H[i],H[j]))break;[H[i],H[j]]=[H[j],H[i]];i=j;}};
+  const pop=()=>{const top=H[0],last=H.pop();if(H.length){H[0]=last;let i=0;for(;;){const l=2*i+1,r=l+1;let m=i;if(l<H.length&&lt(H[l],H[m]))m=l;if(r<H.length&&lt(H[r],H[m]))m=r;if(m===i)break;[H[i],H[m]]=[H[m],H[i]];i=m;}}return top;};
+  pend.forEach(push);
+  while(H.length){
+    const p=pop(),t=p.q.shift();let s=p.es;
     if(!t.D){t.s=t.e=Math.max(p.prev,p.base,t.ms?C.next(t.ms):0);}
     else{const cap=level?caps[t.b]:0,capS=level&&t.sub?capsS[t.sub]:0;
       if(cap||capS){const cp=cap?Math.max(cap,t.ld):0,cs=capS?Math.max(capS,t.ld):0;for(let g=0;g<3000&&!fits(t,s,cp,cs);g++)s=C.next(s+1);}
       t.s=s;t.e=C.add(s,t.D-1);addUse(t);}
     p.prev=Math.max(p.prev,t.e);tasks.push(t);byRoom[p.r.id][t.id]=t;
-    if(p.q.length)p.es=esOf(p);else act.splice(bi,1);
+    if(p.q.length){p.es=esOf(p);push(p);}
   }
   let end=-1e9,start=1e9;const fEnd={},rEnd={};
   tasks.forEach(t=>{end=Math.max(end,t.e);start=Math.min(start,t.s);const r=S.rooms[t.rid];rEnd[t.rid]=Math.max(rEnd[t.rid]||-1e9,t.e);fEnd[r.floor]=Math.max(fEnd[r.floor]||-1e9,t.e);});
@@ -1490,7 +1496,7 @@ function plGantt(P,B){
   if(g==='type')byType(rows).forEach(x=>groups.push({...x,lvl:1}));
   else lvls.forEach(f=>{const rs=rows.filter(r=>inLvl(r,f));if(!rs.length)return;groups.push({name:f.name,rs,lvl:1});if(g==='floortype')byType(rs).forEach(x=>groups.push({...x,lvl:2}));});
   groups.forEach(G=>{
-    const rs=G.rs,ft=tasks.filter(t=>rs.some(r=>r.id===t.rid)),fs=ft.length?Math.min(...ft.map(t=>t.s)):null,fe=ft.length?Math.max(...ft.map(t=>t.e)):null;
+    const rs=G.rs,ft=rs.flatMap(r=>Object.values(P.byRoom[r.id]||{})),fs=ft.length?Math.min(...ft.map(t=>t.s)):null,fe=ft.length?Math.max(...ft.map(t=>t.e)):null;
     body+=`<div class="grow gfl ${G.lvl===2?'gfl2':''}"><div class="glab">${G.lvl===2?'└ ':''}${esc(G.name)} <small>${rs.length} rooms${fs!=null?` · ${fmtN(fs)} → ${fmtN(fe)}`:' · nothing to plan'}</small></div><div class="gtr">${fs!=null?`<b class="gsum" style="left:${X(fs)}px;width:${(fe-fs+1)*px}px"></b>`:''}</div></div>`;
     if(g==='floortype'&&G.lvl===1)return;
     rs.forEach(r=>{const bt=B&&B.t[r.id],rt=Object.values(P.byRoom[r.id]||{});
