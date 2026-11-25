@@ -262,7 +262,7 @@ details.tools .tmenu .btn{text-align:left}
 /* planning */
 .gwrap{overflow:auto;max-height:calc(100vh - 250px);background:#fff;border:1px solid var(--line);border-radius:var(--rad)}
 .gin{position:relative}
-.ghead{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid var(--line);display:flex;height:34px}.ghead .glab{z-index:6}
+.ghead{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid var(--line);display:flex;height:34px}.ghead .glab{position:sticky}.ghead .glab{z-index:6}
 .grow{display:flex;height:24px;border-bottom:1px solid #f0f2f5}
 .glab{position:sticky;left:0;z-index:3;background:#fff;width:var(--lw);flex:none;padding:4px 8px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-right:1px solid var(--line)}
 .glab span{color:var(--mute)}.glab a{color:var(--acc);text-decoration:none}
@@ -277,7 +277,7 @@ details.tools .tmenu .btn{text-align:left}
 .gbl{position:absolute;bottom:1px;height:3px;background:#a9b2bf;border-radius:2px}
 .gbody{position:relative}.ggrid{position:absolute;top:0;bottom:0;pointer-events:none}.ggrid i{position:absolute;top:0;bottom:0;border-left:1px solid #eef0f4}
 .ggrid i.gtoday{border-left:2px solid var(--blk);z-index:2}
-.ggrid i.gms{border-left:2px dashed #c48a00;z-index:2}.gmsl{position:absolute;top:2px;z-index:3;transform:translateX(-50%);background:#fff3cd;color:#8a5a00;border:1px solid #e6c260;border-radius:6px;font-size:10px;font-weight:700;padding:0 4px;white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis}
+.ggrid i.gms{border-left:2px dashed #c48a00;z-index:2}.gmsl{position:absolute;z-index:3;margin-left:-5px;height:17px;line-height:15px;background:#fff3cd;color:#8a5a00;border:1px solid #e6c260;border-radius:0 6px 6px 0;border-left:2px solid #c48a00;font-size:11px;font-weight:700;padding:0 5px;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis}.gmsl span{font-weight:400;opacity:.8}
 .mstag{background:#fff3cd;color:#8a5a00;border:1px solid #e6c260;border-radius:6px;padding:0 4px;font-weight:700;white-space:nowrap}.pstartrow{gap:8px;font-size:13px;margin:-2px 0 8px;padding:6px 8px;background:var(--acc2);border-radius:8px}.pstartrow input.dt{color:var(--ink);border-style:solid;font-size:12px}
 .gps{position:absolute;top:5px;width:0;height:0;border-top:7px solid transparent;border-bottom:7px solid transparent;border-left:8px solid var(--hp);z-index:2;margin-left:-2px}
 .gm{position:absolute;top:2px;font-size:11px;font-weight:700;padding-left:3px;border-left:1px solid var(--line);white-space:nowrap}
@@ -395,8 +395,10 @@ const pad=n=>String(n).padStart(2,'0');
 const ymd=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
 const today=()=>ymd(new Date());
 const dMinus=n=>{const d=new Date();d.setDate(d.getDate()-n);return ymd(d);};
-const fmtD=s=>s?new Date(s+'T00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short'}):'';
-const fmtLong=s=>new Date(s+'T00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'});
+// date formats are cached: toLocaleDateString builds a new formatter on every call (very slow on big Gantts)
+const FMT_S=new Intl.DateTimeFormat('en-GB',{day:'2-digit',month:'short'}),FMT_L=new Intl.DateTimeFormat('en-GB',{day:'2-digit',month:'long',year:'numeric'}),FMC={},FMCL={};
+const fmtD=s=>s?(FMC[s]||(FMC[s]=FMT_S.format(new Date(s+'T00:00')))):'';
+const fmtLong=s=>FMCL[s]||(FMCL[s]=FMT_L.format(new Date(s+'T00:00')));
 const days=(a,b)=>Math.round((new Date(b+'T00:00')-new Date(a+'T00:00'))/864e5);
 const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:0;
 const pc=p=>Math.round(p*100);
@@ -575,7 +577,8 @@ const st=(r,a)=>(r.st&&r.st[a]&&r.st[a].s)||0;
 const openBlk=(r,a)=>Object.values(S.blockers).filter(b=>b.status==='open'&&b.roomId===r.id&&(a===undefined||b.actId===a));
 function progress(r){const ids=roomActs(r);if(!ids.length)return 0;return avg(ids.map(a=>{const s=st(r,a);return s===2?1:s===1?.5:0;}));}
 const nextStep=r=>roomActs(r).find(a=>st(r,a)!==2)||null;
-const roomsList=()=>Object.values(S.rooms).sort((a,b)=>floorIdx(a.floor)-floorIdx(b.floor)||String(a.code).localeCompare(String(b.code),undefined,{numeric:true}));
+const CODE_COLL=new Intl.Collator(undefined,{numeric:true});
+const roomsList=()=>{const fi={};S.settings.floors.forEach((f,i)=>fi[f.id]=i);const k=f=>f in fi?fi[f]:999;return Object.values(S.rooms).sort((a,b)=>k(a.floor)-k(b.floor)||CODE_COLL.compare(String(a.code),String(b.code)));};
 function passes(r,skipNext){
   if(F.floor!=='all'&&r.floor!==F.floor)return false;
   if(F.type!=='all'&&r.type!==F.type)return false;
@@ -863,6 +866,7 @@ function doRender(){
   navSync();
   setTimeout(ensureSnapshots,0);
 }
+document.addEventListener('change',e=>{const t=e.target;if(t&&t.type==='date'&&t.value&&+t.value.slice(0,4)<1900)e.stopImmediatePropagation();},true);
 document.addEventListener('focusin',e=>{const t=e.target;if(t&&t.matches&&t.matches('input[type=number]'))setTimeout(()=>{if(document.activeElement===t)try{t.select();}catch(_){}},0);});
 document.addEventListener('wheel',e=>{const t=e.target;if(t&&t.matches&&t.matches('input[type=number]')&&document.activeElement===t)t.blur();},{passive:true});
 document.addEventListener('focusout',()=>{if(pending){pending=false;setTimeout(render,0);}});
@@ -1304,7 +1308,8 @@ function stepDur(r,id,noOv){
 }
 /* Milestones (settings.milestones): e.g. a material delivery. The listed activities cannot start before its date
    in the rooms of the listed levels / room types (empty list = all). */
-const msList=()=>(S.settings.milestones||[]).filter(m=>m&&m.date);
+const okDate=v=>/^\d{4}-\d\d-\d\d$/.test(v||'')&&+v.slice(0,4)>=1900;
+const msList=()=>(S.settings.milestones||[]).filter(m=>m&&okDate(m.date));
 function msFor(r,id){
   if(isHP(id))return null;const b=baseOf(id);let best=null;
   msList().forEach(m=>{if(!(m.acts||[]).includes(b))return;if((m.floors||[]).length&&!m.floors.includes(r.floor))return;if((m.types||[]).length&&!m.types.includes(r.type))return;
@@ -1316,7 +1321,7 @@ function planOf(mode){PLC=PLC||{};return PLC[mode]=PLC[mode]||planCompute(mode==
 const plMode=()=>F.plMode==='asap'?'asap':'lev';
 const hasCaps=()=>S.settings.acts.some(a=>+a.crews>0)||(S.settings.subs||[]).some(x=>+x.crews>0);
 function planCompute(level){
-  const c=pcfg(),C=calendar(),T=dn(today()),P0=c.start?dn(c.start):T,use={},useS={},caps={},capsS={},tasks=[],byRoom={};
+  const c=pcfg(),C=calendar(),T=dn(today()),P0=okDate(c.start)?dn(c.start):T,use={},useS={},caps={},capsS={},tasks=[],byRoom={};
   S.settings.acts.forEach(a=>caps[a.id]=+a.crews>0?+a.crews:0);(S.settings.subs||[]).forEach(x=>capsS[x.id]=+x.crews>0?+x.crews:0);
   // load per activity (use) and per subcontractor (useS)
   const addUse=t=>{if(!t.ld)return;const u=use[t.b]=use[t.b]||{},v=t.sub?(useS[t.sub]=useS[t.sub]||{}):null;
@@ -1324,8 +1329,8 @@ function planCompute(level){
   const fits=(t,s,cap,capS)=>{const u=use[t.b]||{},v=(t.sub&&useS[t.sub])||{};let n=s;
     for(let k=0;k<t.D;k++){if(cap&&(u[n]||0)+t.ld>cap+1e-6)return false;if(capS&&(v[n]||0)+t.ld>capS+1e-6)return false;n=C.next(n+1);}return true;};
   const pend=[];
-  roomsList().forEach(r=>{
-    const f=floorById(r.floor),base=C.next(Math.max(T,P0,f&&f.start?dn(f.start):0,r.pstart?dn(r.pstart):0)),q=[];let prev=-1e9;
+  roomsList().forEach((r,ri)=>{
+    const f=floorById(r.floor),base=C.next(Math.max(T,P0,f&&okDate(f.start)?dn(f.start):0,okDate(r.pstart)?dn(r.pstart):0)),q=[];let prev=-1e9;
     byRoom[r.id]={};
     roomActs(r).forEach(id=>{
       const o=(r.st||{})[id]||{},sv=o.s||0,d=stepDur(r,id),D=Math.ceil(d-1e-9),ld=isHP(id)||!D?0:d/D,t={rid:r.id,id,b:baseOf(id),d,D,ld,sv,sub:isHP(id)?'':asg(r,id).sub||''};
@@ -1336,20 +1341,23 @@ function planCompute(level){
       if(t.ld){const k=C.count(t.s,t.e);t.ld=k?Math.min(1,t.d/k):t.ld;}
       addUse(t);prev=Math.max(prev,t.e);tasks.push(t);byRoom[r.id][id]=t;
     });
-    if(q.length)pend.push({r,q,prev,base,fi:floorIdx(r.floor)});
+    if(q.length)pend.push({r,q,prev,base,ri});   // ri = rank in roomsList (level, then code)
   });
   const esOf=p=>Math.max(p.base,C.next(p.prev+1),p.q.length&&p.q[0].ms?C.next(p.q[0].ms):0);
   pend.forEach(p=>p.es=esOf(p));
-  let act=pend.slice();
-  while(act.length){
-    let bi=0;for(let i=1;i<act.length;i++){const a=act[i],b=act[bi];if(a.es<b.es||(a.es===b.es&&(a.fi<b.fi||(a.fi===b.fi&&byCode(a.r,b.r)<0))))bi=i;}
-    const p=act[bi],t=p.q.shift();let s=p.es;
+  // priority queue on (earliest start, level/code rank): the room that can start first is scheduled first
+  const H=[],lt=(a,b)=>a.es<b.es||(a.es===b.es&&a.ri<b.ri);
+  const push=x=>{H.push(x);let i=H.length-1;while(i){const j=(i-1)>>1;if(!lt(H[i],H[j]))break;[H[i],H[j]]=[H[j],H[i]];i=j;}};
+  const pop=()=>{const top=H[0],last=H.pop();if(H.length){H[0]=last;let i=0;for(;;){const l=2*i+1,r=l+1;let m=i;if(l<H.length&&lt(H[l],H[m]))m=l;if(r<H.length&&lt(H[r],H[m]))m=r;if(m===i)break;[H[i],H[m]]=[H[m],H[i]];i=m;}}return top;};
+  pend.forEach(push);
+  while(H.length){
+    const p=pop(),t=p.q.shift();let s=p.es;
     if(!t.D){t.s=t.e=Math.max(p.prev,p.base,t.ms?C.next(t.ms):0);}
     else{const cap=level?caps[t.b]:0,capS=level&&t.sub?capsS[t.sub]:0;
       if(cap||capS){const cp=cap?Math.max(cap,t.ld):0,cs=capS?Math.max(capS,t.ld):0;for(let g=0;g<3000&&!fits(t,s,cp,cs);g++)s=C.next(s+1);}
       t.s=s;t.e=C.add(s,t.D-1);addUse(t);}
     p.prev=Math.max(p.prev,t.e);tasks.push(t);byRoom[p.r.id][t.id]=t;
-    if(p.q.length)p.es=esOf(p);else act.splice(bi,1);
+    if(p.q.length){p.es=esOf(p);push(p);}
   }
   let end=-1e9,start=1e9;const fEnd={},rEnd={};
   tasks.forEach(t=>{end=Math.max(end,t.e);start=Math.min(start,t.s);const r=S.rooms[t.rid];rEnd[t.rid]=Math.max(rEnd[t.rid]||-1e9,t.e);fEnd[r.floor]=Math.max(fEnd[r.floor]||-1e9,t.e);});
@@ -1488,15 +1496,19 @@ function plGantt(P,B){
   if(g==='type')byType(rows).forEach(x=>groups.push({...x,lvl:1}));
   else lvls.forEach(f=>{const rs=rows.filter(r=>inLvl(r,f));if(!rs.length)return;groups.push({name:f.name,rs,lvl:1});if(g==='floortype')byType(rs).forEach(x=>groups.push({...x,lvl:2}));});
   groups.forEach(G=>{
-    const rs=G.rs,ft=tasks.filter(t=>rs.some(r=>r.id===t.rid)),fs=ft.length?Math.min(...ft.map(t=>t.s)):null,fe=ft.length?Math.max(...ft.map(t=>t.e)):null;
+    const rs=G.rs,ft=rs.flatMap(r=>Object.values(P.byRoom[r.id]||{})),fs=ft.length?Math.min(...ft.map(t=>t.s)):null,fe=ft.length?Math.max(...ft.map(t=>t.e)):null;
     body+=`<div class="grow gfl ${G.lvl===2?'gfl2':''}"><div class="glab">${G.lvl===2?'└ ':''}${esc(G.name)} <small>${rs.length} rooms${fs!=null?` · ${fmtN(fs)} → ${fmtN(fe)}`:' · nothing to plan'}</small></div><div class="gtr">${fs!=null?`<b class="gsum" style="left:${X(fs)}px;width:${(fe-fs+1)*px}px"></b>`:''}</div></div>`;
     if(g==='floortype'&&G.lvl===1)return;
     rs.forEach(r=>{const bt=B&&B.t[r.id],rt=Object.values(P.byRoom[r.id]||{});
       if(!rt.length){body+=`<div class="grow"><div class="glab"><a href="#" data-room="${r.id}"><b>${esc(r.code)}</b></a> <span>${esc(r.name)}</span></div><div class="gtr"><small style="position:sticky;left:${LW+6}px;z-index:1;background:#fff;padding:0 6px;color:var(--mute);font-style:italic;line-height:22px">${why(r)}</small></div></div>`;return;}
-      const ps=r.pstart?dn(r.pstart):null,psM=ps!=null?`<i class="gps" style="left:${X(ps)}px" title="Earliest start of ${esc(r.code)}: ${fmtN(ps)}"></i>`:'';
+      const ps=okDate(r.pstart)?dn(r.pstart):null,psM=ps!=null?`<i class="gps" style="left:${X(ps)}px" title="Earliest start of ${esc(r.code)}: ${fmtN(ps)}"></i>`:'';
       const re=Math.max(...rt.map(t=>t.e)),be=bt?Math.max(...Object.values(bt).map(x=>x[1])):null;
       body+=`<div class="grow"><div class="glab"><a href="#" data-room="${r.id}"><b>${esc(r.code)}</b></a> <span>${esc(r.name)}</span>${g==='type'?` <span>· ${esc((floorById(r.floor)||{}).name||'')}</span>`:''}${be!=null&&re>be?` <small class="overdue" title="Forecast finish ${fmtN(re)}, baseline ${fmtN(be)}">+${P.C.count(be,re)-1}d</small>`:''}</div><div class="gtr">${psM}${bt?Object.entries(bt).map(([id,x])=>`<i class="gbl" style="left:${X(x[0])}px;width:${(x[1]-x[0]+1)*px}px"></i>`).join(''):''}${rt.map(t=>bar(t,r)).join('')}</div></div>`;});
   });
+  // milestone labels: a band under the dates, one lane per row so the labels never overlap
+  const msL=msList().map(m=>({m,n:dn(m.date)})).filter(x=>x.n>=a0&&x.n<=a1).sort((a,b)=>a.n-b.n),lanes=[];
+  msL.forEach(x=>{x.x=X(x.n);const w=Math.min(220,28+((x.m.name||'Milestone').length+7)*6.2);let l=lanes.findIndex(e=>e<x.x-4);if(l<0){l=lanes.length;lanes.push(0);}lanes[l]=x.x+w;x.lane=l;});
+  const msH=lanes.length?lanes.length*20+6:0;
   const hid=roomsList().filter(r=>(F.floor==='all'||r.floor===F.floor)&&(F.type==='all'||r.type===F.type)&&(!F.q||`${r.code} ${r.name}`.toLowerCase().includes(F.q.toLowerCase()))).length-rows.length;
   const hidBar=hid>0?`<div class="pdraw noprint row"><span>🔍 <b>${hid}</b> room(s) hidden by filters set in the Rooms tab (next step, subcontractor, blocking points…).</span><button class="btn sm pri" data-act="ganttall">Show all rooms</button></div>`:'';
   return hidBar+`<div class="card noprint" style="padding:10px"><div class="row"><b>Zoom</b><div class="seg">${[['w','Weeks'],['d','Days']].map(([k,l])=>`<button class="${z===k?'on0':''}" data-pg="plZoom|${k}">${l}</button>`).join('')}</div>
@@ -1504,7 +1516,7 @@ function plGantt(P,B){
     <select data-pgsel="type" title="Show one room type only"><option value="all">All room types</option>${S.settings.types.map(t=>`<option value="${t.id}" ${F.type===t.id?'selected':''}>${esc(t.name)}</option>`).join('')}</select>
     <input data-fs="q" id="q" placeholder="🔍 Room…" value="${esc(F.q)}" style="width:140px">
     <span class="legend" style="margin:0"><span><i class="sq" style="background:#7a8699;border:0"></i>Done</span><span><i class="sq" style="background:repeating-linear-gradient(45deg,#7a8699,#7a8699 3px,#b9c1cd 3px,#b9c1cd 6px);border:0"></i>In progress</span><span><i class="sq" style="background:#d4d9e1;border:0"></i>Planned</span>${B?'<span><i class="sq" style="background:#a9b2bf;height:4px;border:0"></i>Baseline</span>':''}<span style="color:var(--blk)">│ today</span>${msList().length?'<span style="color:#8a5a00">◆ milestone</span>':''}<span style="color:var(--hp)">▸ room start date</span></span></div></div>
-    <div class="gwrap" id="gwrap"><div class="gin" style="width:${LW+W}px;--lw:${LW}px"><div class="ghead"><div class="glab"></div><div class="gtr">${head}${msList().filter(m=>dn(m.date)>=a0&&dn(m.date)<=a1).map(m=>`<div class="gmsl" style="left:${X(dn(m.date))}px" title="${esc(m.name||'Milestone')} — ${fmtN(dn(m.date))}">◆ ${esc(m.name||'Milestone')}</div>`).join('')}</div></div>
+    <div class="gwrap" id="gwrap"><div class="gin" style="width:${LW+W}px;--lw:${LW}px"><div class="ghead" style="height:${34+msH}px"><div class="glab">${msL.length?`<small style="position:absolute;bottom:4px;left:8px;color:#8a5a00;font-weight:700">◆ Milestones</small>`:''}</div><div class="gtr">${head}${msL.map(x=>`<div class="gmsl" style="left:${x.x}px;top:${36+x.lane*20}px" title="${esc(x.m.name||'Milestone')} — ${fmtN(x.n)}">◆ ${esc(x.m.name||'Milestone')} <span>${fmtN(x.n)}</span></div>`).join('')}</div></div>
     <div class="gbody"><div class="ggrid" style="left:${LW}px;width:${W}px">${grid}<i class="gtoday" style="left:${X(P.T)}px"></i>${msList().filter(m=>dn(m.date)>=a0&&dn(m.date)<=a1).map(m=>`<i class="gms" style="left:${X(dn(m.date))}px" title="◆ ${esc(m.name||'Milestone')} — ${fmtN(dn(m.date))}"></i>`).join('')}</div>${body||'<div class="empty" style="padding:10px">No room matches.</div>'}</div></div></div>`;
 }
 /* Planning on the floor plan: every room tag shows what is scheduled in it on the chosen day */
@@ -1519,7 +1531,7 @@ function plMap(P){
   const z=ZOOMS.includes(+F.pzoom)?+F.pzoom:1,zi=ZOOMS.indexOf(z);
   h+=`<div class="card noprint" style="padding:10px"><div class="row" style="align-items:center">
     <div class="seg"><button data-pg="pldate|${prevW(5)}" title="1 week earlier">◀◀</button><button data-pg="pldate|${prevW(1)}" title="Previous working day">◀</button></div>
-    <input type="date" data-pgsel="pldate" data-pldn value="${dstr(n)}" min="${dstr(a0)}" max="${dstr(a1)}">
+    <input type="date" data-hold data-pgsel="pldate" data-pldn value="${dstr(n)}" min="${dstr(a0)}" max="${dstr(a1)}">
     <div class="seg"><button data-pg="pldate|${nextW(1)}" title="Next working day">▶</button><button data-pg="pldate|${nextW(5)}" title="1 week later">▶▶</button></div>
     <button class="btn sm" data-pg="pldate|${Math.min(Math.max(P.T,a0),a1)}">Today</button>
     <b id="plrlab">${fmtLong(dstr(n))}</b>${C.isW(n)?'':' <small style="color:var(--mute)">(not a working day)</small>'}
@@ -1559,7 +1571,7 @@ function plDates(P){
   const chk=(on,attr,label,col)=>`<label class="chk" style="padding:1px 4px"><input type="checkbox" ${attr} ${on?'checked':''} ${adm?'':'disabled'}>${col?`<span class="dot" style="background:${col}"></span>`:''}${esc(label)}</label>`;
   const msRows=ms.map(m=>{const nA=(m.acts||[]).length,nF=(m.floors||[]).length,nT=(m.types||[]).length,late=m.date&&!m.done&&dn(m.date)<P.T;
     return `<tr><td>${adm?`<input data-hold data-ms="name|${m.id}" value="${esc(m.name||'')}" placeholder="e.g. Tiles delivery" style="width:100%;min-width:160px">`:esc(m.name||'')}</td>
-      <td>${adm?`<input type="date" data-ms="date|${m.id}" value="${esc(m.date||'')}">`:fmtD(m.date)}${late?'<br><small class="overdue">date passed</small>':''}</td>
+      <td>${adm?`<input type="date" data-hold data-ms="date|${m.id}" value="${esc(m.date||'')}">`:fmtD(m.date)}${late?'<br><small class="overdue">date passed</small>':''}</td>
       <td><details data-dk="msa_${m.id}"><summary>${nA?acts.filter(a=>(m.acts||[]).includes(a.id)).map(a=>`<span class="dot" style="background:${a.color}"></span>${esc(a.name)}`).join(', '):'<span style="color:var(--blk)">choose…</span>'}</summary><div style="display:grid;gap:1px;margin-top:4px">${acts.map(a=>chk((m.acts||[]).includes(a.id),`data-msact="${m.id}|${a.id}"`,a.name,a.color)).join('')}</div></details></td>
       <td><details data-dk="msf_${m.id}"><summary>${nF?s.floors.filter(f=>m.floors.includes(f.id)).map(f=>esc(f.name)).join(', '):'All levels'}${nT?' · '+s.types.filter(t=>m.types.includes(t.id)).map(t=>esc(t.name)).join(', '):''}</summary><div style="margin-top:4px"><small style="color:var(--mute)">Levels (none = all)</small><div class="row" style="gap:2px">${s.floors.map(f=>chk((m.floors||[]).includes(f.id),`data-msfl="${m.id}|${f.id}"`,f.name)).join('')}</div><small style="color:var(--mute)">Room types (none = all)</small><div class="row" style="gap:2px">${s.types.map(t=>chk((m.types||[]).includes(t.id),`data-msty="${m.id}|${t.id}"`,t.name)).join('')}</div></div></details></td>
       <td>${cnt(m)}</td><td>${adm?`<label class="chk"><input type="checkbox" data-msdone="${m.id}" ${m.done?'checked':''}>Received</label>`:(m.done?'✓ Received':'')}</td><td>${adm?`<button class="btn sm red" data-msdel="${m.id}" title="Delete this milestone">✕</button>`:''}</td></tr>`;}).join('');
@@ -1574,7 +1586,7 @@ function plDates(P){
     ${ed&&rs.length?`<span class="sp"></span><input type="date" id="ps_all"><button class="btn sm" data-act="psall">Apply to the ${rs.length} rooms of this level</button><button class="btn sm" data-act="psclear">Clear them</button>`:''}</div>
   <div class="tbwrap" style="max-height:360px"><table class="tb"><thead><tr><th>Room</th><th>Type</th><th>Earliest start</th><th>Planned start</th></tr></thead><tbody>
   ${rs.map(r=>{const fs=first(r),f=floorById(r.floor);return `<tr><td><a href="#" data-room="${r.id}"><b>${esc(r.code)}</b></a> ${esc(r.name)}</td><td><small>${esc((typeById(r.type)||{}).name||'')}</small></td>
-    <td>${ed?`<input type="date" data-rps="${r.id}" value="${esc(r.pstart||'')}">`:(r.pstart?fmtD(r.pstart):'—')}${!r.pstart&&f&&f.start?` <small style="color:var(--mute)">level: ${fmtD(f.start)}</small>`:''}</td>
+    <td>${ed?`<input type="date" data-hold data-rps="${r.id}" value="${esc(r.pstart||'')}">`:(r.pstart?fmtD(r.pstart):'—')}${!r.pstart&&f&&f.start?` <small style="color:var(--mute)">level: ${fmtD(f.start)}</small>`:''}</td>
     <td>${fs!=null?fmtN(fs):'<small style="color:var(--mute)">—</small>'}</td></tr>`;}).join('')||'<tr><td colspan="4" class="empty">No room on this level.</td></tr>'}
   </tbody></table></div></details>`;
 }
@@ -1583,14 +1595,14 @@ function plParams(){
   const wdn=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],nA=Object.values(S.rooms).filter(roomArea).length;
   return `<details class="card" data-dk="plparams" ${adm&&!S.settings.planCfg?'open':''}><summary><b style="font-size:16px">⚙ Planning parameters</b> <small style="color:var(--mute)">durations, crews, calendar, baseline${adm?'':' — read only'}</small></summary>
   <div class="row" style="margin:10px 0;align-items:flex-end">
-    <label class="form" style="display:grid;gap:4px;font-size:12px;color:var(--mute);font-weight:600">Start of works<input type="date" data-pc="start" value="${esc(c.start)}" ${dis}></label>
+    <label class="form" style="display:grid;gap:4px;font-size:12px;color:var(--mute);font-weight:600">Start of works<input type="date" data-hold data-pc="start" value="${esc(c.start)}" ${dis}></label>
     <label class="form" style="display:grid;gap:4px;font-size:12px;color:var(--mute);font-weight:600">Hold point inspection (days)<input type="number" min="0" step="0.5" style="width:90px" data-pc="hp" value="${c.hp}" ${dis}></label>
     <div style="font-size:12px;color:var(--mute);font-weight:600">Working days<div class="row" style="gap:4px;margin-top:4px">${[1,2,3,4,5,6,0].map(d=>`<label class="chk" style="padding:0 4px"><input type="checkbox" data-pcwd="${d}" ${c.wd.map(Number).includes(d)?'checked':''} ${dis}>${wdn[d]}</label>`).join('')}</div></div></div>
   <label style="display:grid;gap:4px;font-size:12px;color:var(--mute);font-weight:600">Holidays / site closed (dates, one per line or separated by commas)<textarea data-pc="hol" rows="2" style="width:100%" placeholder="2026-12-25, 2027-01-01" ${dis}>${esc(c.hol.join(', '))}</textarea></label>
   <h3>Durations per room and crews</h3><p style="margin:0 0 8px;color:var(--mute);font-size:12px">Days per room = working days one crew needs for one room (0.5 = half a day). If m²/day is set, rooms with an area (${nA}/${Object.keys(S.rooms).length} rooms have one, read from the plans) use area ÷ m²/day instead.</p>
   <div class="tbwrap"><table class="tb"><thead><tr><th>Activity</th><th>Days per room</th><th>or m² / day</th><th>Crews max</th><th>Subcontractor</th></tr></thead><tbody>
   ${[...s.acts].sort(byNm).map(a=>`<tr><td><span class="dot" style="background:${a.color};margin-right:6px"></span>${esc(a.name)}</td><td><input type="number" min="0" step="0.25" style="width:80px" data-pact="dur|${a.id}" value="${+a.dur>0?+a.dur:''}" placeholder="1" ${dis}></td><td><input type="number" min="0" step="1" style="width:80px" data-pact="rate|${a.id}" value="${+a.rate>0?+a.rate:''}" placeholder="—" ${dis}></td><td><input type="number" min="0" step="1" style="width:70px" data-pact="crews|${a.id}" value="${+a.crews>0?+a.crews:''}" placeholder="∞" ${dis}></td><td>${esc(subName(a.sub)||'—')}</td></tr>`).join('')}</tbody></table></div>
-  <h3>Floor start dates</h3><div class="row">${s.floors.map(f=>`<label style="display:grid;gap:4px;font-size:12px;color:var(--mute);font-weight:600">${esc(f.name)}<input type="date" data-pfstart="${f.id}" value="${esc(f.start||'')}" ${dis}></label>`).join('')}</div>
+  <h3>Floor start dates</h3><div class="row">${s.floors.map(f=>`<label style="display:grid;gap:4px;font-size:12px;color:var(--mute);font-weight:600">${esc(f.name)}<input type="date" data-hold data-pfstart="${f.id}" value="${esc(f.start||'')}" ${dis}></label>`).join('')}</div>
   <h3>Baseline</h3><div class="row">${B&&B.t?`Saved ${fmtLong(ymd(new Date(B.at)))} by ${esc(B.by||'')} (${B.mode==='lev'?'leveled':'as soon as possible'} plan, finish ${fmtN(B.end)})`:'No baseline: save the plan once it is agreed, to see the drift (late rooms, late steps) afterwards.'}
     ${adm?`<button class="btn sm pri" data-pg="basesave|1">📌 Save the ${plMode()==='lev'?'leveled':'ASAP'} plan as baseline</button>${B&&B.t?'<button class="btn sm red" data-pg="basedel|1">Remove baseline</button>':''}`:''}</div>
   </details>`;
