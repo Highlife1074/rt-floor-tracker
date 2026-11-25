@@ -283,7 +283,8 @@ details.tools .tmenu .btn{text-align:left}
 @media print{.fab{display:none!important}.gwrap{max-height:none;overflow:visible}}
 .mx td.c.hpx{box-shadow:inset 0 0 0 3px #f97316}
 .hpxtag{color:#b45309;background:#fff1e0;border-radius:5px;padding:0 5px;font-weight:700;white-space:nowrap}
-input.dt.pdur{width:64px;border-style:solid;color:var(--ink)}
+input.dt.pdur{width:64px;border-style:solid;color:var(--ink);font-weight:700}input.dt.pdur::placeholder{color:#b3b9c4;font-weight:400;font-style:italic}
+input.dt.pdur:focus{outline:none;border:2px solid var(--acc);background:#fff8d6;box-shadow:0 0 0 3px rgba(201,168,76,.35)}input[type=number]::selection{background:#ffd54a;color:#111}
 @media (max-width:640px){
   #drawer .arow{flex-wrap:wrap;row-gap:6px}
   #drawer .arow .an{flex:1 1 calc(100% - 24px)}
@@ -847,7 +848,7 @@ function doRender(){
   const v={cockpit:vCockpit,overview:vOverview,matrix:vMatrix,plans:vPlans,planning:vPlanning,blockers:vBlockers,setup:vSetup}[F.view]||vCockpit;
   const fid=ae&&ae.id,pos=ae&&ae.selectionStart;
   // keep the scroll position of the page and of the scrolling boxes (plan, matrix, tables) across the re-render
-  const SCB='#planwrap,.mxwrap,.tbwrap',boxes=[...$('#view').querySelectorAll(SCB)].map(e=>[e.scrollLeft,e.scrollTop]),wy=scrollY,wx=scrollX,sv=F.view;
+  const SCB='#planwrap,.mxwrap,.tbwrap,.gwrap',boxes=[...$('#view').querySelectorAll(SCB)].map(e=>[e.scrollLeft,e.scrollTop]),wy=scrollY,wx=scrollX,sv=F.view;
   $('#view').innerHTML=floorRepairBanner()+misplacedBanner()+v();reopen($('#view'));
   if(sv===LASTVIEW){[...$('#view').querySelectorAll(SCB)].forEach((e,i)=>{const b=boxes[i];if(b){e.scrollLeft=b[0];e.scrollTop=b[1];}});if(scrollY!==wy||scrollX!==wx)scrollTo(wx,wy);}
   LASTVIEW=sv;
@@ -858,6 +859,8 @@ function doRender(){
   navSync();
   setTimeout(ensureSnapshots,0);
 }
+document.addEventListener('focusin',e=>{const t=e.target;if(t&&t.matches&&t.matches('input[type=number]'))setTimeout(()=>{if(document.activeElement===t)try{t.select();}catch(_){}},0);});
+document.addEventListener('wheel',e=>{const t=e.target;if(t&&t.matches&&t.matches('input[type=number]')&&document.activeElement===t)t.blur();},{passive:true});
 document.addEventListener('focusout',()=>{if(pending){pending=false;setTimeout(render,0);}});
 
 function filterBar(mode){
@@ -1725,8 +1728,10 @@ function renderDrawer(){
   h+=`<h3>Notes</h3><textarea data-hold data-rnote="${r.id}" ${isRO()?'readonly':''} rows="3" style="width:100%" placeholder="Site remarks, access, materials…">${esc(r.note||'')}</textarea>`;
   h+=`<details data-dk="room_cust" class="rwonly" style="margin-top:14px"><summary><b>Customize sequence</b> <small style="color:var(--mute)">(${cleanSeq(r.acts).length} activities)</small></summary><div class="row" style="margin:8px 0">Reset from template: <select id="tplsel">${s.types.map(x=>`<option value="${x.id}" ${x.id===r.type?'selected':''}>${esc(x.name)}</option>`).join('')}</select><button class="btn sm" data-act="applytpl">Apply</button></div>${seqEditor('room',r.id,r.acts)}</details>`;
   h+=`<details data-dk="room_det" class="rwonly" style="margin-top:6px"><summary><b>Room details</b></summary><div class="form" style="margin-top:8px"><div class="row"><label>Code<input data-hold id="rd_code" value="${esc(r.code)}"></label><label>Floor<select id="rd_floor">${s.floors.map(x=>`<option value="${x.id}" ${x.id===r.floor?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label></div><label>Name<input data-hold id="rd_name" value="${esc(r.name)}"></label><label>Type<select id="rd_type">${s.types.map(x=>`<option value="${x.id}" ${x.id===r.type?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label><div class="row"><label>Area (m²)<input data-hold id="rd_area" value="${esc(r.area||'')}" placeholder="e.g. 24.5 m²"></label><label>Earliest start (planning)<input type="date" id="rd_pstart" value="${esc(r.pstart||'')}"></label></div><div class="row"><button class="btn pri" data-act="saveroom">Save details</button><span class="sp"></span><button class="btn red" data-act="delroom">Delete room</button></div></div></details></div>`;
+  const FK=['data-pdur','data-sdate','data-set','data-rnote'],fk=ae&&D.contains(ae)&&FK.find(k=>ae.hasAttribute(k)),fv=fk&&ae.getAttribute(fk);
   D.innerHTML=h;
   reopen(D);D.scrollTop=sc;
+  if(fk){const el=[...D.querySelectorAll('['+fk+']')].find(x=>x.getAttribute(fk)===fv);if(el){el.focus({preventScroll:true});if(el.select&&el.type==='number')el.select();D.scrollTop=sc;}}
 }
 
 /* ===================== MODALS ===================== */
