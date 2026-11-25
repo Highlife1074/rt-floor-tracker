@@ -1464,16 +1464,20 @@ function plGantt(P,B){
     const tip=`${r.code} · ${a.name||t.id}\n${fmtN(t.s)}${t.e!==t.s?' → '+fmtN(t.e):''} · ${t.d} d${t.ld&&t.ld<1?' (part of a day)':''}\n${lbl(t.id,t.sv)}`;
     return `<b class="gbar ${cl} ${hp?'ghp':''}" style="left:${X(t.s)}px;width:${Math.max(hp?6:3,(t.e-t.s+1)*px-1)}px;--c:${hp?'var(--hp)':a.color||'#999'}" title="${esc(tip)}" data-room="${r.id}">${z==='d'&&(t.e-t.s+1)*px>34?esc(a.short||''):''}</b>`;};
   let body='';
-  S.settings.floors.forEach(f=>{
-    const rs=rows.filter(r=>r.floor===f.id);if(!rs.length)return;
-    const ft=tasks.filter(t=>S.rooms[t.rid]&&S.rooms[t.rid].floor===f.id);if(!ft.length)return;
-    const fs=Math.min(...ft.map(t=>t.s)),fe=Math.max(...ft.map(t=>t.e));
-    body+=`<div class="grow gfl"><div class="glab">${esc(f.name)} <small>${rs.length} rooms · ${fmtN(fs)} → ${fmtN(fe)}</small></div><div class="gtr"><b class="gsum" style="left:${X(fs)}px;width:${(fe-fs+1)*px}px"></b></div></div>`;
-    rs.forEach(r=>{const bt=B&&B.t[r.id],rt=Object.values(P.byRoom[r.id]||{});if(!rt.length)return;
+  const why=r=>{const ra=roomActs(r);if(!ra.length)return 'no activity in its sequence';if(ra.every(id=>(((r.st||{})[id]||{}).s||0)===2))return 'all steps done';return 'nothing to plan';};
+  const lvls=[...S.settings.floors.map(f=>({id:f.id,name:f.name})),...(rows.some(r=>!floorById(r.floor))?[{id:'__none',name:'⚠ Unknown level'}]:[])];
+  lvls.forEach(f=>{
+    const rs=rows.filter(r=>f.id==='__none'?!floorById(r.floor):r.floor===f.id);if(!rs.length)return;
+    const ft=tasks.filter(t=>rs.some(r=>r.id===t.rid)),fs=ft.length?Math.min(...ft.map(t=>t.s)):null,fe=ft.length?Math.max(...ft.map(t=>t.e)):null;
+    body+=`<div class="grow gfl"><div class="glab">${esc(f.name)} <small>${rs.length} rooms${fs!=null?` · ${fmtN(fs)} → ${fmtN(fe)}`:' · nothing to plan'}</small></div><div class="gtr">${fs!=null?`<b class="gsum" style="left:${X(fs)}px;width:${(fe-fs+1)*px}px"></b>`:''}</div></div>`;
+    rs.forEach(r=>{const bt=B&&B.t[r.id],rt=Object.values(P.byRoom[r.id]||{});
+      if(!rt.length){body+=`<div class="grow"><div class="glab"><a href="#" data-room="${r.id}"><b>${esc(r.code)}</b></a> <span>${esc(r.name)}</span></div><div class="gtr"><small style="position:sticky;left:${LW+6}px;z-index:1;background:#fff;padding:0 6px;color:var(--mute);font-style:italic;line-height:22px">${why(r)}</small></div></div>`;return;}
       const re=Math.max(...rt.map(t=>t.e)),be=bt?Math.max(...Object.values(bt).map(x=>x[1])):null;
       body+=`<div class="grow"><div class="glab"><a href="#" data-room="${r.id}"><b>${esc(r.code)}</b></a> <span>${esc(r.name)}</span>${be!=null&&re>be?` <small class="overdue" title="Forecast finish ${fmtN(re)}, baseline ${fmtN(be)}">+${P.C.count(be,re)-1}d</small>`:''}</div><div class="gtr">${bt?Object.entries(bt).map(([id,x])=>`<i class="gbl" style="left:${X(x[0])}px;width:${(x[1]-x[0]+1)*px}px"></i>`).join(''):''}${rt.map(t=>bar(t,r)).join('')}</div></div>`;});
   });
-  return `<div class="card noprint" style="padding:10px"><div class="row"><b>Zoom</b><div class="seg">${[['w','Weeks'],['d','Days']].map(([k,l])=>`<button class="${z===k?'on0':''}" data-pg="plZoom|${k}">${l}</button>`).join('')}</div>
+  const hid=roomsList().filter(r=>(F.floor==='all'||r.floor===F.floor)&&(!F.q||`${r.code} ${r.name}`.toLowerCase().includes(F.q.toLowerCase()))).length-rows.length;
+  const hidBar=hid>0?`<div class="pdraw noprint row"><span>🔍 <b>${hid}</b> room(s) hidden by filters set in the Rooms tab (type, next step, subcontractor, blocking points…).</span><button class="btn sm pri" data-act="ganttall">Show all rooms</button></div>`:'';
+  return hidBar+`<div class="card noprint" style="padding:10px"><div class="row"><b>Zoom</b><div class="seg">${[['w','Weeks'],['d','Days']].map(([k,l])=>`<button class="${z===k?'on0':''}" data-pg="plZoom|${k}">${l}</button>`).join('')}</div>
     <input data-fs="q" id="q" placeholder="🔍 Room…" value="${esc(F.q)}" style="width:140px">
     <span class="legend" style="margin:0"><span><i class="sq" style="background:#7a8699;border:0"></i>Done</span><span><i class="sq" style="background:repeating-linear-gradient(45deg,#7a8699,#7a8699 3px,#b9c1cd 3px,#b9c1cd 6px);border:0"></i>In progress</span><span><i class="sq" style="background:#d4d9e1;border:0"></i>Planned</span>${B?'<span><i class="sq" style="background:#a9b2bf;height:4px;border:0"></i>Baseline</span>':''}<span style="color:var(--blk)">│ today</span></span></div></div>
     <div class="gwrap" id="gwrap"><div class="gin" style="width:${LW+W}px;--lw:${LW}px"><div class="ghead"><div class="glab"></div><div class="gtr">${head}</div></div>
@@ -1881,6 +1885,7 @@ const ACT={
   print:()=>window.print(),
   navback:()=>history.back(),
   morefilters:()=>{F.more=!F.more;render();},
+  ganttall:()=>{Object.assign(F,{type:'all',sub:'all',resp:'all',blk:'all',next:'all'});render();},
   clearfilters:()=>{Object.assign(F,{type:'all',sub:'all',resp:'all',blk:'all',q:'',next:'all'});if(F.view!=='plans')F.floor='all';render();},
   quickroom:quickRoom,
   close:closeDrawer,
