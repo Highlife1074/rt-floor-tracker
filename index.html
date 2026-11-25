@@ -268,6 +268,7 @@ details.tools .tmenu .btn{text-align:left}
 .glab span{color:var(--mute)}.glab a{color:var(--acc);text-decoration:none}
 .gtr{position:relative;flex:1}
 .gfl{background:var(--acc2);height:28px}.gfl .glab{background:var(--acc2);font-weight:700;padding-top:6px}.gfl .glab small{font-weight:400;color:var(--mute)}
+.gfl2{height:24px}.gfl2 .glab{background:#f3f6fa;font-weight:600;padding-top:4px;padding-left:16px}.gfl2,.gfl2 .gtr{background:#f3f6fa}
 .gsum{position:absolute;top:10px;height:8px;background:var(--acc);border-radius:4px;opacity:.55}
 .gbar{position:absolute;top:4px;height:15px;border-radius:3px;background:var(--c);opacity:.4;cursor:pointer;font:700 9px/15px system-ui,sans-serif;color:#fff;overflow:hidden;padding-left:2px;z-index:1}
 .gbar.g2{opacity:1}.gbar.g1{opacity:1;background:repeating-linear-gradient(45deg,var(--c),var(--c) 3px,#fff 3px,#fff 6px);box-shadow:inset 0 0 0 1px var(--c)}
@@ -1478,20 +1479,29 @@ function plGantt(P,B){
     return `<b class="gbar ${cl} ${hp?'ghp':''}" style="left:${X(t.s)}px;width:${Math.max(hp?6:3,(t.e-t.s+1)*px-1)}px;--c:${hp?'var(--hp)':a.color||'#999'}" title="${esc(tip)}" data-room="${r.id}">${z==='d'&&(t.e-t.s+1)*px>34?esc(a.short||''):''}</b>`;};
   let body='';
   const why=r=>{const ra=roomActs(r);if(!ra.length)return 'no activity in its sequence';if(ra.every(id=>(((r.st||{})[id]||{}).s||0)===2))return 'all steps done';return 'nothing to plan';};
+  const g=['type','floortype'].includes(F.plGroup)?F.plGroup:'floor';
+  const tyOrd=id=>{const i=S.settings.types.findIndex(t=>t.id===id);return i<0?1e6:i;},tyName=id=>(typeById(id)||{}).name||'No type';
   const lvls=[...S.settings.floors.map(f=>({id:f.id,name:f.name})),...(rows.some(r=>!floorById(r.floor))?[{id:'__none',name:'⚠ Unknown level'}]:[])];
-  lvls.forEach(f=>{
-    const rs=rows.filter(r=>f.id==='__none'?!floorById(r.floor):r.floor===f.id);if(!rs.length)return;
-    const ft=tasks.filter(t=>rs.some(r=>r.id===t.rid)),fs=ft.length?Math.min(...ft.map(t=>t.s)):null,fe=ft.length?Math.max(...ft.map(t=>t.e)):null;
-    body+=`<div class="grow gfl"><div class="glab">${esc(f.name)} <small>${rs.length} rooms${fs!=null?` · ${fmtN(fs)} → ${fmtN(fe)}`:' · nothing to plan'}</small></div><div class="gtr">${fs!=null?`<b class="gsum" style="left:${X(fs)}px;width:${(fe-fs+1)*px}px"></b>`:''}</div></div>`;
+  const inLvl=(r,f)=>f.id==='__none'?!floorById(r.floor):r.floor===f.id;
+  const byType=l=>{const o=[];[...new Set(l.map(r=>r.type||''))].sort((a,b)=>tyOrd(a)-tyOrd(b)).forEach(t=>o.push({name:tyName(t),rs:l.filter(r=>(r.type||'')===t)}));return o;};
+  const groups=[];
+  if(g==='type')byType(rows).forEach(x=>groups.push({...x,lvl:1}));
+  else lvls.forEach(f=>{const rs=rows.filter(r=>inLvl(r,f));if(!rs.length)return;groups.push({name:f.name,rs,lvl:1});if(g==='floortype')byType(rs).forEach(x=>groups.push({...x,lvl:2}));});
+  groups.forEach(G=>{
+    const rs=G.rs,ft=tasks.filter(t=>rs.some(r=>r.id===t.rid)),fs=ft.length?Math.min(...ft.map(t=>t.s)):null,fe=ft.length?Math.max(...ft.map(t=>t.e)):null;
+    body+=`<div class="grow gfl ${G.lvl===2?'gfl2':''}"><div class="glab">${G.lvl===2?'└ ':''}${esc(G.name)} <small>${rs.length} rooms${fs!=null?` · ${fmtN(fs)} → ${fmtN(fe)}`:' · nothing to plan'}</small></div><div class="gtr">${fs!=null?`<b class="gsum" style="left:${X(fs)}px;width:${(fe-fs+1)*px}px"></b>`:''}</div></div>`;
+    if(g==='floortype'&&G.lvl===1)return;
     rs.forEach(r=>{const bt=B&&B.t[r.id],rt=Object.values(P.byRoom[r.id]||{});
       if(!rt.length){body+=`<div class="grow"><div class="glab"><a href="#" data-room="${r.id}"><b>${esc(r.code)}</b></a> <span>${esc(r.name)}</span></div><div class="gtr"><small style="position:sticky;left:${LW+6}px;z-index:1;background:#fff;padding:0 6px;color:var(--mute);font-style:italic;line-height:22px">${why(r)}</small></div></div>`;return;}
       const ps=r.pstart?dn(r.pstart):null,psM=ps!=null?`<i class="gps" style="left:${X(ps)}px" title="Earliest start of ${esc(r.code)}: ${fmtN(ps)}"></i>`:'';
       const re=Math.max(...rt.map(t=>t.e)),be=bt?Math.max(...Object.values(bt).map(x=>x[1])):null;
-      body+=`<div class="grow"><div class="glab"><a href="#" data-room="${r.id}"><b>${esc(r.code)}</b></a> <span>${esc(r.name)}</span>${be!=null&&re>be?` <small class="overdue" title="Forecast finish ${fmtN(re)}, baseline ${fmtN(be)}">+${P.C.count(be,re)-1}d</small>`:''}</div><div class="gtr">${psM}${bt?Object.entries(bt).map(([id,x])=>`<i class="gbl" style="left:${X(x[0])}px;width:${(x[1]-x[0]+1)*px}px"></i>`).join(''):''}${rt.map(t=>bar(t,r)).join('')}</div></div>`;});
+      body+=`<div class="grow"><div class="glab"><a href="#" data-room="${r.id}"><b>${esc(r.code)}</b></a> <span>${esc(r.name)}</span>${g==='type'?` <span>· ${esc((floorById(r.floor)||{}).name||'')}</span>`:''}${be!=null&&re>be?` <small class="overdue" title="Forecast finish ${fmtN(re)}, baseline ${fmtN(be)}">+${P.C.count(be,re)-1}d</small>`:''}</div><div class="gtr">${psM}${bt?Object.entries(bt).map(([id,x])=>`<i class="gbl" style="left:${X(x[0])}px;width:${(x[1]-x[0]+1)*px}px"></i>`).join(''):''}${rt.map(t=>bar(t,r)).join('')}</div></div>`;});
   });
-  const hid=roomsList().filter(r=>(F.floor==='all'||r.floor===F.floor)&&(!F.q||`${r.code} ${r.name}`.toLowerCase().includes(F.q.toLowerCase()))).length-rows.length;
-  const hidBar=hid>0?`<div class="pdraw noprint row"><span>🔍 <b>${hid}</b> room(s) hidden by filters set in the Rooms tab (type, next step, subcontractor, blocking points…).</span><button class="btn sm pri" data-act="ganttall">Show all rooms</button></div>`:'';
+  const hid=roomsList().filter(r=>(F.floor==='all'||r.floor===F.floor)&&(F.type==='all'||r.type===F.type)&&(!F.q||`${r.code} ${r.name}`.toLowerCase().includes(F.q.toLowerCase()))).length-rows.length;
+  const hidBar=hid>0?`<div class="pdraw noprint row"><span>🔍 <b>${hid}</b> room(s) hidden by filters set in the Rooms tab (next step, subcontractor, blocking points…).</span><button class="btn sm pri" data-act="ganttall">Show all rooms</button></div>`:'';
   return hidBar+`<div class="card noprint" style="padding:10px"><div class="row"><b>Zoom</b><div class="seg">${[['w','Weeks'],['d','Days']].map(([k,l])=>`<button class="${z===k?'on0':''}" data-pg="plZoom|${k}">${l}</button>`).join('')}</div>
+    <b>Group</b><div class="seg">${[['floor','Level'],['type','Room type'],['floortype','Level › type']].map(([k,l])=>`<button class="${g===k?'on0':''}" data-pg="plGroup|${k}">${l}</button>`).join('')}</div>
+    <select data-pgsel="type" title="Show one room type only"><option value="all">All room types</option>${S.settings.types.map(t=>`<option value="${t.id}" ${F.type===t.id?'selected':''}>${esc(t.name)}</option>`).join('')}</select>
     <input data-fs="q" id="q" placeholder="🔍 Room…" value="${esc(F.q)}" style="width:140px">
     <span class="legend" style="margin:0"><span><i class="sq" style="background:#7a8699;border:0"></i>Done</span><span><i class="sq" style="background:repeating-linear-gradient(45deg,#7a8699,#7a8699 3px,#b9c1cd 3px,#b9c1cd 6px);border:0"></i>In progress</span><span><i class="sq" style="background:#d4d9e1;border:0"></i>Planned</span>${B?'<span><i class="sq" style="background:#a9b2bf;height:4px;border:0"></i>Baseline</span>':''}<span style="color:var(--blk)">│ today</span>${msList().length?'<span style="color:#8a5a00">◆ milestone</span>':''}<span style="color:var(--hp)">▸ room start date</span></span></div></div>
     <div class="gwrap" id="gwrap"><div class="gin" style="width:${LW+W}px;--lw:${LW}px"><div class="ghead"><div class="glab"></div><div class="gtr">${head}${msList().filter(m=>dn(m.date)>=a0&&dn(m.date)<=a1).map(m=>`<div class="gmsl" style="left:${X(dn(m.date))}px" title="${esc(m.name||'Milestone')} — ${fmtN(dn(m.date))}">◆ ${esc(m.name||'Milestone')}</div>`).join('')}</div></div>
@@ -1942,7 +1952,7 @@ const ACT={
     const rs=roomsList().filter(r=>r.floor===fid);if(!confirm(`Set the earliest start of the ${rs.length} rooms of ${floorById(fid).name} to ${fmtD(v)}?`))return;store.patchRooms(rs.map(r=>[r.id,{pstart:v}]));},
   psclear:()=>{const fid=floorById(F.psfloor)?F.psfloor:(F.floor!=='all'&&floorById(F.floor)?F.floor:(S.settings.floors[0]||{}).id);
     const rs=roomsList().filter(r=>r.floor===fid&&r.pstart);if(!rs.length)return;if(!confirm(`Clear the earliest start of ${rs.length} room(s)?`))return;store.patchRooms(rs.map(r=>[r.id,{pstart:''}]));},
-  ganttall:()=>{Object.assign(F,{type:'all',sub:'all',resp:'all',blk:'all',next:'all'});render();},
+  ganttall:()=>{Object.assign(F,{sub:'all',resp:'all',blk:'all',next:'all'});render();},
   clearfilters:()=>{Object.assign(F,{type:'all',sub:'all',resp:'all',blk:'all',q:'',next:'all'});if(F.view!=='plans')F.floor='all';render();},
   quickroom:quickRoom,
   close:closeDrawer,
