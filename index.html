@@ -262,7 +262,7 @@ details.tools .tmenu .btn{text-align:left}
 /* planning */
 .gwrap{overflow:auto;max-height:calc(100vh - 250px);background:#fff;border:1px solid var(--line);border-radius:var(--rad)}
 .gin{position:relative}
-.ghead{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid var(--line);display:flex;height:34px}.ghead .glab{z-index:6}
+.ghead{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid var(--line);display:flex;height:34px}.ghead .glab{position:sticky}.ghead .glab{z-index:6}
 .grow{display:flex;height:24px;border-bottom:1px solid #f0f2f5}
 .glab{position:sticky;left:0;z-index:3;background:#fff;width:var(--lw);flex:none;padding:4px 8px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-right:1px solid var(--line)}
 .glab span{color:var(--mute)}.glab a{color:var(--acc);text-decoration:none}
@@ -277,7 +277,7 @@ details.tools .tmenu .btn{text-align:left}
 .gbl{position:absolute;bottom:1px;height:3px;background:#a9b2bf;border-radius:2px}
 .gbody{position:relative}.ggrid{position:absolute;top:0;bottom:0;pointer-events:none}.ggrid i{position:absolute;top:0;bottom:0;border-left:1px solid #eef0f4}
 .ggrid i.gtoday{border-left:2px solid var(--blk);z-index:2}
-.ggrid i.gms{border-left:2px dashed #c48a00;z-index:2}.gmsl{position:absolute;top:2px;z-index:3;transform:translateX(-50%);background:#fff3cd;color:#8a5a00;border:1px solid #e6c260;border-radius:6px;font-size:10px;font-weight:700;padding:0 4px;white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis}
+.ggrid i.gms{border-left:2px dashed #c48a00;z-index:2}.gmsl{position:absolute;z-index:3;margin-left:-5px;height:17px;line-height:15px;background:#fff3cd;color:#8a5a00;border:1px solid #e6c260;border-radius:0 6px 6px 0;border-left:2px solid #c48a00;font-size:11px;font-weight:700;padding:0 5px;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis}.gmsl span{font-weight:400;opacity:.8}
 .mstag{background:#fff3cd;color:#8a5a00;border:1px solid #e6c260;border-radius:6px;padding:0 4px;font-weight:700;white-space:nowrap}.pstartrow{gap:8px;font-size:13px;margin:-2px 0 8px;padding:6px 8px;background:var(--acc2);border-radius:8px}.pstartrow input.dt{color:var(--ink);border-style:solid;font-size:12px}
 .gps{position:absolute;top:5px;width:0;height:0;border-top:7px solid transparent;border-bottom:7px solid transparent;border-left:8px solid var(--hp);z-index:2;margin-left:-2px}
 .gm{position:absolute;top:2px;font-size:11px;font-weight:700;padding-left:3px;border-left:1px solid var(--line);white-space:nowrap}
@@ -1505,6 +1505,10 @@ function plGantt(P,B){
       const re=Math.max(...rt.map(t=>t.e)),be=bt?Math.max(...Object.values(bt).map(x=>x[1])):null;
       body+=`<div class="grow"><div class="glab"><a href="#" data-room="${r.id}"><b>${esc(r.code)}</b></a> <span>${esc(r.name)}</span>${g==='type'?` <span>· ${esc((floorById(r.floor)||{}).name||'')}</span>`:''}${be!=null&&re>be?` <small class="overdue" title="Forecast finish ${fmtN(re)}, baseline ${fmtN(be)}">+${P.C.count(be,re)-1}d</small>`:''}</div><div class="gtr">${psM}${bt?Object.entries(bt).map(([id,x])=>`<i class="gbl" style="left:${X(x[0])}px;width:${(x[1]-x[0]+1)*px}px"></i>`).join(''):''}${rt.map(t=>bar(t,r)).join('')}</div></div>`;});
   });
+  // milestone labels: a band under the dates, one lane per row so the labels never overlap
+  const msL=msList().map(m=>({m,n:dn(m.date)})).filter(x=>x.n>=a0&&x.n<=a1).sort((a,b)=>a.n-b.n),lanes=[];
+  msL.forEach(x=>{x.x=X(x.n);const w=Math.min(220,28+((x.m.name||'Milestone').length+7)*6.2);let l=lanes.findIndex(e=>e<x.x-4);if(l<0){l=lanes.length;lanes.push(0);}lanes[l]=x.x+w;x.lane=l;});
+  const msH=lanes.length?lanes.length*20+6:0;
   const hid=roomsList().filter(r=>(F.floor==='all'||r.floor===F.floor)&&(F.type==='all'||r.type===F.type)&&(!F.q||`${r.code} ${r.name}`.toLowerCase().includes(F.q.toLowerCase()))).length-rows.length;
   const hidBar=hid>0?`<div class="pdraw noprint row"><span>🔍 <b>${hid}</b> room(s) hidden by filters set in the Rooms tab (next step, subcontractor, blocking points…).</span><button class="btn sm pri" data-act="ganttall">Show all rooms</button></div>`:'';
   return hidBar+`<div class="card noprint" style="padding:10px"><div class="row"><b>Zoom</b><div class="seg">${[['w','Weeks'],['d','Days']].map(([k,l])=>`<button class="${z===k?'on0':''}" data-pg="plZoom|${k}">${l}</button>`).join('')}</div>
@@ -1512,7 +1516,7 @@ function plGantt(P,B){
     <select data-pgsel="type" title="Show one room type only"><option value="all">All room types</option>${S.settings.types.map(t=>`<option value="${t.id}" ${F.type===t.id?'selected':''}>${esc(t.name)}</option>`).join('')}</select>
     <input data-fs="q" id="q" placeholder="🔍 Room…" value="${esc(F.q)}" style="width:140px">
     <span class="legend" style="margin:0"><span><i class="sq" style="background:#7a8699;border:0"></i>Done</span><span><i class="sq" style="background:repeating-linear-gradient(45deg,#7a8699,#7a8699 3px,#b9c1cd 3px,#b9c1cd 6px);border:0"></i>In progress</span><span><i class="sq" style="background:#d4d9e1;border:0"></i>Planned</span>${B?'<span><i class="sq" style="background:#a9b2bf;height:4px;border:0"></i>Baseline</span>':''}<span style="color:var(--blk)">│ today</span>${msList().length?'<span style="color:#8a5a00">◆ milestone</span>':''}<span style="color:var(--hp)">▸ room start date</span></span></div></div>
-    <div class="gwrap" id="gwrap"><div class="gin" style="width:${LW+W}px;--lw:${LW}px"><div class="ghead"><div class="glab"></div><div class="gtr">${head}${msList().filter(m=>dn(m.date)>=a0&&dn(m.date)<=a1).map(m=>`<div class="gmsl" style="left:${X(dn(m.date))}px" title="${esc(m.name||'Milestone')} — ${fmtN(dn(m.date))}">◆ ${esc(m.name||'Milestone')}</div>`).join('')}</div></div>
+    <div class="gwrap" id="gwrap"><div class="gin" style="width:${LW+W}px;--lw:${LW}px"><div class="ghead" style="height:${34+msH}px"><div class="glab">${msL.length?`<small style="position:absolute;bottom:4px;left:8px;color:#8a5a00;font-weight:700">◆ Milestones</small>`:''}</div><div class="gtr">${head}${msL.map(x=>`<div class="gmsl" style="left:${x.x}px;top:${36+x.lane*20}px" title="${esc(x.m.name||'Milestone')} — ${fmtN(x.n)}">◆ ${esc(x.m.name||'Milestone')} <span>${fmtN(x.n)}</span></div>`).join('')}</div></div>
     <div class="gbody"><div class="ggrid" style="left:${LW}px;width:${W}px">${grid}<i class="gtoday" style="left:${X(P.T)}px"></i>${msList().filter(m=>dn(m.date)>=a0&&dn(m.date)<=a1).map(m=>`<i class="gms" style="left:${X(dn(m.date))}px" title="◆ ${esc(m.name||'Milestone')} — ${fmtN(dn(m.date))}"></i>`).join('')}</div>${body||'<div class="empty" style="padding:10px">No room matches.</div>'}</div></div></div>`;
 }
 /* Planning on the floor plan: every room tag shows what is scheduled in it on the chosen day */
