@@ -276,6 +276,9 @@ details.tools .tmenu .btn{text-align:left}
 .gbl{position:absolute;bottom:1px;height:3px;background:#a9b2bf;border-radius:2px}
 .gbody{position:relative}.ggrid{position:absolute;top:0;bottom:0;pointer-events:none}.ggrid i{position:absolute;top:0;bottom:0;border-left:1px solid #eef0f4}
 .ggrid i.gtoday{border-left:2px solid var(--blk);z-index:2}
+.ggrid i.gms{border-left:2px dashed #c48a00;z-index:2}.gmsl{position:absolute;top:2px;z-index:3;transform:translateX(-50%);background:#fff3cd;color:#8a5a00;border:1px solid #e6c260;border-radius:6px;font-size:10px;font-weight:700;padding:0 4px;white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis}
+.mstag{background:#fff3cd;color:#8a5a00;border:1px solid #e6c260;border-radius:6px;padding:0 4px;font-weight:700;white-space:nowrap}.pstartrow{gap:8px;font-size:13px;margin:-2px 0 8px;padding:6px 8px;background:var(--acc2);border-radius:8px}.pstartrow input.dt{color:var(--ink);border-style:solid;font-size:12px}
+.gps{position:absolute;top:5px;width:0;height:0;border-top:7px solid transparent;border-bottom:7px solid transparent;border-left:8px solid var(--hp);z-index:2;margin-left:-2px}
 .gm{position:absolute;top:2px;font-size:11px;font-weight:700;padding-left:3px;border-left:1px solid var(--line);white-space:nowrap}
 .gw{position:absolute;top:18px;font-size:10px;color:var(--mute);padding-left:2px;white-space:nowrap}
 .pdates{color:var(--acc);white-space:nowrap}
@@ -1298,6 +1301,15 @@ function stepDur(r,id,noOv){
   const ar=roomArea(r);if(+a.rate>0&&ar)return Math.max(.25,Math.round(ar/a.rate*4)/4);
   return +a.dur>0?+a.dur:1;
 }
+/* Milestones (settings.milestones): e.g. a material delivery. The listed activities cannot start before its date
+   in the rooms of the listed levels / room types (empty list = all). */
+const msList=()=>(S.settings.milestones||[]).filter(m=>m&&m.date);
+function msFor(r,id){
+  if(isHP(id))return null;const b=baseOf(id);let best=null;
+  msList().forEach(m=>{if(!(m.acts||[]).includes(b))return;if((m.floors||[]).length&&!m.floors.includes(r.floor))return;if((m.types||[]).length&&!m.types.includes(r.type))return;
+    const n=dn(m.date);if(!best||n>best.n)best={n,m};});
+  return best;
+}
 let PLC=null;   // cache {asap, lev}, cleared at every render (data may have changed)
 function planOf(mode){PLC=PLC||{};return PLC[mode]=PLC[mode]||planCompute(mode==='lev');}
 const plMode=()=>F.plMode==='asap'?'asap':'lev';
@@ -1318,20 +1330,20 @@ function planCompute(level){
       const o=(r.st||{})[id]||{},sv=o.s||0,d=stepDur(r,id),D=Math.ceil(d-1e-9),ld=isHP(id)||!D?0:d/D,t={rid:r.id,id,b:baseOf(id),d,D,ld,sv,sub:isHP(id)?'':asg(r,id).sub||''};
       if(sv===2){t.e=dn(o.dd||o.d||today());t.s=Math.min(t.e,dn(o.ds||o.dd||o.d||today()));}
       else if(sv===1){t.s=dn(o.ds||o.d||today());t.e=D?C.add(t.s,D-1):t.s;if(t.e<T)t.e=C.next(T);}
-      else{q.push(t);return;}
+      else{const mg=msFor(r,id);if(mg){t.ms=mg.n;t.msn=mg.m.name||'Milestone';}q.push(t);return;}
       // real dates: the crew-days of the step are spread over the working days it actually took
       if(t.ld){const k=C.count(t.s,t.e);t.ld=k?Math.min(1,t.d/k):t.ld;}
       addUse(t);prev=Math.max(prev,t.e);tasks.push(t);byRoom[r.id][id]=t;
     });
     if(q.length)pend.push({r,q,prev,base,fi:floorIdx(r.floor)});
   });
-  const esOf=p=>Math.max(p.base,C.next(p.prev+1));
+  const esOf=p=>Math.max(p.base,C.next(p.prev+1),p.q.length&&p.q[0].ms?C.next(p.q[0].ms):0);
   pend.forEach(p=>p.es=esOf(p));
   let act=pend.slice();
   while(act.length){
     let bi=0;for(let i=1;i<act.length;i++){const a=act[i],b=act[bi];if(a.es<b.es||(a.es===b.es&&(a.fi<b.fi||(a.fi===b.fi&&byCode(a.r,b.r)<0))))bi=i;}
     const p=act[bi],t=p.q.shift();let s=p.es;
-    if(!t.D){t.s=t.e=Math.max(p.prev,p.base);}
+    if(!t.D){t.s=t.e=Math.max(p.prev,p.base,t.ms?C.next(t.ms):0);}
     else{const cap=level?caps[t.b]:0,capS=level&&t.sub?capsS[t.sub]:0;
       if(cap||capS){const cp=cap?Math.max(cap,t.ld):0,cs=capS?Math.max(capS,t.ld):0;for(let g=0;g<3000&&!fits(t,s,cp,cs);g++)s=C.next(s+1);}
       t.s=s;t.e=C.add(s,t.D-1);addUse(t);}
@@ -1394,6 +1406,7 @@ function vPlanning(){
       :`<div class="kpi"><b style="color:var(--mute)">—</b><span>No baseline yet</span><small style="color:var(--mute)">${isAdmin()?'save one below to follow the drift':'an admin can save one'}</small></div>`}
   </div>`;
   h+=F.plv==='gantt'?plGantt(P,B):F.plv==='map'?plMap(P):plLoadView(A,L,P);
+  h+=plDates(P);
   h+=plParams();
   return h;
 }
@@ -1461,7 +1474,7 @@ function plGantt(P,B){
     if(dowN(n)===1){head+=`<div class="gw" style="left:${X(n)}px">${z==='d'?fmtN(n):d.getUTCDate()}</div>`;grid+=`<i style="left:${X(n)}px"></i>`;}
 }
   const bar=(t,r)=>{const a=actById(t.id)||{},hp=isHP(t.id),cl=t.sv===2?'g2':t.sv===1?'g1':'g0';
-    const tip=`${r.code} · ${a.name||t.id}\n${fmtN(t.s)}${t.e!==t.s?' → '+fmtN(t.e):''} · ${t.d} d${t.ld&&t.ld<1?' (part of a day)':''}\n${lbl(t.id,t.sv)}`;
+    const tip=`${r.code} · ${a.name||t.id}\n${fmtN(t.s)}${t.e!==t.s?' → '+fmtN(t.e):''} · ${t.d} d${t.ld&&t.ld<1?' (part of a day)':''}\n${lbl(t.id,t.sv)}${t.ms&&!t.sv?`\n◆ not before ${fmtN(t.ms)} (${t.msn})${t.s===P.C.next(t.ms)?' ← waiting for it':''}`:''}`;
     return `<b class="gbar ${cl} ${hp?'ghp':''}" style="left:${X(t.s)}px;width:${Math.max(hp?6:3,(t.e-t.s+1)*px-1)}px;--c:${hp?'var(--hp)':a.color||'#999'}" title="${esc(tip)}" data-room="${r.id}">${z==='d'&&(t.e-t.s+1)*px>34?esc(a.short||''):''}</b>`;};
   let body='';
   const why=r=>{const ra=roomActs(r);if(!ra.length)return 'no activity in its sequence';if(ra.every(id=>(((r.st||{})[id]||{}).s||0)===2))return 'all steps done';return 'nothing to plan';};
@@ -1472,16 +1485,17 @@ function plGantt(P,B){
     body+=`<div class="grow gfl"><div class="glab">${esc(f.name)} <small>${rs.length} rooms${fs!=null?` · ${fmtN(fs)} → ${fmtN(fe)}`:' · nothing to plan'}</small></div><div class="gtr">${fs!=null?`<b class="gsum" style="left:${X(fs)}px;width:${(fe-fs+1)*px}px"></b>`:''}</div></div>`;
     rs.forEach(r=>{const bt=B&&B.t[r.id],rt=Object.values(P.byRoom[r.id]||{});
       if(!rt.length){body+=`<div class="grow"><div class="glab"><a href="#" data-room="${r.id}"><b>${esc(r.code)}</b></a> <span>${esc(r.name)}</span></div><div class="gtr"><small style="position:sticky;left:${LW+6}px;z-index:1;background:#fff;padding:0 6px;color:var(--mute);font-style:italic;line-height:22px">${why(r)}</small></div></div>`;return;}
+      const ps=r.pstart?dn(r.pstart):null,psM=ps!=null?`<i class="gps" style="left:${X(ps)}px" title="Earliest start of ${esc(r.code)}: ${fmtN(ps)}"></i>`:'';
       const re=Math.max(...rt.map(t=>t.e)),be=bt?Math.max(...Object.values(bt).map(x=>x[1])):null;
-      body+=`<div class="grow"><div class="glab"><a href="#" data-room="${r.id}"><b>${esc(r.code)}</b></a> <span>${esc(r.name)}</span>${be!=null&&re>be?` <small class="overdue" title="Forecast finish ${fmtN(re)}, baseline ${fmtN(be)}">+${P.C.count(be,re)-1}d</small>`:''}</div><div class="gtr">${bt?Object.entries(bt).map(([id,x])=>`<i class="gbl" style="left:${X(x[0])}px;width:${(x[1]-x[0]+1)*px}px"></i>`).join(''):''}${rt.map(t=>bar(t,r)).join('')}</div></div>`;});
+      body+=`<div class="grow"><div class="glab"><a href="#" data-room="${r.id}"><b>${esc(r.code)}</b></a> <span>${esc(r.name)}</span>${be!=null&&re>be?` <small class="overdue" title="Forecast finish ${fmtN(re)}, baseline ${fmtN(be)}">+${P.C.count(be,re)-1}d</small>`:''}</div><div class="gtr">${psM}${bt?Object.entries(bt).map(([id,x])=>`<i class="gbl" style="left:${X(x[0])}px;width:${(x[1]-x[0]+1)*px}px"></i>`).join(''):''}${rt.map(t=>bar(t,r)).join('')}</div></div>`;});
   });
   const hid=roomsList().filter(r=>(F.floor==='all'||r.floor===F.floor)&&(!F.q||`${r.code} ${r.name}`.toLowerCase().includes(F.q.toLowerCase()))).length-rows.length;
   const hidBar=hid>0?`<div class="pdraw noprint row"><span>🔍 <b>${hid}</b> room(s) hidden by filters set in the Rooms tab (type, next step, subcontractor, blocking points…).</span><button class="btn sm pri" data-act="ganttall">Show all rooms</button></div>`:'';
   return hidBar+`<div class="card noprint" style="padding:10px"><div class="row"><b>Zoom</b><div class="seg">${[['w','Weeks'],['d','Days']].map(([k,l])=>`<button class="${z===k?'on0':''}" data-pg="plZoom|${k}">${l}</button>`).join('')}</div>
     <input data-fs="q" id="q" placeholder="🔍 Room…" value="${esc(F.q)}" style="width:140px">
-    <span class="legend" style="margin:0"><span><i class="sq" style="background:#7a8699;border:0"></i>Done</span><span><i class="sq" style="background:repeating-linear-gradient(45deg,#7a8699,#7a8699 3px,#b9c1cd 3px,#b9c1cd 6px);border:0"></i>In progress</span><span><i class="sq" style="background:#d4d9e1;border:0"></i>Planned</span>${B?'<span><i class="sq" style="background:#a9b2bf;height:4px;border:0"></i>Baseline</span>':''}<span style="color:var(--blk)">│ today</span></span></div></div>
-    <div class="gwrap" id="gwrap"><div class="gin" style="width:${LW+W}px;--lw:${LW}px"><div class="ghead"><div class="glab"></div><div class="gtr">${head}</div></div>
-    <div class="gbody"><div class="ggrid" style="left:${LW}px;width:${W}px">${grid}<i class="gtoday" style="left:${X(P.T)}px"></i></div>${body||'<div class="empty" style="padding:10px">No room matches.</div>'}</div></div></div>`;
+    <span class="legend" style="margin:0"><span><i class="sq" style="background:#7a8699;border:0"></i>Done</span><span><i class="sq" style="background:repeating-linear-gradient(45deg,#7a8699,#7a8699 3px,#b9c1cd 3px,#b9c1cd 6px);border:0"></i>In progress</span><span><i class="sq" style="background:#d4d9e1;border:0"></i>Planned</span>${B?'<span><i class="sq" style="background:#a9b2bf;height:4px;border:0"></i>Baseline</span>':''}<span style="color:var(--blk)">│ today</span>${msList().length?'<span style="color:#8a5a00">◆ milestone</span>':''}<span style="color:var(--hp)">▸ room start date</span></span></div></div>
+    <div class="gwrap" id="gwrap"><div class="gin" style="width:${LW+W}px;--lw:${LW}px"><div class="ghead"><div class="glab"></div><div class="gtr">${head}${msList().filter(m=>dn(m.date)>=a0&&dn(m.date)<=a1).map(m=>`<div class="gmsl" style="left:${X(dn(m.date))}px" title="${esc(m.name||'Milestone')} — ${fmtN(dn(m.date))}">◆ ${esc(m.name||'Milestone')}</div>`).join('')}</div></div>
+    <div class="gbody"><div class="ggrid" style="left:${LW}px;width:${W}px">${grid}<i class="gtoday" style="left:${X(P.T)}px"></i>${msList().filter(m=>dn(m.date)>=a0&&dn(m.date)<=a1).map(m=>`<i class="gms" style="left:${X(dn(m.date))}px" title="◆ ${esc(m.name||'Milestone')} — ${fmtN(dn(m.date))}"></i>`).join('')}</div>${body||'<div class="empty" style="padding:10px">No room matches.</div>'}</div></div></div>`;
 }
 /* Planning on the floor plan: every room tag shows what is scheduled in it on the chosen day */
 function plMap(P){
@@ -1525,6 +1539,35 @@ function plMap(P){
   h+=`<div class="planwrap" id="planwrap"><div class="planin tg-${F.psz||'s'}" id="plmapin" style="width:${z*100}%"><img src="${im.url}" alt="" draggable="false">${pinsH}</div></div>`;
   return h;
 }
+/* Room start dates + milestones (material deliveries...) */
+function plDates(P){
+  const s=S.settings,adm=isAdmin()&&!isRO(),ed=!isRO(),ms=s.milestones||[],acts=[...s.acts].sort((a,b)=>libOrd(a.id)-libOrd(b.id));
+  let fid=floorById(F.psfloor)?F.psfloor:(F.floor!=='all'&&floorById(F.floor)?F.floor:(s.floors[0]||{}).id);
+  const rs=roomsList().filter(r=>r.floor===fid),nSet=Object.values(S.rooms).filter(r=>r.pstart).length;
+  const first=r=>{const l=Object.values(P.byRoom[r.id]||{}).filter(t=>!t.sv);return l.length?Math.min(...l.map(t=>t.s)):null;};
+  const cnt=m=>Object.values(S.rooms).filter(r=>roomActs(r).some(id=>{const g=msFor(r,id);return g&&g.m===m;})).length;
+  const chk=(on,attr,label,col)=>`<label class="chk" style="padding:1px 4px"><input type="checkbox" ${attr} ${on?'checked':''} ${adm?'':'disabled'}>${col?`<span class="dot" style="background:${col}"></span>`:''}${esc(label)}</label>`;
+  const msRows=ms.map(m=>{const nA=(m.acts||[]).length,nF=(m.floors||[]).length,nT=(m.types||[]).length,late=m.date&&!m.done&&dn(m.date)<P.T;
+    return `<tr><td>${adm?`<input data-hold data-ms="name|${m.id}" value="${esc(m.name||'')}" placeholder="e.g. Tiles delivery" style="width:100%;min-width:160px">`:esc(m.name||'')}</td>
+      <td>${adm?`<input type="date" data-ms="date|${m.id}" value="${esc(m.date||'')}">`:fmtD(m.date)}${late?'<br><small class="overdue">date passed</small>':''}</td>
+      <td><details data-dk="msa_${m.id}"><summary>${nA?acts.filter(a=>(m.acts||[]).includes(a.id)).map(a=>`<span class="dot" style="background:${a.color}"></span>${esc(a.name)}`).join(', '):'<span style="color:var(--blk)">choose…</span>'}</summary><div style="display:grid;gap:1px;margin-top:4px">${acts.map(a=>chk((m.acts||[]).includes(a.id),`data-msact="${m.id}|${a.id}"`,a.name,a.color)).join('')}</div></details></td>
+      <td><details data-dk="msf_${m.id}"><summary>${nF?s.floors.filter(f=>m.floors.includes(f.id)).map(f=>esc(f.name)).join(', '):'All levels'}${nT?' · '+s.types.filter(t=>m.types.includes(t.id)).map(t=>esc(t.name)).join(', '):''}</summary><div style="margin-top:4px"><small style="color:var(--mute)">Levels (none = all)</small><div class="row" style="gap:2px">${s.floors.map(f=>chk((m.floors||[]).includes(f.id),`data-msfl="${m.id}|${f.id}"`,f.name)).join('')}</div><small style="color:var(--mute)">Room types (none = all)</small><div class="row" style="gap:2px">${s.types.map(t=>chk((m.types||[]).includes(t.id),`data-msty="${m.id}|${t.id}"`,t.name)).join('')}</div></div></details></td>
+      <td>${cnt(m)}</td><td>${adm?`<label class="chk"><input type="checkbox" data-msdone="${m.id}" ${m.done?'checked':''}>Received</label>`:(m.done?'✓ Received':'')}</td><td>${adm?`<button class="btn sm red" data-msdel="${m.id}" title="Delete this milestone">✕</button>`:''}</td></tr>`;}).join('');
+  return `<details class="card" data-dk="pldates"><summary><b style="font-size:16px">📅 Start dates & milestones</b> <small style="color:var(--mute)">${ms.length} milestone(s) · ${nSet} room(s) with a start date</small></summary>
+  <h3>◆ Milestones — material deliveries, handovers…</h3>
+  <p style="margin:-4px 0 8px;color:var(--mute);font-size:12px">The chosen activities cannot start before the milestone date in the rooms concerned (levels / room types; nothing ticked = all). Move the date and the planning follows. Shown as ◆ on the Gantt.</p>
+  ${ms.length?`<div class="tbwrap"><table class="tb"><thead><tr><th>Milestone</th><th>Date</th><th>Activities it releases</th><th>Where</th><th>Rooms</th><th>Status</th><th></th></tr></thead><tbody>${msRows}</tbody></table></div>`:'<div class="empty" style="padding:6px 0">No milestone yet.</div>'}
+  ${adm?'<button class="btn sm pri" data-pg="msadd|1" style="margin-top:8px">＋ Add a milestone</button>':''}
+  <h3 style="margin-top:16px">▸ Earliest start per room</h3>
+  <p style="margin:-4px 0 8px;color:var(--mute);font-size:12px">The works of a room are not planned before this date (also editable in the room panel). Empty = level start date, or start of works.</p>
+  <div class="row" style="margin-bottom:8px"><div class="chips" style="margin:0">${s.floors.map(f=>`<button class="chip ${f.id===fid?'on':''}" data-pg="psfloor|${f.id}">${esc(f.name)}</button>`).join('')}</div>
+    ${ed&&rs.length?`<span class="sp"></span><input type="date" id="ps_all"><button class="btn sm" data-act="psall">Apply to the ${rs.length} rooms of this level</button><button class="btn sm" data-act="psclear">Clear them</button>`:''}</div>
+  <div class="tbwrap" style="max-height:360px"><table class="tb"><thead><tr><th>Room</th><th>Type</th><th>Earliest start</th><th>Planned start</th></tr></thead><tbody>
+  ${rs.map(r=>{const fs=first(r),f=floorById(r.floor);return `<tr><td><a href="#" data-room="${r.id}"><b>${esc(r.code)}</b></a> ${esc(r.name)}</td><td><small>${esc((typeById(r.type)||{}).name||'')}</small></td>
+    <td>${ed?`<input type="date" data-rps="${r.id}" value="${esc(r.pstart||'')}">`:(r.pstart?fmtD(r.pstart):'—')}${!r.pstart&&f&&f.start?` <small style="color:var(--mute)">level: ${fmtD(f.start)}</small>`:''}</td>
+    <td>${fs!=null?fmtN(fs):'<small style="color:var(--mute)">—</small>'}</td></tr>`;}).join('')||'<tr><td colspan="4" class="empty">No room on this level.</td></tr>'}
+  </tbody></table></div></details>`;
+}
 function plParams(){
   const c=pcfg(),adm=isAdmin(),dis=adm?'':'disabled',s=S.settings,B=S.baseline;
   const wdn=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],nA=Object.values(S.rooms).filter(roomArea).length;
@@ -1553,12 +1596,14 @@ function planXls(){
 }
 function planSetActs(fn){saveS(s=>s.acts.forEach(fn));}
 document.addEventListener('click',e=>{
+  const md=e.target.closest&&e.target.closest('[data-msdel]');if(md){const m=(S.settings.milestones||[]).find(x=>x.id===md.dataset.msdel);if(m&&confirm(`Delete the milestone “${m.name||'(no name)'}”?`))saveS(s=>{s.milestones=(s.milestones||[]).filter(x=>x.id!==md.dataset.msdel);});return;}
   const b=e.target.closest&&e.target.closest('[data-pg],[data-pgcap],[data-pgsubcap],[data-pgsel-row]');if(!b)return;
   if(b.dataset.pgsubcap){const [id,v]=b.dataset.pgsubcap.split('|');saveS(s=>{const x=(s.subs||[]).find(y=>y.id===id);if(x)x.crews=+v;});return;}
   if(b.dataset.pgselRow!==undefined){if(e.target.closest('input,button'))return;F.plAct=F.plAct===b.dataset.pgselRow?'all':b.dataset.pgselRow;render();scrollTo(0,0);return;}
   if(b.dataset.pgcap){const [id,v]=b.dataset.pgcap.split('|');planSetActs(a=>{if(a.id===id)a.crews=+v;});return;}
   const [k,v]=b.dataset.pg.split('|');
   if(k==='xls')return planXls();
+  if(k==='msadd'){saveS(s=>{(s.milestones=s.milestones||[]).push({id:uid('ms'),name:'',date:'',acts:[],floors:[],types:[]});});OPEN.add('pldates');return;}
   if(k==='capall'){const st=planStats();if(!confirm(`Set “Crews max” of ${st.length} activities to the suggested value (average crews needed)?`))return;const m={};st.forEach(x=>m[x.a.id]=x.sug);planSetActs(a=>{if(m[a.id])a.crews=m[a.id];});return;}
   if(k==='capnone'){if(!confirm('Remove the crew limit of all activities?'))return;planSetActs(a=>{delete a.crews;});return;}
   if(k==='basesave'){const P=planOf(plMode()),t={};P.tasks.forEach(x=>{(t[x.rid]=t[x.rid]||{})[x.id]=[x.s,x.e];});
@@ -1572,6 +1617,14 @@ document.addEventListener('input',e=>{const t=e.target;if(t.dataset&&t.dataset.p
 document.addEventListener('change',e=>{
   const t=e.target,d=t.dataset;
   if(d.pdur){const [rid,id]=d.pdur.split('|'),v=parseFloat(t.value);store.patchRoom(rid,{['pdur.'+id]:v>0?v:0});return;}
+  if(d.rps){store.patchRoom(d.rps,{pstart:t.value||''});return;}
+  const msUp=(id,fn)=>saveS(s=>{const m=(s.milestones||[]).find(x=>x.id===id);if(m)fn(m);});
+  const tg=(l,v,on)=>{l=(l||[]).filter(x=>x!==v);if(on)l.push(v);return l;};
+  if(d.ms){const [k,id]=d.ms.split('|');msUp(id,m=>m[k]=t.value.trim());return;}
+  if(d.msact){const [id,a]=d.msact.split('|');msUp(id,m=>m.acts=tg(m.acts,a,t.checked));return;}
+  if(d.msfl){const [id,f]=d.msfl.split('|');msUp(id,m=>m.floors=tg(m.floors,f,t.checked));return;}
+  if(d.msty){const [id,y]=d.msty.split('|');msUp(id,m=>m.types=tg(m.types,y,t.checked));return;}
+  if(d.msdone){msUp(d.msdone,m=>m.done=t.checked);return;}
   if(!t.closest||!t.closest('#view'))return;
   if(d.psub){const v=parseFloat(t.value);saveS(s=>{const x=(s.subs||[]).find(y=>y.id===d.psub);if(!x)return;if(v>0)x.crews=v;else delete x.crews;});return;}
   if(d.plrange!==undefined){F.pldate=+t.value;render();return;}
@@ -1712,7 +1765,7 @@ function renderDrawer(){
   const BX=new Set(hpBreach(r).map(x=>x.id)),PLR=(planOf(plMode()).byRoom[r.id])||{},BLR=S.baseline&&S.baseline.t?S.baseline.t[r.id]:null,pend=Object.values(PLR).length?Math.max(...Object.values(PLR).map(x=>x.e)):null;
   let h=`<div class="dh"><div class="row" style="flex-wrap:nowrap"><div style="flex:1;min-width:0"><div style="font-size:20px;font-weight:800">${esc(r.code)} <span style="font-weight:500">${esc(r.name)}</span></div><div style="color:var(--mute);font-size:12px">${esc(f?f.name:'')} · ${esc(t?t.name:'—')}${r.area?' · '+esc(r.area):''}${(()=>{const o=[...new Set(pinSheets(r).filter(m=>m.floor!==r.floor).map(m=>floorById(m.floor)?.name).filter(Boolean))];return o.length?` · <span class="tag" style="background:#e8f0fe;color:var(--hp)">⇕ double height, also on ${esc(o.join(', '))}</span>`:'';})()}${pinSheets(r).length?` · <a href="#" class="lnk" data-showpin="${r.id}">📐 Show on plan</a>`:''}</div></div><button class="btn" data-act="close">✕ Close</button></div>
     <div class="row" style="margin-top:8px"><div class="bar" style="max-width:none"><i style="width:${pc(p)}%"></i></div><b>${pc(p)}%</b></div>
-    <div style="margin-top:6px;font-size:13px">${n?`Next step: <b>${esc(actById(n).name)}</b>`:'<b style="color:var(--done)">✓ All activities complete</b>'}${bl.length?` · <span style="color:var(--blk);font-weight:700">⚠ ${bl.length} open blocking point(s)</span>`:''}${n&&pend!=null?` · 📅 forecast finish <b>${fmtN(pend)}</b>`:''}</div></div><div class="db"><h3>Activities</h3>`;
+    <div style="margin-top:6px;font-size:13px">${n?`Next step: <b>${esc(actById(n).name)}</b>`:'<b style="color:var(--done)">✓ All activities complete</b>'}${bl.length?` · <span style="color:var(--blk);font-weight:700">⚠ ${bl.length} open blocking point(s)</span>`:''}${n&&pend!=null?` · 📅 forecast finish <b>${fmtN(pend)}</b>`:''}</div></div><div class="db"><div class="row pstartrow"><span>▸ <b>Earliest start</b> of this room</span><input type="date" class="dt" data-hold data-rps="${r.id}" value="${esc(r.pstart||'')}" ${isRO()?'disabled':''}>${!r.pstart&&f&&f.start?`<small style="color:var(--mute)">level starts ${fmtD(f.start)}</small>`:''}${r.pstart?'':'<small style="color:var(--mute)">empty = as soon as possible</small>'}</div><h3>Activities</h3>`;
   if(!acts.length)h+=`<div class="empty">No activity assigned. Open “Customize activities” below.</div>`;
   acts.forEach(id=>{
     const a=actById(id),hp=!!a.isHp,o=(r.st||{})[id]||{},sv=o.s||0,b=bl.filter(x=>x.actId===id);
@@ -1720,7 +1773,7 @@ function renderDrawer(){
     const meta=sv===2?`${hp?'Released':'Done'} ${dIn('dd')}${o.by?' · '+esc(o.by):''}`:sv===1?`${hp?'Requested':'Started'} ${dIn('ds')}${o.by?' · '+esc(o.by):''}`:'';
     const words=hp?['Pending','Req.','Released']:['To do','WIP','Done'],pt=PLR[id],bt=BLR&&BLR[id];
     const pdIn=!hp&&sv!==2&&!isRO()?` <input type="number" class="dt pdur" data-hold min="0" step="0.25" data-pdur="${r.id}|${id}" value="${+(r.pdur||{})[id]>0?+(r.pdur||{})[id]:''}" placeholder="${stepDur(r,id,true)} d" title="Duration in this room, in working days (empty = ${stepDur(r,id,true)} d from the activity library${roomArea(r)&&+a.rate>0?' and the room area':''})">`:'';
-    const ptxt=pt&&sv!==2?` <span class="pdates" title="Planned (${plMode()==='lev'?'leveled':'as soon as possible'})${bt?' — baseline '+fmtN(bt[0])+' → '+fmtN(bt[1]):''}">📅 ${fmtN(pt.s)}${pt.e!==pt.s?'–'+fmtN(pt.e):''}${bt&&pt.e>bt[1]?` <b class="overdue">+${pt.e-bt[1]}d</b>`:''}</span>`:'';
+    const ptxt=pt&&sv!==2?` <span class="pdates" title="Planned (${plMode()==='lev'?'leveled':'as soon as possible'})${bt?' — baseline '+fmtN(bt[0])+' → '+fmtN(bt[1]):''}">📅 ${fmtN(pt.s)}${pt.e!==pt.s?'–'+fmtN(pt.e):''}${bt&&pt.e>bt[1]?` <b class="overdue">+${pt.e-bt[1]}d</b>`:''}</span>${pt.ms&&!pt.sv?` <span class="mstag" title="Cannot start before ${fmtN(pt.ms)}">◆ ${esc(pt.msn)} ${fmtN(pt.ms)}</span>`:''}`:'';
     h+=`<div class="arow ${hp?'hp':''} ${b.length?'blk':''}">${hp?'':`<span class="dot" style="background:${a.color}"></span>`}<div class="an">${hp?`<b><span class="hptag">◆ HP</span>Hold point – inspection</b>`:`<b>${esc(a.name)}</b>`}<small>${meta}${ptxt}${pdIn}${BX.has(id)?' <span class="hpxtag">⚠ before HP release</span>':''}${b.length?` <span style="color:var(--blk)">⚠ ${esc(b[0].title)}</span>`:''}</small>${(()=>{const g=asg(r,id);return hp?`<small>👷 Inspection by ${esc(g.resp||'—')}</small>`:`<small class="asgl" data-asg="${r.id}|${id}" title="Click to change for this room" style="cursor:pointer">🏗 ${esc(subName(g.sub)||'—')} · 👷 ${esc(g.resp||'—')}${g.ov?' <b style="color:var(--acc)">✎ room-specific</b>':''}</small>`;})()}</div>
       <div class="seg">${[0,1,2].map(k=>`<button class="${sv===k?'on'+k:''} ${hp?'hpb':''}" data-set="${r.id}|${id}|${k}">${words[k]}</button>`).join('')}</div>
       <button class="btn sm blkbtn" title="Raise a blocking point on this activity" data-newblk="${r.id}|${id}">⚠ Block</button></div>`;
@@ -1731,7 +1784,7 @@ function renderDrawer(){
   h+=`<button class="btn" data-newblk="${r.id}|">+ Raise blocking point</button>`;
   h+=`<h3>Notes</h3><textarea data-hold data-rnote="${r.id}" ${isRO()?'readonly':''} rows="3" style="width:100%" placeholder="Site remarks, access, materials…">${esc(r.note||'')}</textarea>`;
   h+=`<details data-dk="room_cust" class="rwonly" style="margin-top:14px"><summary><b>Customize sequence</b> <small style="color:var(--mute)">(${cleanSeq(r.acts).length} activities)</small></summary><div class="row" style="margin:8px 0">Reset from template: <select id="tplsel">${s.types.map(x=>`<option value="${x.id}" ${x.id===r.type?'selected':''}>${esc(x.name)}</option>`).join('')}</select><button class="btn sm" data-act="applytpl">Apply</button></div>${seqEditor('room',r.id,r.acts)}</details>`;
-  h+=`<details data-dk="room_det" class="rwonly" style="margin-top:6px"><summary><b>Room details</b></summary><div class="form" style="margin-top:8px"><div class="row"><label>Code<input data-hold id="rd_code" value="${esc(r.code)}"></label><label>Floor<select id="rd_floor">${s.floors.map(x=>`<option value="${x.id}" ${x.id===r.floor?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label></div><label>Name<input data-hold id="rd_name" value="${esc(r.name)}"></label><label>Type<select id="rd_type">${s.types.map(x=>`<option value="${x.id}" ${x.id===r.type?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label><div class="row"><label>Area (m²)<input data-hold id="rd_area" value="${esc(r.area||'')}" placeholder="e.g. 24.5 m²"></label><label>Earliest start (planning)<input type="date" id="rd_pstart" value="${esc(r.pstart||'')}"></label></div><div class="row"><button class="btn pri" data-act="saveroom">Save details</button><span class="sp"></span><button class="btn red" data-act="delroom">Delete room</button></div></div></details></div>`;
+  h+=`<details data-dk="room_det" class="rwonly" style="margin-top:6px"><summary><b>Room details</b></summary><div class="form" style="margin-top:8px"><div class="row"><label>Code<input data-hold id="rd_code" value="${esc(r.code)}"></label><label>Floor<select id="rd_floor">${s.floors.map(x=>`<option value="${x.id}" ${x.id===r.floor?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label></div><label>Name<input data-hold id="rd_name" value="${esc(r.name)}"></label><label>Type<select id="rd_type">${s.types.map(x=>`<option value="${x.id}" ${x.id===r.type?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label><div class="row"><label>Area (m²)<input data-hold id="rd_area" value="${esc(r.area||'')}" placeholder="e.g. 24.5 m²"></label></div><div class="row"><button class="btn pri" data-act="saveroom">Save details</button><span class="sp"></span><button class="btn red" data-act="delroom">Delete room</button></div></div></details></div>`;
   const FK=['data-pdur','data-sdate','data-set','data-rnote'],fk=ae&&D.contains(ae)&&FK.find(k=>ae.hasAttribute(k)),fv=fk&&ae.getAttribute(fk);
   D.innerHTML=h;
   reopen(D);D.scrollTop=sc;
@@ -1885,6 +1938,10 @@ const ACT={
   print:()=>window.print(),
   navback:()=>history.back(),
   morefilters:()=>{F.more=!F.more;render();},
+  psall:()=>{const v=($('#ps_all')||{}).value;if(!v)return alert('Choose a date first.');const fid=floorById(F.psfloor)?F.psfloor:(F.floor!=='all'&&floorById(F.floor)?F.floor:(S.settings.floors[0]||{}).id);
+    const rs=roomsList().filter(r=>r.floor===fid);if(!confirm(`Set the earliest start of the ${rs.length} rooms of ${floorById(fid).name} to ${fmtD(v)}?`))return;store.patchRooms(rs.map(r=>[r.id,{pstart:v}]));},
+  psclear:()=>{const fid=floorById(F.psfloor)?F.psfloor:(F.floor!=='all'&&floorById(F.floor)?F.floor:(S.settings.floors[0]||{}).id);
+    const rs=roomsList().filter(r=>r.floor===fid&&r.pstart);if(!rs.length)return;if(!confirm(`Clear the earliest start of ${rs.length} room(s)?`))return;store.patchRooms(rs.map(r=>[r.id,{pstart:''}]));},
   ganttall:()=>{Object.assign(F,{type:'all',sub:'all',resp:'all',blk:'all',next:'all'});render();},
   clearfilters:()=>{Object.assign(F,{type:'all',sub:'all',resp:'all',blk:'all',q:'',next:'all'});if(F.view!=='plans')F.floor='all';render();},
   quickroom:quickRoom,
@@ -1920,7 +1977,7 @@ const ACT={
   deldemo:()=>{const ids=Object.values(S.rooms).filter(r=>r.demo).map(r=>r.id);if(!confirm(`Delete ${ids.length} demo rooms and their blocking points?`))return;store.delRooms(ids,Object.values(S.blockers).filter(b=>ids.includes(b.roomId)).map(b=>b.id));},
   delall:()=>{if(prompt('This deletes ALL rooms and blocking points. Type DELETE to confirm:')!=='DELETE')return;store.delRooms(Object.keys(S.rooms),Object.keys(S.blockers));},
   applytpl:()=>{const r=S.rooms[drawerRoom],t=typeById($('#tplsel').value);if(!t||!confirm(`Replace this room's sequence with the “${t.name}” template? Statuses already entered are kept.`))return;store.patchRoom(r.id,{acts:[...t.acts],type:t.id});},
-  saveroom:()=>{const r=S.rooms[drawerRoom],code=$('#rd_code').value.trim();if(!code)return alert('Code is required.');document.activeElement.blur();const type=$('#rd_type').value,p={code,name:$('#rd_name').value.trim(),floor:$('#rd_floor').value,type,area:$('#rd_area').value.trim(),pstart:$('#rd_pstart').value};
+  saveroom:()=>{const r=S.rooms[drawerRoom],code=$('#rd_code').value.trim();if(!code)return alert('Code is required.');document.activeElement.blur();const type=$('#rd_type').value,p={code,name:$('#rd_name').value.trim(),floor:$('#rd_floor').value,type,area:$('#rd_area').value.trim()};
     const t=type!==r.type?typeById(type):null;if(t&&confirm(`Type changed to “${t.name}”.\n\nAlso replace this room's sequence with the template of this type? (Statuses already entered are kept.)`))p.acts=cleanSeq(t.acts);
     store.patchRoom(r.id,p);},
   delroom:()=>{const r=S.rooms[drawerRoom];if(!confirm(`Delete room ${r.code} and its blocking points?`))return;const id=r.id;closeDrawer();store.delRooms([id],Object.values(S.blockers).filter(b=>b.roomId===id).map(b=>b.id));},
